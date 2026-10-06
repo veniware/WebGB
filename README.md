@@ -13,17 +13,19 @@ build step and no dependencies.
 
 ## Running
 
-The app is static files, but browsers block ES modules and AudioWorklets on
-`file://`, so serve the folder over HTTP:
+Open **https://veniware.github.io/WebGB/** in a browser. Nothing to install:
+the site is published with GitHub Pages straight from the `main` branch, and
+your ROMs, saved games and snapshots stay in your browser's storage.
+
+### Development
+
+To work on the code, serve the folder locally (browsers block ES modules and
+AudioWorklets on `file://`):
 
 ```sh
 npm start          # http://localhost:8080 (no dependencies needed)
 npm test           # unit tests (Node 20+)
 ```
-
-Any static host works too (Netlify, `python3 -m http.server`, ...). The live
-version is published with GitHub Pages straight from the `main` branch.
-Audio needs a secure context: `https://` or `localhost`.
 
 ## Features
 
