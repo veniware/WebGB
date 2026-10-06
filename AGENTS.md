@@ -245,7 +245,9 @@ Color support.
 5. FPS counter toggled from the settings (the status bar shows a basic
    fps figure today): emulated fps, speed and time per frame, for
    performance work.
-6. Make it a PWA: web app manifest and service worker, so it installs to
+6. Renderer setting: Auto / WebGL / Canvas 2D, and a WebGPU renderer later
+   (renderers are separate modules in `src/video/`).
+7. Make it a PWA: web app manifest and service worker, so it installs to
    the home screen (fullscreen on iPhone) and works offline.
-7. Possibly later: rewind, audio/video recording, full backup export/import
+8. Possibly later: rewind, audio/video recording, full backup export/import
    of the library.
