@@ -1,4 +1,4 @@
-import { BUTTON_NAMES } from '../buttons.js';
+import { Button, BUTTON_NAMES } from '../buttons.js';
 
 const SIZES = { gb: [160, 144], gbc: [160, 144], gba: [240, 160] };
 
@@ -20,6 +20,8 @@ const DISK = rgb(240, 120, 40);
 const MOVER = rgb(255, 255, 255);
 const BUTTON_OFF = rgb(60, 64, 72);
 const BUTTON_ON = rgb(110, 168, 254);
+const COUNTER_ON = rgb(80, 220, 120);
+const STATE_SIZE = 2 + NOTES.length + 2;
 
 export function createTestCore(_rom, info) {
   return new TestCore(info.system);
@@ -30,10 +32,13 @@ export function createTestCore(_rom, info) {
  * speed, snapshots) until real cores exist. Draws color bars, dither
  * patterns, a disk for edge smoothing, a mover that shows emulation speed
  * and one indicator per button. Each held button plays a square-wave note.
+ *
+ * It also has 4 bytes of battery RAM holding a counter of Start presses,
+ * drawn in binary above the button row, to exercise saved games.
  */
 export class TestCore {
   id = 'test';
-  version = 1;
+  version = 2;
   fps = 59.7275;
   sampleRate = 48000;
 
@@ -44,7 +49,10 @@ export class TestCore {
     this.audio = new Float32Array(Math.ceil(this.sampleRate / this.fps + 1) * 2);
     this.audioLength = 0;
     this.phases = new Float64Array(NOTES.length);
+    this.sram = new Uint8Array(4);
+    this.sramView = new DataView(this.sram.buffer);
     this.buttons = 0;
+    this.previousButtons = 0;
     this.reset();
   }
 
@@ -62,6 +70,10 @@ export class TestCore {
 
   runFrame() {
     this.frameCount++;
+    if (this.buttons & ~this.previousButtons & Button.START) {
+      this.sramView.setUint32(0, this.sramView.getUint32(0, true) + 1, true);
+    }
+    this.previousButtons = this.buttons;
     this.draw();
     this.synth();
   }
@@ -75,25 +87,33 @@ export class TestCore {
   }
 
   getSaveData() {
-    return null;
+    return this.sram;
   }
 
-  loadSaveData() {}
+  loadSaveData(data) {
+    this.sram.fill(0);
+    this.sram.set(data.subarray(0, this.sram.length));
+    this.draw();
+  }
 
   saveState() {
-    const state = new Float64Array(2 + this.phases.length);
+    const state = new Float64Array(STATE_SIZE);
     state[0] = this.frameCount;
     state[1] = this.sampleDebt;
     state.set(this.phases, 2);
+    state[2 + NOTES.length] = this.sramView.getUint32(0, true);
+    state[3 + NOTES.length] = this.previousButtons;
     return new Uint8Array(state.buffer);
   }
 
   loadState(bytes) {
-    if (bytes.byteLength !== (2 + this.phases.length) * 8) throw new Error('Invalid test core state.');
+    if (bytes.byteLength !== STATE_SIZE * 8) throw new Error('Invalid test core state.');
     const state = new Float64Array(bytes.slice().buffer);
     this.frameCount = state[0];
     this.sampleDebt = state[1];
-    this.phases.set(state.subarray(2));
+    this.phases.set(state.subarray(2, 2 + NOTES.length));
+    this.sramView.setUint32(0, state[2 + NOTES.length], true);
+    this.previousButtons = state[3 + NOTES.length];
     this.draw();
   }
 
@@ -118,6 +138,13 @@ export class TestCore {
     const travel = w - 8;
     const t = this.frameCount % (travel * 2);
     this.fill(t < travel ? t : travel * 2 - t, top + 40, 8, 8, () => MOVER);
+
+    // Saved-game counter, least significant bit on the right.
+    const counter = this.sramView.getUint32(0, true);
+    for (let bit = 0; bit < 8; bit++) {
+      const color = counter & (1 << bit) ? COUNTER_ON : BUTTON_OFF;
+      this.fill(w - 14 - bit * 8, h - 26, 6, 6, () => color);
+    }
 
     const slot = (w - 12) / BUTTON_NAMES.length;
     for (let i = 0; i < BUTTON_NAMES.length; i++) {

@@ -11,11 +11,11 @@
 <body>
   <header id="toolbar" class="toolbar">
     <button id="open" type="button">Open ROM</button>
-    <input id="file" type="file" accept=".gb,.gbc,.gba,.zip" hidden>
+    <button id="library-open" type="button">Library</button>
     <button id="pause" type="button" disabled>Pause</button>
     <button id="reset" type="button" disabled>Reset</button>
     <button id="snapshot" type="button" disabled title="Take snapshot (F2)">Snapshot</button>
-    <button id="snapshots-open" type="button" disabled title="Snapshots (F4 loads the latest)">Snapshots…</button>
+    <button id="saves-open" type="button" disabled title="Saved games and snapshots (F4 loads the latest snapshot)">Saves…</button>
     <label>Speed
       <select id="speed">
         <option value="1">1×</option>
@@ -46,7 +46,7 @@
   <main id="play-area" class="play-area">
     <div id="stage" class="stage empty">
       <canvas id="screen"></canvas>
-      <p class="hint">Drop a ROM here (.gb, .gbc, .gba or .zip)<br>or use Open ROM.</p>
+      <p class="hint">Drop a ROM here (.gb, .gbc, .gba or .zip)<br>or use Open ROM or Library.</p>
     </div>
 
     <div id="touch-controls" class="touch-controls">
@@ -74,14 +74,39 @@
 
   <div class="drop-overlay">Drop to load</div>
 
-  <dialog id="snapshots" class="snapshots">
+  <dialog id="library" class="panel">
     <header>
-      <h2>Snapshots</h2>
-      <button type="button" data-take>Take snapshot</button>
+      <h2>Library</h2>
+      <button type="button" data-add>Add ROMs…</button>
       <button type="button" data-close>Close</button>
     </header>
-    <p data-empty>No snapshots for this game yet.</p>
-    <ul data-list></ul>
+    <p class="empty" data-empty>No ROMs yet. Add some, or drop them onto the page.</p>
+    <ul class="rows" data-list></ul>
+    <footer data-usage></footer>
+  </dialog>
+
+  <dialog id="game" class="panel">
+    <header>
+      <h2 data-title></h2>
+      <button type="button" data-close>Close</button>
+    </header>
+    <section>
+      <header>
+        <h3>Saved games</h3>
+        <button type="button" data-new-game>New game</button>
+        <button type="button" data-import>Import…</button>
+      </header>
+      <p class="empty" data-saves-empty>No saved games yet.</p>
+      <ul class="rows" data-saves></ul>
+    </section>
+    <section>
+      <header>
+        <h3>Snapshots</h3>
+        <button type="button" data-take>Take snapshot</button>
+      </header>
+      <p class="empty" data-snapshots-empty>No snapshots yet.</p>
+      <ul class="rows" data-snapshots></ul>
+    </section>
   </dialog>
 </body>
 </html>

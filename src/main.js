@@ -24,3 +24,6 @@ const input = new InputManager([keyboard, new GamepadInput(), touch]);
 const emulator = new Emulator({ display, audio, input });
 ui = setupUI({ emulator, display, audio, inputs: [keyboard, touch], settings });
 emulator.start();
+
+// Debugging handle for the browser console and automated browser tests.
+window.webgb = { emulator, display, audio, inputs: [keyboard, touch] };

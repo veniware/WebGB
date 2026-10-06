@@ -1,5 +1,6 @@
-// IndexedDB access. Used instead of localStorage because save states are
-// large (hundreds of KB for GBA) and localStorage is limited to ~5 MB.
+// IndexedDB access. Used instead of localStorage because ROMs and save
+// states are large (up to 32 MB and hundreds of KB) and localStorage is
+// limited to ~5 MB.
 
 const DB_NAME = 'webgb';
 const DB_VERSION = 1;
@@ -16,10 +17,13 @@ function openDb() {
     request.onupgradeneeded = (event) => {
       const db = request.result;
       if (event.oldVersion < 1) {
-        db.createObjectStore('saves', { keyPath: 'romKey' });
+        // ROM metadata and ROM bytes are split so listing the library stays cheap.
+        db.createObjectStore('roms', { keyPath: 'key' });
+        db.createObjectStore('romData', { keyPath: 'key' });
+        const saves = db.createObjectStore('saves', { keyPath: 'id', autoIncrement: true });
+        saves.createIndex('romKey', 'romKey');
         const snapshots = db.createObjectStore('snapshots', { keyPath: 'id', autoIncrement: true });
         snapshots.createIndex('romKey', 'romKey');
-        // Snapshot states live apart from their metadata so listing stays cheap.
         db.createObjectStore('snapshotStates', { keyPath: 'id' });
       }
     };

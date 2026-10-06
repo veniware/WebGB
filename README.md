@@ -24,18 +24,24 @@ Audio needs a secure context: `https://` or `localhost`.
 
 ## Features
 
-- **ROM loading:** Open ROM button or drag-and-drop anywhere on the page.
-  Accepts `.gb`, `.gbc` and `.gba`, plain or zipped.
+- **ROM library:** ROMs you open or drop onto the page (`.gb`, `.gbc`,
+  `.gba`, plain or zipped) are kept in the browser. Browse, play, export and
+  delete them from the Library.
+- **Saved games:** in-game saves are stored automatically, several per game.
+  When you pick a game that has saved games or snapshots, you choose which one
+  to continue (or start a new game). Saved games can be imported and exported
+  as `.sav` files, compatible with other emulators; dropping a `.sav` onto the
+  page imports it for the running game.
+- **Snapshots:** save states with thumbnails that you can return to later.
 - **Video:** WebGL2 renderer with filters (Sharp, Nearest, Smooth, Scale2x)
   and an optional de-dither pass, zoom (Fit or 1×–6×) and fullscreen. Falls
   back to a 2D canvas without WebGL2.
 - **Audio:** AudioWorklet output with dynamic rate control to avoid crackles.
 - **Input:** keyboard, gamepads (Gamepad API) and on-screen touch controls.
 - **Speed:** 1×–8×, plus hold-to-fast-forward.
-- **Saves:** in-game (battery) saves are stored automatically per ROM.
-- **Snapshots:** save states with thumbnails that you can return to later.
-
-Saves and snapshots live in the browser's IndexedDB; settings use localStorage.
+ROMs, saved games and snapshots live in the browser's IndexedDB; settings use
+localStorage. Clearing the site's data deletes them, so export saved games you
+care about.
 
 ## Controls
 

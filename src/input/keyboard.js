@@ -29,6 +29,8 @@ const TEXT_FIELDS = new Set(['INPUT', 'SELECT', 'TEXTAREA']);
 export class KeyboardInput {
   enabled = true;
   #down = new Set();
+  // Keys pressed since the last poll, so a tap shorter than a frame still registers.
+  #tapped = new Set();
 
   /**
    * @param {{ keyMap?: Record<string, number>, hotkeys?: Record<string, string>, onHotkey?: (name: string) => void }} [options]
@@ -39,7 +41,10 @@ export class KeyboardInput {
     this.onHotkey = onHotkey;
     window.addEventListener('keydown', (e) => this.#keydown(e));
     window.addEventListener('keyup', (e) => this.#keyup(e));
-    window.addEventListener('blur', () => this.#down.clear());
+    window.addEventListener('blur', () => {
+      this.#down.clear();
+      this.#tapped.clear();
+    });
   }
 
   #keydown(e) {
@@ -49,6 +54,7 @@ export class KeyboardInput {
     e.preventDefault();
     if (e.repeat) return;
     this.#down.add(e.code);
+    this.#tapped.add(e.code);
     if (hotkey && hotkey !== 'fastForward') this.onHotkey(hotkey);
   }
 
@@ -60,11 +66,12 @@ export class KeyboardInput {
     let buttons = 0;
     let fastForward = false;
     if (this.enabled) {
-      for (const code of this.#down) {
+      for (const code of [...this.#down, ...this.#tapped]) {
         buttons |= this.keyMap[code] ?? 0;
         if (this.hotkeys[code] === 'fastForward') fastForward = true;
       }
     }
+    this.#tapped.clear();
     return { buttons, fastForward };
   }
 }

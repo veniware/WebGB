@@ -45,3 +45,23 @@ test('input manager merges sources and cancels opposite directions', () => {
   const input = new InputManager([source(Button.A | Button.LEFT), source(Button.RIGHT | Button.UP, true)]);
   assert.deepEqual(input.poll(), { buttons: Button.A | Button.UP, fastForward: true });
 });
+
+test('test core counts Start presses in battery RAM', () => {
+  const core = new TestCore();
+  for (let i = 0; i < 3; i++) {
+    core.setInput(Button.START);
+    core.runFrame();
+    core.runFrame();
+    core.setInput(0);
+    core.runFrame();
+  }
+  assert.deepEqual([...core.getSaveData()], [3, 0, 0, 0]);
+
+  const other = new TestCore();
+  other.loadSaveData(new Uint8Array([7, 0]));
+  assert.deepEqual([...other.getSaveData()], [7, 0, 0, 0]);
+
+  const state = core.saveState();
+  other.loadState(state);
+  assert.deepEqual([...other.getSaveData()], [3, 0, 0, 0]);
+});

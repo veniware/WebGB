@@ -17,8 +17,9 @@ Decisions so far:
   loads `src/` directly. Don't add a bundler or npm packages without asking.
 - **Game Boy core first**, then GBA. Until a core exists, ROMs run on the test
   core (`src/core/test/`).
-- **Storage:** IndexedDB for saves and snapshots (too big for localStorage),
-  localStorage for settings only.
+- **Storage:** IndexedDB for the ROM library, saved games and snapshots (too
+  big for localStorage), localStorage for settings only.
+- **License:** MIT.
 - **No `SharedArrayBuffer`**: it needs COOP/COEP headers that plain static
   hosting can't set. Audio goes to the AudioWorklet with `postMessage`.
 - **Mobile is a first-class target**: touch controls, responsive layout, safe
@@ -34,23 +35,27 @@ npm test    # node --test, runs tests/*.test.js
 
 Run `npm test` before committing. For UI changes, also load the page in a
 browser (Playwright and Chromium are usually available) and check the console
-for errors at desktop and phone sizes.
+for errors at desktop and phone sizes. The page exposes `window.webgb`
+(`emulator`, `display`, `audio`, `inputs`) for the console and for browser
+tests, e.g. `webgb.emulator.core.getSaveData()`.
 
 ## Architecture
 
 ```
-index.html              Page shell: toolbar, stage, touch controls, status bar, dialog
+index.html              Page shell: toolbar, stage, touch controls, status bar, dialogs
 src/main.js             Composition root: builds the modules and wires them together
 src/styles.css          All styles (touch layout under @media (pointer: coarse))
 src/app/
-  emulator.js           Host: owns the core, runs the rAF loop, speed, saves, snapshots
+  emulator.js           Host: owns the core, runs the rAF loop, speed, launching,
+                        in-game saves, snapshots
   settings.js           Persisted user preferences (localStorage)
   emitter.js            Tiny event emitter
 src/core/
   interface.js          The Core contract (JSDoc) and CoreDescriptor
   registry.js           System -> core lookup; lazy-loads cores with import()
   buttons.js            Button bitmask shared by input and cores
-  test/test-core.js     Stand-in core: test pattern, button tones, save states
+  test/test-core.js     Stand-in core: test pattern, button tones, a Start-press
+                        counter in battery RAM, save states
 src/video/
   display.js            Canvas sizing (zoom, devicePixelRatio), fullscreen
   webgl-renderer.js     WebGL2 renderer, one shader program per filter
@@ -72,11 +77,17 @@ src/rom/
   zip.js                Minimal zip reader (DecompressionStream)
 src/storage/
   db.js                 IndexedDB open/upgrade and transaction helper
-  saves.js              Battery saves, keyed by ROM key
+  roms.js               ROM library (metadata and bytes in separate stores)
+  saves.js              Saved games (battery RAM), several per ROM
   snapshots.js          Snapshot metadata and states (separate stores)
 src/ui/
-  ui.js                 Toolbar, drag-and-drop, status bar, hotkey actions
-  snapshots-panel.js    Snapshot list dialog
+  ui.js                 Toolbar, opening files, drag-and-drop, status bar, hotkeys
+  library-dialog.js     Library: play, export, delete ROMs; add ROMs
+  game-dialog.js        Per game: new game, saved games (play/import/export/delete),
+                        snapshots (load/take/delete)
+  modals.js             Shows dialogs; pauses the game and input while open
+  dom.js                h() element helper, formatting, downloads, file picker
+  files.js              Accepted file types and limits
 src/util/crc32.js
 tools/serve.js          Dev static server
 tests/                  node:test unit tests (+ helpers.js for fake ROMs/zips)
@@ -102,16 +113,40 @@ To add a core: create `src/core/<name>/index.js` exporting
 core's `version` whenever its `saveState()` format changes; snapshots from
 other versions are refused.
 
+### Library, saved games and snapshots
+
+- Opening or dropping ROM files adds them to the library. Selecting a ROM
+  (`selectRom` in `ui.js`) opens the game dialog when it has saved games or
+  snapshots, otherwise starts a new game. Dropped `.sav`/`.srm` files are
+  imported as saved games for the running ROM.
+- If a ROM can't be stored (quota, storage blocked), it still runs from
+  memory via `emulator.play(rom, data)`.
+- A ROM can have several **saved games** (battery RAM). The running game
+  writes to `emulator.saveId`; with none (new game), the first in-game save
+  creates "Save N". If the active saved game is deleted, the next save creates
+  a new one. Writes are serialized through a queue in `Emulator.flushSave()`.
+- A **snapshot** records the `saveId` in use; resuming it switches back to
+  that saved game (or to a new one if it was deleted or never existed).
+- Deleting a ROM deletes its saved games and snapshots.
+- Exported saved games are raw `.sav` files, compatible with other emulators.
+
 ### Identities and storage
 
-- ROM key: `<system>-<crc32>-<size>` (from `loader.js`). Saves and snapshots
-  are keyed by it.
-- IndexedDB `webgb`, version 1: `saves` (keyPath `romKey`), `snapshots`
+- ROM key: `<system>-<crc32>-<size>` (from `loader.js`). Library entries,
+  saved games and snapshots are keyed by it.
+- IndexedDB `webgb`, version 1: `roms` (metadata, keyPath `key`), `romData`
+  (`key` -> bytes), `saves` (autoIncrement `id`, index `romKey`), `snapshots`
   (metadata, autoIncrement `id`, index `romKey`), `snapshotStates` (`id` ->
   state bytes). Schema changes go in `db.js` `onupgradeneeded`, keyed on
   `event.oldVersion`, and bump `DB_VERSION`.
-- Battery saves are written when they change (checked every 2 s, on tab hide
+- In-game saves are written when they change (checked every 2 s, on tab hide
   and on pagehide).
+
+### Input timing
+
+Inputs report buttons pressed since the last poll even if already released,
+and the host ORs input across animation frames that run no emulated frame,
+so short taps are never lost.
 
 ## Conventions
 
@@ -131,4 +166,4 @@ other versions are refused.
 2. Game Boy Color support.
 3. GBA core (needs a BIOS: user-supplied file or high-level emulation).
 4. Possibly later: key rebinding UI, PWA/offline install, rewind,
-   audio/video recording.
+   audio/video recording, full backup export/import of the library.

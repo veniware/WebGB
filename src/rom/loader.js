@@ -10,6 +10,7 @@ const MAX_SIZE = 64 * 1024 * 1024;
  * @property {string} name     File name of the ROM (inside the zip, if zipped).
  * @property {Uint8Array} data
  * @property {import('./detect.js').RomInfo} info
+ * @property {number} size
  * @property {string} key      Stable identity used to store saves and snapshots.
  */
 
@@ -31,5 +32,5 @@ export async function loadRomFile(file) {
   }
   const info = detectRom(data, name);
   const key = `${info.system}-${crc32(data).toString(16).padStart(8, '0')}-${data.length}`;
-  return { name, data, info, key };
+  return { key, name, info, size: data.length, data };
 }

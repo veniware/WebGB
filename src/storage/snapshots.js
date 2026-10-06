@@ -8,6 +8,7 @@ import { requestPersistence, transaction } from './db.js';
  * @property {string} romKey
  * @property {string} coreId
  * @property {number} coreVersion
+ * @property {number | null} saveId  Saved game in use when the snapshot was taken.
  * @property {number} created      Timestamp in ms.
  * @property {Blob | null} thumbnail
  */

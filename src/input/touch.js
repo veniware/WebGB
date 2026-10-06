@@ -14,6 +14,8 @@ export class TouchInput {
   enabled = true;
   #pointers = new Map();
   #state = { buttons: 0, fastForward: false };
+  // Buttons pressed since the last poll, so a tap shorter than a frame still registers.
+  #tapped = 0;
 
   /** @param {HTMLElement} root */
   constructor(root) {
@@ -39,7 +41,10 @@ export class TouchInput {
   }
 
   poll() {
-    return this.enabled ? this.#state : { buttons: 0, fastForward: false };
+    const { buttons, fastForward } = this.#state;
+    const tapped = this.#tapped;
+    this.#tapped = 0;
+    return this.enabled ? { buttons: buttons | tapped, fastForward } : { buttons: 0, fastForward: false };
   }
 
   #hit(x, y) {
@@ -68,6 +73,7 @@ export class TouchInput {
     }
     const pressed = buttons & ~this.#state.buttons;
     if (pressed) navigator.vibrate?.(8);
+    this.#tapped |= pressed;
     this.#state = { buttons, fastForward };
 
     for (const el of this.root.querySelectorAll('[data-button]')) {

@@ -1,8 +1,8 @@
 import { Emitter } from './emitter.js';
 import { createCore } from '../core/registry.js';
-import { loadRomFile } from '../rom/loader.js';
-import { loadSave, storeSave } from '../storage/saves.js';
-import { addSnapshot, deleteSnapshot, getSnapshot, listSnapshots } from '../storage/snapshots.js';
+import { getRom, getRomData, touchRom } from '../storage/roms.js';
+import { createSave, getSave, updateSave } from '../storage/saves.js';
+import { addSnapshot, getSnapshot, listSnapshots } from '../storage/snapshots.js';
 import { frameToBlob } from '../video/thumbnail.js';
 
 /** Speed while the fast-forward hotkey is held (unless the selected speed is higher). */
@@ -17,14 +17,19 @@ const SAVE_CHECK_INTERVAL = 2000;
  * The host: owns the running core and drives it from requestAnimationFrame,
  * feeding input, video, audio and storage.
  *
- * Events: 'loaded' ({ rom, fallback }), 'paused' (boolean), 'fps' (number),
- * 'snapshots' (list changed), 'status' ({ text, error? }).
+ * In-game saves go to the active saved game (`saveId`); when there is none
+ * yet, the first save creates one.
+ *
+ * Events: 'loaded' ({ rom, fallback }), 'stopped', 'paused' (boolean),
+ * 'fps' (number), 'snapshots' (list changed), 'status' ({ text, error? }).
  */
 export class Emulator extends Emitter {
   /** @type {import('../core/interface.js').Core | null} */
   core = null;
-  /** @type {import('../rom/loader.js').LoadedRom | null} */
+  /** @type {{ key: string, name: string, info: import('../rom/detect.js').RomInfo, size: number } | null} */
   rom = null;
+  /** @type {number | null} Saved game that in-game saves are written to. */
+  saveId = null;
   paused = false;
   speed = 1;
 
@@ -33,7 +38,11 @@ export class Emulator extends Emitter {
   #input;
   #frameDebt = 0;
   #lastTime = 0;
+  // Buttons seen since the last emulated frame; on high-refresh displays some
+  // animation frames run no emulated frame, and short taps must not be lost.
+  #pendingButtons = 0;
   #lastSave = null;
+  #saveQueue = Promise.resolve();
   #fpsFrames = 0;
   #fpsSince = 0;
 
@@ -54,24 +63,66 @@ export class Emulator extends Emitter {
     requestAnimationFrame(this.#tick);
   }
 
-  /** @param {File} file */
-  async load(file) {
-    const rom = await loadRomFile(file);
-    const { core, fallback } = await createCore(rom.data, rom.info);
-    await this.flushSave();
+  /**
+   * Starts a ROM from the library.
+   * @param {string} key
+   * @param {{ saveId?: number | null, snapshotId?: number | null }} [options]
+   */
+  async launch(key, options) {
+    const [rom, data] = await Promise.all([getRom(key), getRomData(key)]);
+    if (!rom || !data) throw new Error('This ROM is no longer in the library.');
+    await this.play(rom, data, options);
+  }
 
-    const save = await loadSave(rom.key).catch((err) => console.warn('Could not read save data:', err));
-    if (save) core.loadSaveData(save);
+  /**
+   * Starts a ROM. Boots with the given saved game (none = new game), or
+   * resumes a snapshot, which brings back the saved game it was taken with.
+   *
+   * @param {{ key: string, name: string, info: import('../rom/detect.js').RomInfo, size: number }} rom
+   * @param {Uint8Array} data
+   * @param {{ saveId?: number | null, snapshotId?: number | null }} [options]
+   */
+  async play(rom, data, { saveId = null, snapshotId = null } = {}) {
+    const { core, fallback } = await createCore(data, rom.info);
+    let state = null;
+    if (snapshotId !== null) {
+      const snapshot = await getSnapshot(snapshotId);
+      checkSnapshot(snapshot, rom.key, core);
+      state = snapshot.state;
+      saveId = snapshot.saveId ?? null;
+    }
+    const save = saveId !== null ? await getSave(saveId) : null;
 
+    await this.#unload();
+    if (save) core.loadSaveData(save.data);
+    if (state) core.loadState(state);
     this.core = core;
-    this.rom = rom;
+    this.rom = { key: rom.key, name: rom.name, info: rom.info, size: rom.size };
+    this.saveId = save?.id ?? null;
     this.#lastSave = core.getSaveData()?.slice() ?? null;
     this.#frameDebt = 0;
     this.#display.setSourceSize(core.width, core.height);
     this.#display.draw(core.getFrameBuffer());
-    this.#audio.clear();
     this.setPaused(false);
-    this.emit('loaded', { rom, fallback });
+    touchRom(rom.key).catch(() => {});
+    this.emit('loaded', { rom: this.rom, fallback });
+  }
+
+  /** Stops the running game (after storing its save). */
+  async stop() {
+    if (!this.core) return;
+    await this.#unload();
+    this.emit('stopped');
+  }
+
+  async #unload() {
+    if (!this.core) return;
+    await this.flushSave();
+    this.core = null;
+    this.rom = null;
+    this.saveId = null;
+    this.#lastSave = null;
+    this.#audio.clear();
   }
 
   setPaused(paused) {
@@ -86,29 +137,41 @@ export class Emulator extends Emitter {
     this.#display.draw(this.core.getFrameBuffer());
   }
 
-  /** Writes battery-backed save data if it changed since the last write. */
-  async flushSave() {
+  /** Stores the in-game save if it changed. Calls are queued, never concurrent. */
+  flushSave() {
+    this.#saveQueue = this.#saveQueue.then(() => this.#writeSave());
+    return this.#saveQueue;
+  }
+
+  async #writeSave() {
     const { core, rom } = this;
     const data = core?.getSaveData();
     if (!data || sameBytes(data, this.#lastSave)) return;
     const copy = data.slice();
     this.#lastSave = copy;
     try {
-      await storeSave(rom.key, copy);
+      // The saved game may have been deleted while in use: start a new one.
+      if (this.saveId === null || !(await updateSave(this.saveId, copy))) {
+        const id = await createSave(rom.key, copy);
+        if (this.core === core) this.saveId = id;
+        this.emit('status', { text: 'Started a new saved game.' });
+      }
     } catch (err) {
-      this.emit('status', { text: `Could not store save data: ${err.message}`, error: true });
+      this.emit('status', { text: `Could not store the saved game: ${err.message}`, error: true });
     }
   }
 
   async takeSnapshot() {
     const { core, rom } = this;
     if (!core) return;
+    await this.flushSave();
     const state = core.saveState();
     const thumbnail = await frameToBlob(core.getFrameBuffer(), core.width, core.height);
     await addSnapshot({
       romKey: rom.key,
       coreId: core.id,
       coreVersion: core.version,
+      saveId: this.saveId,
       created: Date.now(),
       thumbnail,
       state,
@@ -117,19 +180,17 @@ export class Emulator extends Emitter {
     this.emit('status', { text: 'Snapshot saved.' });
   }
 
-  /** @returns {Promise<import('../storage/snapshots.js').SnapshotInfo[]>} */
-  listSnapshots() {
-    return this.rom ? listSnapshots(this.rom.key) : Promise.resolve([]);
-  }
-
+  /** Restores a snapshot of the running game in place. */
   async loadSnapshot(id) {
     const { core, rom } = this;
-    const snapshot = core && (await getSnapshot(id));
-    if (!snapshot || snapshot.romKey !== rom.key) throw new Error('Snapshot not found for this game.');
-    if (snapshot.coreId !== core.id || snapshot.coreVersion !== core.version) {
-      throw new Error('This snapshot was made with a different emulator core version.');
-    }
+    if (!core) return;
+    const snapshot = await getSnapshot(id);
+    checkSnapshot(snapshot, rom.key, core);
+    const save = snapshot.saveId != null ? await getSave(snapshot.saveId) : null;
+    await this.flushSave();
     core.loadState(snapshot.state);
+    this.saveId = save?.id ?? null;
+    this.#lastSave = core.getSaveData()?.slice() ?? null;
     this.#audio.clear();
     this.#display.draw(core.getFrameBuffer());
     this.emit('status', { text: 'Snapshot loaded.' });
@@ -137,14 +198,9 @@ export class Emulator extends Emitter {
 
   async loadLatestSnapshot() {
     if (!this.core) return;
-    const [latest] = await this.listSnapshots();
+    const [latest] = await listSnapshots(this.rom.key);
     if (!latest) throw new Error('No snapshots for this game yet.');
     await this.loadSnapshot(latest.id);
-  }
-
-  async deleteSnapshot(id) {
-    await deleteSnapshot(id);
-    this.emit('snapshots');
   }
 
   #tick = (now) => {
@@ -153,7 +209,10 @@ export class Emulator extends Emitter {
     this.#lastTime = now;
     const input = this.#input.poll();
     const { core } = this;
-    if (!core || this.paused) return;
+    if (!core || this.paused) {
+      this.#pendingButtons = 0;
+      return;
+    }
 
     const speed = input.fastForward ? Math.max(FAST_FORWARD_SPEED, this.speed) : this.speed;
     this.#frameDebt += (elapsed / 1000) * core.fps * speed;
@@ -165,7 +224,11 @@ export class Emulator extends Emitter {
       this.#frameDebt -= frames;
     }
 
-    core.setInput(input.buttons);
+    this.#pendingButtons |= input.buttons;
+    if (frames) {
+      core.setInput(this.#pendingButtons);
+      this.#pendingButtons = 0;
+    }
     for (let i = 0; i < frames; i++) {
       core.runFrame();
       this.#audio.push(core.getAudioSamples(), core.sampleRate);
@@ -180,6 +243,13 @@ export class Emulator extends Emitter {
       this.#fpsSince = now;
     }
   };
+}
+
+function checkSnapshot(snapshot, romKey, core) {
+  if (!snapshot || snapshot.romKey !== romKey) throw new Error('Snapshot not found for this game.');
+  if (snapshot.coreId !== core.id || snapshot.coreVersion !== core.version) {
+    throw new Error('This snapshot was made with a different emulator core version.');
+  }
 }
 
 function sameBytes(a, b) {

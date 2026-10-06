@@ -1,25 +1,32 @@
 import { saveSettings } from '../app/settings.js';
+import { loadRomFile } from '../rom/loader.js';
+import { addRom, listRoms } from '../storage/roms.js';
+import { listSaves } from '../storage/saves.js';
+import { listSnapshots } from '../storage/snapshots.js';
 import { FILTERS } from '../video/filters.js';
-import { createSnapshotsPanel } from './snapshots-panel.js';
+import { baseName, formatSize, pickFiles, SYSTEM_NAMES } from './dom.js';
+import { ROM_ACCEPT, SAVE_EXTENSION } from './files.js';
+import { createGameDialog } from './game-dialog.js';
+import { createLibraryDialog } from './library-dialog.js';
+import { createModals } from './modals.js';
 
-const SYSTEM_NAMES = { gb: 'Game Boy', gbc: 'Game Boy Color', gba: 'Game Boy Advance' };
 const FLASH_DURATION = 4000;
 
 const $ = (id) => document.getElementById(id);
 
 /**
- * Wires the page (toolbar, drag-and-drop, status bar, snapshot dialog) to
- * the emulator. Returns the hotkey handler used by the keyboard.
+ * Wires the page (toolbar, drag-and-drop, status bar, dialogs) to the
+ * emulator. Returns the hotkey handler used by the keyboard.
  */
 export function setupUI({ emulator, display, audio, inputs, settings }) {
   const el = {
     toolbar: $('toolbar'),
     open: $('open'),
-    file: $('file'),
+    library: $('library-open'),
     pause: $('pause'),
     reset: $('reset'),
     snapshot: $('snapshot'),
-    snapshots: $('snapshots-open'),
+    saves: $('saves-open'),
     speed: $('speed'),
     filter: $('filter'),
     dedither: $('dedither'),
@@ -30,7 +37,7 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     status: $('status'),
     fps: $('fps'),
   };
-  const gameControls = [el.pause, el.reset, el.snapshot, el.snapshots];
+  const gameControls = [el.pause, el.reset, el.snapshot, el.saves];
 
   // --- Status bar --------------------------------------------------------
   let romStatus = 'No ROM loaded.';
@@ -64,22 +71,100 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     saveSettings(settings);
   };
 
-  // --- ROM loading -------------------------------------------------------
-  async function openRom(file) {
+  // --- Dialogs -----------------------------------------------------------
+  const modals = createModals({ emulator, inputs });
+  const gameDialog = createGameDialog({
+    dialog: $('game'),
+    modals,
+    emulator,
+    onError: reportError,
+    onStatus: flash,
+  });
+  const library = createLibraryDialog({
+    dialog: $('library'),
+    modals,
+    emulator,
+    onPlay: (key) => selectRom(key).catch(reportError),
+    onAdd: (files) => addRoms(files).then(reportAdded),
+    onError: reportError,
+  });
+
+  // --- ROMs and saved-game files -----------------------------------------
+
+  /** Offers saved games and snapshots when there are any; otherwise starts a new game. */
+  async function selectRom(key) {
     audio.init();
-    setStatus(`Loading ${file.name}…`);
+    const [saves, snapshots] = await Promise.all([listSaves(key), listSnapshots(key)]);
+    if (saves.length || snapshots.length) await gameDialog.open(key);
+    else await emulator.launch(key);
+  }
+
+  /**
+   * Adds ROM files to the library.
+   * @returns {Promise<{ added: import('../rom/loader.js').LoadedRom[], unstored: import('../rom/loader.js').LoadedRom[], errors: string[] }>}
+   */
+  async function addRoms(files) {
+    const result = { added: [], unstored: [], errors: [] };
+    for (const file of files) {
+      setStatus(`Loading ${file.name}…`);
+      let rom;
+      try {
+        rom = await loadRomFile(file);
+      } catch (err) {
+        result.errors.push(`${file.name}: ${err.message}`);
+        continue;
+      }
+      try {
+        await addRom(rom);
+        result.added.push(rom);
+      } catch (err) {
+        console.error(err);
+        result.unstored.push(rom);
+        result.errors.push(`${file.name} could not be stored: ${err.message}`);
+      }
+    }
+    return result;
+  }
+
+  function reportAdded({ added, errors }) {
+    if (errors.length) flash(errors.join(' · '), true);
+    else if (added.length) flash(`Added ${added.length} ROM${added.length === 1 ? '' : 's'} to the library.`);
+    else showRomStatus();
+  }
+
+  /** Handles files from Open ROM or drag-and-drop: ROMs, zips and saved games. */
+  async function openFiles(files) {
+    audio.init();
+    const saveFiles = files.filter((file) => SAVE_EXTENSION.test(file.name));
+    const romFiles = files.filter((file) => !SAVE_EXTENSION.test(file.name));
     try {
-      await emulator.load(file);
+      if (saveFiles.length) {
+        if (!emulator.rom) throw new Error('Start a game first, then add its saved game.');
+        await gameDialog.importSaves(emulator.rom.key, saveFiles);
+      }
+      if (!romFiles.length) return;
+
+      const result = await addRoms(romFiles);
+      reportAdded(result);
+      const [rom] = result.added;
+      if (result.added.length === 1 && result.unstored.length === 0) {
+        await selectRom(rom.key);
+      } else if (result.added.length > 1) {
+        await library.open();
+      } else if (result.unstored.length === 1 && result.added.length === 0) {
+        // Storage full or unavailable: still let the ROM be played.
+        const [unstored] = result.unstored;
+        await emulator.play(unstored, unstored.data);
+        flash(`${unstored.name} is running but could not be added to the library.`, true);
+      }
     } catch (err) {
       reportError(err);
     }
   }
 
-  el.open.addEventListener('click', () => el.file.click());
-  el.file.addEventListener('change', () => {
-    const [file] = el.file.files;
-    el.file.value = '';
-    if (file) openRom(file);
+  el.open.addEventListener('click', async () => {
+    const files = await pickFiles({ accept: `${ROM_ACCEPT},.sav,.srm`, multiple: true });
+    if (files.length) openFiles(files);
   });
 
   let dragDepth = 0;
@@ -105,23 +190,19 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     e.preventDefault();
     dragDepth = 0;
     document.body.classList.remove('dragging');
-    const [file] = e.dataTransfer?.files ?? [];
-    if (file) openRom(file);
+    const files = [...(e.dataTransfer?.files ?? [])];
+    if (!files.length) return;
+    // Close open dialogs so the dropped game isn't hidden behind them.
+    document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
+    openFiles(files);
   });
 
   // --- Toolbar -----------------------------------------------------------
-  const setInputsEnabled = (enabled) => inputs.forEach((input) => (input.enabled = enabled));
-  const snapshotsPanel = createSnapshotsPanel({
-    dialog: $('snapshots'),
-    emulator,
-    onError: reportError,
-    onOpenChange: (open) => setInputsEnabled(!open),
-  });
-
+  el.library.addEventListener('click', () => library.open().catch(reportError));
   el.pause.addEventListener('click', () => emulator.setPaused(!emulator.paused));
   el.reset.addEventListener('click', () => emulator.reset());
   el.snapshot.addEventListener('click', () => emulator.takeSnapshot().catch(reportError));
-  el.snapshots.addEventListener('click', () => snapshotsPanel.open());
+  el.saves.addEventListener('click', () => emulator.rom && gameDialog.open(emulator.rom.key).catch(reportError));
   el.fullscreen.addEventListener('click', () => display.toggleFullscreen());
   el.fullscreen.hidden = !document.fullscreenEnabled;
 
@@ -164,14 +245,21 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
   emulator.on('loaded', ({ rom, fallback }) => {
     el.stage.classList.remove('empty');
     gameControls.forEach((control) => (control.disabled = false));
-    const title = rom.info.title || rom.name;
-    romStatus = `${SYSTEM_NAMES[rom.info.system]} · ${title} · ${formatSize(rom.data.length)}`;
+    const title = rom.info.title || baseName(rom.name);
+    romStatus = `${SYSTEM_NAMES[rom.info.system]} · ${title} · ${formatSize(rom.size)}`;
     if (fallback) romStatus += ' · core not implemented yet, running the test core';
+    showRomStatus();
+  });
+  emulator.on('stopped', () => {
+    el.stage.classList.add('empty');
+    gameControls.forEach((control) => (control.disabled = true));
+    el.fps.textContent = '';
+    romStatus = 'No ROM loaded.';
     showRomStatus();
   });
   emulator.on('paused', (paused) => {
     el.pause.textContent = paused ? 'Resume' : 'Pause';
-    if (paused) el.fps.textContent = 'Paused';
+    if (paused && emulator.core) el.fps.textContent = 'Paused';
   });
   emulator.on('fps', (fps) => (el.fps.textContent = `${fps.toFixed(1)} fps`));
   emulator.on('status', ({ text, error }) => flash(text, error));
@@ -183,6 +271,11 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
 
   showRomStatus();
 
+  // Start on the library when it has games.
+  listRoms()
+    .then((roms) => roms.length && !emulator.core && library.open())
+    .catch(reportError);
+
   const hotkeys = {
     pause: () => emulator.core && emulator.setPaused(!emulator.paused),
     fullscreen: () => display.toggleFullscreen(),
@@ -190,8 +283,4 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     loadSnapshot: () => emulator.loadLatestSnapshot().catch(reportError),
   };
   return { hotkey: (name) => hotkeys[name]?.() };
-}
-
-function formatSize(bytes) {
-  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
 }
