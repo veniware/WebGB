@@ -4,7 +4,7 @@
   "description": "Game Boy / Game Boy Advance emulator that runs entirely in the browser.",
   "private": true,
   "type": "module",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "scripts": {
     "start": "node tools/serve.js",
     "test": "node --test"

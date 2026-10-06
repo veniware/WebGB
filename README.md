@@ -60,4 +60,4 @@ See [AGENTS.md](AGENTS.md) for the architecture and conventions.
 
 ## License
 
-GPL-3.0, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
