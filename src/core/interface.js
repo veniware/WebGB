@@ -25,6 +25,9 @@
  * @property {(data: Uint8Array) => void} loadSaveData
  * @property {() => Uint8Array} saveState
  * @property {(state: Uint8Array) => void} loadState
+ * @property {(options: object) => void} [configure]
+ *   Optional: applies user options (e.g. palettes) while running. The host
+ *   passes the same options to createCore() and again whenever they change.
  */
 
 /**
@@ -35,7 +38,7 @@
  * @property {string} id
  * @property {string} name
  * @property {Array<'gb' | 'gbc' | 'gba'>} systems
- * @property {() => Promise<{ createCore: (rom: Uint8Array, info: import('../rom/detect.js').RomInfo) => Core }>} load
+ * @property {() => Promise<{ createCore: (rom: Uint8Array, info: import('../rom/detect.js').RomInfo, options: object) => Core }>} load
  */
 
 export {};

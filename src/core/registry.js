@@ -23,11 +23,12 @@ export function findCore(system) {
  *
  * @param {Uint8Array} rom
  * @param {import('../rom/detect.js').RomInfo} info
+ * @param {object} [options] Core options (see Core.configure)
  * @returns {Promise<{ core: import('./interface.js').Core, fallback: boolean }>}
  */
-export async function createCore(rom, info) {
+export async function createCore(rom, info, options = {}) {
   const descriptor = findCore(info.system);
   if (!descriptor) return { core: createTestCore(rom, info), fallback: true };
   const module = await descriptor.load();
-  return { core: module.createCore(rom, info), fallback: false };
+  return { core: module.createCore(rom, info, options), fallback: false };
 }

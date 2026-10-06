@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { Button } from '../src/core/buttons.js';
 import { createCartridge } from '../src/core/gb/cartridge.js';
 import { GameBoy } from '../src/core/gb/gameboy.js';
+import { gbcCombinationFor } from '../src/core/gb/palettes.js';
 import { makeGbRom } from './helpers.js';
 
 // Small hand-assembled programs (placed at 0x150 by makeGbRom).
@@ -198,4 +199,22 @@ test('MBC3 clock follows the wall clock and survives saving', () => {
   later.writeRom(0x6000, 1);
   later.writeRom(0x4000, 0x0a);
   assert.equal(later.readRam(0xa000), 21);
+});
+
+test('picks the Game Boy Color palette of known Nintendo titles', () => {
+  const tetris = makeGbRom({ title: 'TETRIS' });
+  assert.equal(gbcCombinationFor(tetris), -1, 'not published by Nintendo');
+  tetris[0x14b] = 0x01;
+  assert.equal(gbcCombinationFor(tetris), 3);
+
+  const gb = new GameBoy(tetris);
+  gb.configure({ gbPalette: 'auto' });
+  assert.equal(gb.ppu.dmgBg[1], 0xff00ffff, 'yellow');
+  gb.configure({ gbPalette: 'gray' });
+  assert.equal(gb.ppu.dmgBg[0], 0xffffffff);
+
+  // Unknown games get the Game Boy Color's default: different BG and sprite colors.
+  const other = new GameBoy(makeGbRom());
+  other.configure({ gbPalette: 'gbc' });
+  assert.notDeepEqual([...other.ppu.dmgBg], [...other.ppu.dmgObj0]);
 });

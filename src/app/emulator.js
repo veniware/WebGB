@@ -36,6 +36,7 @@ export class Emulator extends Emitter {
   #display;
   #audio;
   #input;
+  #coreOptions = {};
   #frameDebt = 0;
   #lastTime = 0;
   // Buttons seen since the last emulated frame; on high-refresh displays some
@@ -63,6 +64,12 @@ export class Emulator extends Emitter {
     requestAnimationFrame(this.#tick);
   }
 
+  /** User options for cores (palettes etc.): applied now and to cores created later. */
+  configure(options) {
+    this.#coreOptions = options;
+    this.core?.configure?.(options);
+  }
+
   /**
    * Starts a ROM from the library.
    * @param {string} key
@@ -83,7 +90,7 @@ export class Emulator extends Emitter {
    * @param {{ saveId?: number | null, snapshotId?: number | null }} [options]
    */
   async play(rom, data, { saveId = null, snapshotId = null } = {}) {
-    const { core, fallback } = await createCore(data, rom.info);
+    const { core, fallback } = await createCore(data, rom.info, this.#coreOptions);
     let state = null;
     if (snapshotId !== null) {
       const snapshot = await getSnapshot(snapshotId);

@@ -206,6 +206,32 @@ body.dragging .drop-overlay {
   color: var(--muted);
 }
 
+.fields {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) 1fr;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 12px;
+}
+
+.fields select {
+  min-width: 0;
+  width: 100%;
+}
+
+.fields .check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .fields {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
 .rows {
   display: grid;
   gap: 4px;

@@ -41,6 +41,7 @@
     </label>
     <label>Volume <input id="volume" type="range" min="0" max="100" step="1"></label>
     <button id="fullscreen" type="button" title="Fullscreen (F)">Fullscreen</button>
+    <button id="settings-open" type="button">Settings</button>
   </header>
 
   <main id="play-area" class="play-area">
@@ -106,6 +107,22 @@
       </header>
       <p class="empty" data-snapshots-empty>No snapshots yet.</p>
       <ul class="rows" data-snapshots></ul>
+    </section>
+  </dialog>
+  <dialog id="settings" class="panel">
+    <header>
+      <h2>Settings</h2>
+      <button type="button" data-close>Close</button>
+    </header>
+    <section>
+      <header><h3>Game Boy</h3></header>
+      <div class="fields">
+        <label for="set-gb-palette">Colors of Game Boy games</label>
+        <select id="set-gb-palette" data-setting="gbPalette"></select>
+        <label for="set-color-correction">Game Boy Color screen</label>
+        <label class="check"><input id="set-color-correction" type="checkbox" data-setting="colorCorrection">
+          Softer colors, like the original LCD</label>
+      </div>
     </section>
   </dialog>
 </body>

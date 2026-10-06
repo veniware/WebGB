@@ -9,6 +9,7 @@ import { ROM_ACCEPT, SAVE_EXTENSION } from './files.js';
 import { createGameDialog } from './game-dialog.js';
 import { createLibraryDialog } from './library-dialog.js';
 import { createModals } from './modals.js';
+import { createSettingsDialog } from './settings-dialog.js';
 
 const FLASH_DURATION = 4000;
 
@@ -33,6 +34,7 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     zoom: $('zoom'),
     volume: $('volume'),
     fullscreen: $('fullscreen'),
+    settings: $('settings-open'),
     stage: $('stage'),
     status: $('status'),
     fps: $('fps'),
@@ -79,6 +81,18 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     emulator,
     onError: reportError,
     onStatus: flash,
+  });
+  // Settings the cores read (see Emulator.configure).
+  const coreOptions = () => ({ gbPalette: settings.gbPalette, colorCorrection: settings.colorCorrection });
+  emulator.configure(coreOptions());
+  const settingsDialog = createSettingsDialog({
+    dialog: $('settings'),
+    modals,
+    settings,
+    onChange: (key, value) => {
+      updateSettings({ [key]: value });
+      emulator.configure(coreOptions());
+    },
   });
   const library = createLibraryDialog({
     dialog: $('library'),
@@ -204,6 +218,7 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
   el.snapshot.addEventListener('click', () => emulator.takeSnapshot().catch(reportError));
   el.saves.addEventListener('click', () => emulator.rom && gameDialog.open(emulator.rom.key).catch(reportError));
   el.fullscreen.addEventListener('click', () => display.toggleFullscreen());
+  el.settings.addEventListener('click', () => settingsDialog.open());
   el.fullscreen.hidden = !document.fullscreenEnabled;
 
   el.speed.addEventListener('change', () => (emulator.speed = Number(el.speed.value)));

@@ -3,6 +3,7 @@ import { Apu, SAMPLE_RATE } from './apu.js';
 import { createCartridge } from './cartridge.js';
 import { CLOCK_RATE, FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH } from './constants.js';
 import { Cpu } from './cpu.js';
+import { DMG_PALETTES, GBC_PRESETS, gbcCombination, gbcCombinationFor } from './palettes.js';
 import { Joypad } from './joypad.js';
 import { Ppu } from './ppu.js';
 import { Serial } from './serial.js';
@@ -36,6 +37,7 @@ export class GameBoy {
    */
   constructor(rom, { cgb = false, now } = {}) {
     this.cgb = cgb;
+    this.rom = rom;
     this.cart = createCartridge(rom, { now });
     this.wram = new Uint8Array(cgb ? 0x8000 : 0x2000);
     this.hram = new Uint8Array(0x7f);
@@ -48,6 +50,24 @@ export class GameBoy {
     this.joypad = new Joypad(this);
     this.serial = new Serial(this);
     this.reset();
+  }
+
+  /**
+   * Display options; can change while running.
+   * @param {{ gbPalette?: string, colorCorrection?: boolean }} options
+   *   gbPalette (DMG games): 'auto' (Game Boy Color colors for the games it
+   *   knows, else green), 'gbc' (always the Game Boy Color's choice), a
+   *   DMG_PALETTES name or a GBC_PRESETS name. colorCorrection: mimic the
+   *   Game Boy Color's LCD instead of raw colors.
+   */
+  configure({ gbPalette = 'auto', colorCorrection = false } = {}) {
+    this.ppu.setColorCorrection(colorCorrection);
+    if (this.cgb) return;
+    const known = gbcCombinationFor(this.rom);
+    if (gbPalette in DMG_PALETTES) this.ppu.setDmgPalette(DMG_PALETTES[gbPalette]);
+    else if (gbPalette in GBC_PRESETS) this.ppu.setCompatPalette(gbcCombination(GBC_PRESETS[gbPalette]));
+    else if (gbPalette === 'gbc' || known >= 0) this.ppu.setCompatPalette(gbcCombination(Math.max(known, 0)));
+    else this.ppu.setDmgPalette(DMG_PALETTES.green);
   }
 
   /** Power cycle. Battery-backed RAM and the RTC are kept. */

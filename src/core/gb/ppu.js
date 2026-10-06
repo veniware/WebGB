@@ -45,7 +45,13 @@ export class Ppu {
     this.objPaletteRam = new Uint8Array(64);
     this.bgColors = new Uint32Array(32);
     this.objColors = new Uint32Array(32);
-    this.dmgColors = new Uint32Array(DEFAULT_DMG_PALETTE.map(rgbToPixel));
+    // DMG mode: the colors BGP, OBP0 and OBP1 pick from (one set on a DMG,
+    // three when a Game Boy Color colors an old game).
+    this.dmgBg = new Uint32Array(DEFAULT_DMG_PALETTE.map(rgbToPixel));
+    this.dmgObj0 = this.dmgBg.slice();
+    this.dmgObj1 = this.dmgBg.slice();
+    // CGB colors mixed to look like the Game Boy Color's LCD.
+    this.colorCorrection = false;
     this.bgShades = new Uint32Array(4);
     this.obp0Shades = new Uint32Array(4);
     this.obp1Shades = new Uint32Array(4);
@@ -132,7 +138,24 @@ export class Ppu {
 
   /** Sets the four DMG shades, lightest first, as 0xRRGGBB. */
   setDmgPalette(colors) {
-    this.dmgColors.set(colors.map(rgbToPixel));
+    const pixels = colors.map(rgbToPixel);
+    this.dmgBg.set(pixels);
+    this.dmgObj0.set(pixels);
+    this.dmgObj1.set(pixels);
+    this.#refreshColors();
+  }
+
+  /** Colors a DMG game like a Game Boy Color: separate 15-bit palettes for BG and sprites. */
+  setCompatPalette({ bg, obj0, obj1 }) {
+    const pixel = (color) => cgbToPixel(color, this.colorCorrection);
+    this.dmgBg.set(bg.map(pixel));
+    this.dmgObj0.set(obj0.map(pixel));
+    this.dmgObj1.set(obj1.map(pixel));
+    this.#refreshColors();
+  }
+
+  setColorCorrection(enabled) {
+    this.colorCorrection = enabled;
     this.#refreshColors();
   }
 
@@ -339,7 +362,7 @@ export class Ppu {
       }
     } else {
       // DMG with BG and window off: blank.
-      back.fill(this.dmgColors[0], base, base + SCREEN_WIDTH);
+      back.fill(this.dmgBg[0], base, base + SCREEN_WIDTH);
       this.lineIndex.fill(0);
     }
 
@@ -430,18 +453,18 @@ export class Ppu {
   }
 
   #blank() {
-    return this.cgb ? WHITE : this.dmgColors[0];
+    return this.cgb ? WHITE : this.dmgBg[0];
   }
 
   #refreshColors() {
     for (let i = 0; i < 4; i++) {
-      this.bgShades[i] = this.dmgColors[(this.bgp >> (i * 2)) & 3];
-      this.obp0Shades[i] = this.dmgColors[(this.obp0 >> (i * 2)) & 3];
-      this.obp1Shades[i] = this.dmgColors[(this.obp1 >> (i * 2)) & 3];
+      this.bgShades[i] = this.dmgBg[(this.bgp >> (i * 2)) & 3];
+      this.obp0Shades[i] = this.dmgObj0[(this.obp0 >> (i * 2)) & 3];
+      this.obp1Shades[i] = this.dmgObj1[(this.obp1 >> (i * 2)) & 3];
     }
     for (let i = 0; i < 32; i++) {
-      this.bgColors[i] = cgbToPixel(this.bgPaletteRam[i * 2] | (this.bgPaletteRam[i * 2 + 1] << 8));
-      this.objColors[i] = cgbToPixel(this.objPaletteRam[i * 2] | (this.objPaletteRam[i * 2 + 1] << 8));
+      this.bgColors[i] = cgbToPixel(this.bgPaletteRam[i * 2] | (this.bgPaletteRam[i * 2 + 1] << 8), this.colorCorrection);
+      this.objColors[i] = cgbToPixel(this.objPaletteRam[i * 2] | (this.objPaletteRam[i * 2 + 1] << 8), this.colorCorrection);
     }
   }
 
@@ -527,7 +550,7 @@ export class Ppu {
     const i = index & 0x3f;
     ram[i] = value;
     const entry = i >> 1;
-    colors[entry] = cgbToPixel(ram[entry * 2] | (ram[entry * 2 + 1] << 8));
+    colors[entry] = cgbToPixel(ram[entry * 2] | (ram[entry * 2 + 1] << 8), this.colorCorrection);
     return index & 0x80 ? (index & 0x80) | ((i + 1) & 0x3f) : index;
   }
 

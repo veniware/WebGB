@@ -116,9 +116,10 @@ for (const path of mooneye) {
 if (!available) romTest('mooneye-test-suite', () => {});
 
 /** The acid2 tests execute LD B,B when done; the screen must match the reference. */
-function runAcid(path, reference, cgb) {
+function runAcid(path, reference, cgb, gbPalette) {
   const gb = new GameBoy(load(path), { cgb });
-  gb.ppu.setDmgPalette(DMG_PALETTES.gray);
+  if (gbPalette) gb.configure({ gbPalette });
+  else gb.ppu.setDmgPalette(DMG_PALETTES.gray);
   const { cpu } = gb;
   for (let i = 0; i < 10_000_000 && (cpu.halted || gb.read(cpu.pc) !== 0x40); i++) cpu.step();
   for (let i = 0; i < 3; i++) gb.runFrame();
@@ -133,6 +134,9 @@ function runAcid(path, reference, cgb) {
 
 romTest('dmg-acid2/dmg-acid2.gb', () => {
   assert.equal(runAcid('dmg-acid2/dmg-acid2.gb', 'dmg-acid2/dmg-acid2-dmg.png', false), 0);
+});
+romTest('dmg-acid2/dmg-acid2.gb (Game Boy Color palette)', () => {
+  assert.equal(runAcid('dmg-acid2/dmg-acid2.gb', 'dmg-acid2/dmg-acid2-cgb.png', false, 'gbc'), 0);
 });
 romTest('cgb-acid2/cgb-acid2.gbc', () => {
   assert.equal(runAcid('cgb-acid2/cgb-acid2.gbc', 'cgb-acid2/cgb-acid2.png', true), 0);

@@ -7,6 +7,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   dedither: false,
   zoom: 'fit',
   volume: 0.8,
+  // Game Boy: palette for DMG games (see GameBoy.configure) and GBC color correction.
+  gbPalette: 'auto',
+  colorCorrection: true,
 });
 
 export function loadSettings() {
