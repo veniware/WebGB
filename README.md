@@ -4,6 +4,8 @@ A Game Boy / Game Boy Color / Game Boy Advance emulator written in plain
 JavaScript. It runs entirely in the browser: no server-side processing, no
 build step and no dependencies.
 
+**Play it:** https://veniware.github.io/WebGB/
+
 > **Status:** the frontend is in place (ROM loading, video filters, audio,
 > keyboard/gamepad/touch input, speed control, saves and snapshots). The
 > emulator cores are not implemented yet; loading a ROM currently starts a
@@ -19,7 +21,8 @@ npm start          # http://localhost:8080 (no dependencies needed)
 npm test           # unit tests (Node 20+)
 ```
 
-Any static host works too (GitHub Pages, Netlify, `python3 -m http.server`).
+Any static host works too (Netlify, `python3 -m http.server`, ...). The live
+version is published with GitHub Pages straight from the `main` branch.
 Audio needs a secure context: `https://` or `localhost`.
 
 ## Features

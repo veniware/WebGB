@@ -26,6 +26,13 @@ Decisions so far:
   areas. Check phone portrait and landscape when changing the UI.
 - The UI is kept deliberately simple; the user fine-tunes it themselves.
 
+## Hosting
+
+Published with GitHub Pages from the root of `main` at
+https://veniware.github.io/WebGB/ (no build or workflow; `.nojekyll` makes
+Pages serve the files as-is). Every push to `main` goes live, so keep `main`
+working. Keep all URLs relative: the site lives under `/WebGB/`.
+
 ## Commands
 
 ```sh
