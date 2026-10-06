@@ -1,10 +1,10 @@
 # WebGB
 
+**▶ [Play WebGB in your browser](https://veniware.github.io/WebGB/)**
+
 A Game Boy / Game Boy Color / Game Boy Advance emulator written in plain
 JavaScript. It runs entirely in the browser: no server-side processing, no
 build step and no dependencies.
-
-**Play it:** https://veniware.github.io/WebGB/
 
 > **Status:** the frontend is in place (ROM loading, video filters, audio,
 > keyboard/gamepad/touch input, speed control, saves and snapshots). The
