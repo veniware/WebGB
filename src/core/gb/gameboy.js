@@ -127,8 +127,36 @@ export class GameBoy {
     for (const [addr, value] of sound) this.apu.write(addr, value);
     this.apu.settle();
 
+    if (!this.cgb) this.#bootLogo();
     this.ppu.writeRegister(0xff47, 0xfc);
     this.ppu.writeRegister(0xff40, 0x91);
+  }
+
+  /**
+   * The DMG boot ROM leaves the cartridge's logo (scaled 2x) in tiles 1-24,
+   * the ® symbol in tile 25 and a map showing them; some games and tests use them.
+   */
+  #bootLogo() {
+    const { vram } = this.ppu;
+    const double = (nibble) => {
+      let byte = 0;
+      for (let bit = 3; bit >= 0; bit--) byte = (byte << 2) | (((nibble >> bit) & 1) * 3);
+      return byte;
+    };
+    let address = 0x10;
+    for (let i = 0x104; i < 0x134; i++) {
+      for (const nibble of [this.rom[i] >> 4, this.rom[i] & 0x0f]) {
+        vram[address] = vram[address + 2] = double(nibble);
+        address += 4;
+      }
+    }
+    const registered = [0x3c, 0x42, 0xb9, 0xa5, 0xb9, 0xa5, 0x42, 0x3c];
+    registered.forEach((row, i) => (vram[0x190 + i * 2] = row));
+    vram[0x1910] = 0x19;
+    for (let i = 0; i < 12; i++) {
+      vram[0x1904 + i] = 1 + i;
+      vram[0x1924 + i] = 13 + i;
+    }
   }
 
   sync(s) {

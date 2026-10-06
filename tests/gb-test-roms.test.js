@@ -23,6 +23,14 @@ const KNOWN_FAILURES = {
   'mooneye-test-suite/acceptance/serial/boot_sclk_align-dmgABCmgb.gb': 'serial clock phase after the boot ROM',
   'mooneye-test-suite/acceptance/timer/rapid_toggle.gb': 'sub-M-cycle timing of timer glitches',
   'mooneye-test-suite/misc/bits/unused_hwio-C.gb': 'CGB unused I/O bits',
+  'mealybug-tearoom-tests/ppu/m3_lcdc_bg_en_change.gb': 'off by a pixel at some transitions',
+  'mealybug-tearoom-tests/ppu/m3_lcdc_obj_en_change.gb': 'sprite fetch aborted by disabling sprites',
+  'mealybug-tearoom-tests/ppu/m3_lcdc_obj_en_change_variant.gb': 'sprite fetch aborted by disabling sprites',
+  'mealybug-tearoom-tests/ppu/m3_lcdc_win_en_change_multiple_wx.gb': 'window re-enabled with WX changes',
+  'mealybug-tearoom-tests/ppu/m3_wx_4_change.gb': 'WX below 7 changed mid-line',
+  'mealybug-tearoom-tests/ppu/m3_wx_4_change_sprites.gb': 'WX below 7 changed mid-line',
+  'mealybug-tearoom-tests/ppu/m3_wx_5_change.gb': 'WX below 7 changed mid-line',
+  'mealybug-tearoom-tests/ppu/m3_wx_6_change.gb': 'WX below 7 changed mid-line',
 };
 
 function load(path) {
@@ -130,6 +138,19 @@ function runAcid(path, reference, cgb, gbPalette) {
     if (frame[i] !== expected[i] || frame[i + 1] !== expected[i + 1] || frame[i + 2] !== expected[i + 2]) different++;
   }
   return different;
+}
+
+// Mealybug Tearoom: register changes in the middle of a line (DMG screenshots).
+const MEALYBUG = 'mealybug-tearoom-tests/ppu';
+const mealybug = available && existsSync(join(ROOT, MEALYBUG))
+  ? readdirSync(join(ROOT, MEALYBUG)).filter((name) => name.endsWith('.gb')).sort() : [];
+for (const name of mealybug) {
+  const base = name.slice(0, -3);
+  const reference = [`${base}_dmg_blob.png`, `${base}_dmg_b.png`].find((file) => existsSync(join(ROOT, MEALYBUG, file)));
+  if (!reference) continue;
+  romTest(`${MEALYBUG}/${name}`, () => {
+    assert.equal(runAcid(`${MEALYBUG}/${name}`, `${MEALYBUG}/${reference}`, false), 0);
+  });
 }
 
 romTest('dmg-acid2/dmg-acid2.gb', () => {

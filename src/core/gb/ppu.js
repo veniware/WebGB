@@ -1,4 +1,5 @@
 import { Interrupt, SCREEN_HEIGHT, SCREEN_WIDTH } from './constants.js';
+import { LOGGED_REGISTERS, PixelFifo } from './fifo.js';
 import { cgbToPixel, DEFAULT_DMG_PALETTE, rgbToPixel } from './palettes.js';
 
 const LINE_DOTS = 456;
@@ -12,14 +13,15 @@ const Phase = {
   OAM_SCAN: 0, // dot 4: STAT mode 2, LY=LYC compare
   VRAM_LOCK: 1, // dot 80: VRAM reads blocked; OAM writes briefly allowed
   DRAWING: 2, // dot 84: mode 3
-  HBLANK_IRQ: 3, // 4 dots before the end of mode 3: HBlank interrupt, line rendered
-  HBLANK: 4, // mode 0, VRAM and OAM accessible
+  HBLANK_IRQ: 3, // 4 dots before the end of mode 3: HBlank interrupt
+  HBLANK: 4, // mode 0, VRAM and OAM accessible; line rendered, HDMA
   LINE_END: 5, // dot 456
   VBLANK_LYC: 6, // dot 4 of lines 144-153
   LY_RESET: 7, // line 153, dot 8: LY reads 0 from dot 4, the LY=LYC flag drops
   LY_RESET_LYC: 8, // line 153, dot 12: compares LY=0
   VBLANK_END: 9, // dot 456 of lines 144-153
-  CGB_LINE_144_STAT: 10, // line 143, dot 452: see #startVBlank
+  VBLANK_START: 10, // line 144, dot 4: VBlank interrupt, mode 1
+  FIFO_RENDER: 11, // 8 dots into HBlank, for lines drawn by PixelFifo
 };
 
 /**
@@ -67,6 +69,9 @@ export class Ppu {
     this.linePriority = new Uint8Array(SCREEN_WIDTH);
     this.lineTaken = new Uint8Array(SCREEN_WIDTH);
     this.lineSprites = new Uint8Array(MAX_SPRITES_PER_LINE);
+    // Lines with register writes during mode 3 are drawn dot by dot instead.
+    this.fifo = new PixelFifo(this.cgb);
+    this.drawStartRegs = new Uint8Array(LOGGED_REGISTERS.length);
     this.reset();
   }
 
@@ -108,6 +113,8 @@ export class Ppu {
     this.coincidence = false;
     this.statSignal = false;
     this.spriteCount = 0;
+    this.drawing = false;
+    this.fifo.logLength = 0;
     this.frameDone = false;
     // The first frame after switching the LCD on isn't shown.
     this.skipFrame = false;
@@ -127,11 +134,17 @@ export class Ppu {
     }
     this.dot = s.u16(this.dot);
     this.nextEvent = s.u16(this.nextEvent);
-    for (const flag of ['oamReadBlocked', 'oamWriteBlocked', 'vramReadBlocked', 'vramWriteBlocked', 'windowTriggered', 'coincidence', 'statSignal', 'frameDone',
-      'skipFrame']) {
+    for (const flag of ['oamReadBlocked', 'oamWriteBlocked', 'vramReadBlocked', 'vramWriteBlocked', 'windowTriggered',
+      'coincidence', 'statSignal', 'frameDone', 'skipFrame', 'drawing']) {
       this[flag] = s.bool(this[flag]);
     }
     s.bytes(this.lineSprites);
+    s.bytes(this.drawStartRegs);
+    const { fifo } = this;
+    fifo.logLength = s.u8(fifo.logLength);
+    s.bytes(fifo.logDots);
+    s.bytes(fifo.logRegs);
+    s.bytes(fifo.logValues);
     s.bytes(this.front);
     if (s.reading) this.#refreshColors();
   }
@@ -174,8 +187,9 @@ export class Ppu {
     switch (this.phase) {
       case Phase.OAM_SCAN:
         this.mode = 2;
+        this.irqMode = 2;
         this.oamWriteBlocked = true;
-        if (this.ly === this.wy) this.windowTriggered = true;
+        this.#checkWindowY();
         this.#compareLy();
         this.#next(Phase.VRAM_LOCK, 80);
         break;
@@ -186,6 +200,9 @@ export class Ppu {
         break;
       case Phase.DRAWING:
         this.#scanOam();
+        this.drawing = true;
+        this.fifo.logLength = 0;
+        for (let i = 0; i < LOGGED_REGISTERS.length; i++) this.drawStartRegs[i] = this.readRegister(LOGGED_REGISTERS[i]);
         this.mode = 3;
         this.irqMode = 3;
         this.#blockAccess(true);
@@ -194,27 +211,38 @@ export class Ppu {
         break;
       case Phase.HBLANK_IRQ:
         this.irqMode = 0;
-        this.#renderLine();
         this.#updateStat();
-        this.gb.hblank();
         this.#next(Phase.HBLANK, this.nextEvent + 4);
         break;
       case Phase.HBLANK:
         this.mode = 0;
         this.#blockAccess(false);
-        if (this.cgb && this.ly === SCREEN_HEIGHT - 1) this.#next(Phase.CGB_LINE_144_STAT, LINE_DOTS - 4);
-        else this.#next(Phase.LINE_END, LINE_DOTS);
+        if (this.fifo.logLength) {
+          // Registers changed while drawing: the dot-by-dot renderer runs a
+          // little later, so writes landing on the last pixels are included.
+          this.gb.hblank();
+          this.#next(Phase.FIFO_RENDER, this.nextEvent + 8);
+          break;
+        }
+        this.drawing = false;
+        this.#renderLine();
+        this.gb.hblank();
+        this.#nextAfterRender();
         break;
-      case Phase.CGB_LINE_144_STAT:
-        this.#updateStat(this.statEnables & 0x20);
-        this.#next(Phase.LINE_END, LINE_DOTS);
+      case Phase.FIFO_RENDER:
+        this.drawing = false;
+        this.fifo.render(this, this.drawStartRegs, 84);
+        this.#nextAfterRender();
         break;
       case Phase.LINE_END:
         this.dot -= LINE_DOTS;
         this.ly++;
         this.coincidence = false;
         if (this.ly === SCREEN_HEIGHT) {
-          this.#startVBlank();
+          // The OAM-scan STAT source also fires as line 144 starts; on the
+          // CGB 4 dots before the VBlank interrupt, on the DMG with it.
+          this.#updateStat(this.cgb ? this.statEnables & 0x20 : 0);
+          this.#next(Phase.VBLANK_START, 4);
         } else {
           this.irqMode = 2;
           this.oamReadBlocked = true;
@@ -222,6 +250,9 @@ export class Ppu {
           this.#next(Phase.OAM_SCAN, 4);
         }
         break;
+      case Phase.VBLANK_START:
+        this.#startVBlank();
+      // falls through
       case Phase.VBLANK_LYC:
         this.#compareLy();
         if (this.ly === 153) {
@@ -243,12 +274,11 @@ export class Ppu {
       default: // VBLANK_END
         this.dot -= LINE_DOTS;
         if (this.ly === 0) {
-          // Line 153 is over: new frame.
+          // Line 153 is over: new frame. On line 0 the OAM-scan interrupt
+          // comes with the STAT change, not before it.
           this.windowLine = 0;
           this.windowTriggered = false;
-          this.irqMode = 2;
           this.oamReadBlocked = true;
-          this.#updateStat();
           this.#next(Phase.OAM_SCAN, 4);
         } else {
           this.ly++;
@@ -257,6 +287,10 @@ export class Ppu {
           this.#next(Phase.VBLANK_LYC, 4);
         }
     }
+  }
+
+  #nextAfterRender() {
+    this.#next(Phase.LINE_END, LINE_DOTS);
   }
 
   #blockAccess(blocked) {
@@ -283,10 +317,12 @@ export class Ppu {
       [this.front, this.back] = [this.back, this.front];
       [this.frontBytes, this.backBytes] = [this.backBytes, this.frontBytes];
     }
-    // The OAM-scan STAT source also fires when line 144 starts (on the CGB,
-    // one M-cycle earlier).
     this.#updateStat(this.cgb ? 0 : this.statEnables & 0x20);
-    this.#next(Phase.VBLANK_LYC, 4);
+  }
+
+  /** The window can only start on a frame once LY has matched WY while it was enabled. */
+  #checkWindowY() {
+    if (this.lcdc & 0x20 && this.ly === this.wy) this.windowTriggered = true;
   }
 
   #compareLy() {
@@ -361,8 +397,8 @@ export class Ppu {
         this.windowLine++;
       }
     } else {
-      // DMG with BG and window off: blank.
-      back.fill(this.dmgBg[0], base, base + SCREEN_WIDTH);
+      // DMG with BG and window off: color 0.
+      back.fill(this.bgShades[0], base, base + SCREEN_WIDTH);
       this.lineIndex.fill(0);
     }
 
@@ -513,8 +549,12 @@ export class Ppu {
   }
 
   writeRegister(addr, value) {
+    if (this.drawing) this.fifo.log(this.dot, addr, value, this.readRegister(addr));
     switch (addr) {
-      case 0xff40: this.#writeLcdc(value); break;
+      case 0xff40:
+        this.#writeLcdc(value);
+        if (this.lcdc & 0x80) this.#checkWindowY();
+        break;
       case 0xff41:
         // DMG bug: writing STAT briefly enables every source, so a write
         // during HBlank, VBlank or LY=LYC raises an interrupt.
@@ -534,7 +574,10 @@ export class Ppu {
       case 0xff47: this.bgp = value; this.#refreshColors(); break;
       case 0xff48: this.obp0 = value; this.#refreshColors(); break;
       case 0xff49: this.obp1 = value; this.#refreshColors(); break;
-      case 0xff4a: this.wy = value; break;
+      case 0xff4a:
+        this.wy = value;
+        if (this.lcdc & 0x80) this.#checkWindowY();
+        break;
       case 0xff4b: this.wx = value; break;
       case 0xff4f: if (this.cgb) this.vramBank = value & 1; break;
       case 0xff68: if (this.cgb) this.bcps = value & 0xbf; break;
@@ -571,7 +614,8 @@ export class Ppu {
       this.dot = 4;
       this.#next(Phase.DRAWING, 84);
       this.windowLine = 0;
-      this.windowTriggered = this.wy === 0;
+      this.windowTriggered = false;
+      this.#checkWindowY();
       this.skipFrame = true;
       this.#compareLy();
     }

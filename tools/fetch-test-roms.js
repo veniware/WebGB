@@ -13,7 +13,7 @@ import { extractZipEntry, listZip } from '../src/rom/zip.js';
 
 const VERSION = 'v7.0';
 const RELEASE = `https://github.com/c-sp/game-boy-test-roms/releases/download/${VERSION}/game-boy-test-roms-${VERSION}.zip`;
-const SUITES = /(?:^|\/)((?:blargg|mooneye-test-suite|dmg-acid2|cgb-acid2)\/.+)$/;
+const SUITES = /(?:^|\/)((?:blargg|mooneye-test-suite|dmg-acid2|cgb-acid2|mealybug-tearoom-tests)\/.+)$/;
 const target = new URL('../tests/roms/', import.meta.url).pathname;
 
 const file = process.argv[2];
