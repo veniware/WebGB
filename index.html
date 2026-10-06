@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#20232a">
+  <title>WebGB</title>
+  <link rel="stylesheet" href="src/styles.css">
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <header id="toolbar" class="toolbar">
+    <button id="open" type="button">Open ROM</button>
+    <input id="file" type="file" accept=".gb,.gbc,.gba,.zip" hidden>
+    <button id="pause" type="button" disabled>Pause</button>
+    <button id="reset" type="button" disabled>Reset</button>
+    <button id="snapshot" type="button" disabled title="Take snapshot (F2)">Snapshot</button>
+    <button id="snapshots-open" type="button" disabled title="Snapshots (F4 loads the latest)">Snapshots…</button>
+    <label>Speed
+      <select id="speed">
+        <option value="1">1×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2×</option>
+        <option value="3">3×</option>
+        <option value="4">4×</option>
+        <option value="8">8×</option>
+      </select>
+    </label>
+    <label>Filter <select id="filter"></select></label>
+    <label><input id="dedither" type="checkbox"> De-dither</label>
+    <label>Zoom
+      <select id="zoom">
+        <option value="fit">Fit</option>
+        <option value="1">1×</option>
+        <option value="2">2×</option>
+        <option value="3">3×</option>
+        <option value="4">4×</option>
+        <option value="5">5×</option>
+        <option value="6">6×</option>
+      </select>
+    </label>
+    <label>Volume <input id="volume" type="range" min="0" max="100" step="1"></label>
+    <button id="fullscreen" type="button" title="Fullscreen (F)">Fullscreen</button>
+  </header>
+
+  <main id="play-area" class="play-area">
+    <div id="stage" class="stage empty">
+      <canvas id="screen"></canvas>
+      <p class="hint">Drop a ROM here (.gb, .gbc, .gba or .zip)<br>or use Open ROM.</p>
+    </div>
+
+    <div id="touch-controls" class="touch-controls">
+      <div class="touch-shoulder touch-l" data-button="L">L</div>
+      <div class="touch-shoulder touch-r" data-button="R">R</div>
+      <div class="touch-dpad" data-dpad>
+        <span class="up"></span><span class="down"></span><span class="left"></span><span class="right"></span>
+      </div>
+      <div class="touch-face">
+        <div class="touch-round touch-b" data-button="B">B</div>
+        <div class="touch-round touch-a" data-button="A">A</div>
+      </div>
+      <div class="touch-meta">
+        <div class="touch-pill" data-button="SELECT">Select</div>
+        <div class="touch-pill" data-button="START">Start</div>
+        <div class="touch-pill" data-action="fastForward">Fast</div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status" role="status"></span>
+    <span id="fps"></span>
+  </footer>
+
+  <div class="drop-overlay">Drop to load</div>
+
+  <dialog id="snapshots" class="snapshots">
+    <header>
+      <h2>Snapshots</h2>
+      <button type="button" data-take>Take snapshot</button>
+      <button type="button" data-close>Close</button>
+    </header>
+    <p data-empty>No snapshots for this game yet.</p>
+    <ul data-list></ul>
+  </dialog>
+</body>
+</html>
