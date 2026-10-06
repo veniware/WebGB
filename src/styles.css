@@ -327,6 +327,11 @@ body.dragging .drop-overlay {
     min-width: 88px;
   }
 
+  /* Only the GBA has shoulder buttons; keep their space so the layout doesn't jump. */
+  body:not([data-system="gba"]) .touch-shoulder {
+    visibility: hidden;
+  }
+
   .touch-dpad {
     grid-area: dpad;
     justify-self: start;

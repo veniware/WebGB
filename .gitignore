@@ -4,9 +4,11 @@ coverage/
 *.log
 .DS_Store
 
-# Never commit commercial ROMs. Open-source test ROMs can be re-included
-# explicitly, e.g. !tests/roms/**
+# Never commit ROMs.
 *.gb
 *.gbc
 *.gba
 *.zip
+
+# Open-source test ROMs, downloaded by `npm run fetch-test-roms`.
+tests/roms/

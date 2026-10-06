@@ -243,14 +243,16 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
 
   // --- Emulator and device events ----------------------------------------
   emulator.on('loaded', ({ rom, fallback }) => {
+    document.body.dataset.system = rom.info.system;
     el.stage.classList.remove('empty');
     gameControls.forEach((control) => (control.disabled = false));
     const title = rom.info.title || baseName(rom.name);
     romStatus = `${SYSTEM_NAMES[rom.info.system]} · ${title} · ${formatSize(rom.size)}`;
-    if (fallback) romStatus += ' · core not implemented yet, running the test core';
+    if (fallback) romStatus += ' · no emulator core for this system yet, running the test core';
     showRomStatus();
   });
   emulator.on('stopped', () => {
+    delete document.body.dataset.system;
     el.stage.classList.add('empty');
     gameControls.forEach((control) => (control.disabled = true));
     el.fps.textContent = '';

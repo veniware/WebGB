@@ -1,12 +1,13 @@
 import { createTestCore } from './test/test-core.js';
 
 /**
- * Available cores. Add an entry here when a core is implemented, e.g.
- * { id: 'gb', name: 'Game Boy', systems: ['gb', 'gbc'], load: () => import('./gb/index.js') }
+ * Available cores. Add an entry here when a core is implemented.
  *
  * @type {import('./interface.js').CoreDescriptor[]}
  */
-const cores = [];
+const cores = [
+  { id: 'gb', name: 'Game Boy', systems: ['gb', 'gbc'], load: () => import('./gb/index.js') },
+];
 
 export function registerCore(descriptor) {
   cores.push(descriptor);

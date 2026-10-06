@@ -15,8 +15,13 @@ Decisions so far:
   hot path could later be rewritten in Wasm without touching anything else.
 - **No build step, no runtime dependencies.** Native ES modules; the browser
   loads `src/` directly. Don't add a bundler or npm packages without asking.
-- **Game Boy core first**, then GBA. Until a core exists, ROMs run on the test
-  core (`src/core/test/`).
+- **Game Boy / Game Boy Color core done** (`src/core/gb/`); the GBA core is
+  next. Until it exists, GBA ROMs run on the test core (`src/core/test/`).
+- **No boot ROMs** (they're copyrighted): cores start in the state the boot
+  ROM leaves behind. Game Boy games run as on a DMG, Color games as on a CGB
+  (no CGB compatibility mode for DMG games).
+- **Accuracy is measured with open-source test ROMs** (see Testing); keep
+  them passing.
 - **Storage:** IndexedDB for the ROM library, saved games and snapshots (too
   big for localStorage), localStorage for settings only.
 - **License:** MIT.
@@ -36,8 +41,9 @@ working. Keep all URLs relative: the site lives under `/WebGB/`.
 ## Commands
 
 ```sh
-npm start   # dev server at http://localhost:8080 (tools/serve.js, no deps)
-npm test    # node --test, runs tests/*.test.js
+npm start                 # dev server at http://localhost:8080 (tools/serve.js, no deps)
+npm test                  # node --test, runs tests/*.test.js
+npm run fetch-test-roms   # downloads test ROMs into tests/roms/ (not committed)
 ```
 
 Run `npm test` before committing. For UI changes, also load the page in a
@@ -61,6 +67,20 @@ src/core/
   interface.js          The Core contract (JSDoc) and CoreDescriptor
   registry.js           System -> core lookup; lazy-loads cores with import()
   buttons.js            Button bitmask shared by input and cores
+  state.js              Save-state writer/reader with symmetric sync(s) methods
+  gb/                   Game Boy / Game Boy Color core (see "Game Boy core")
+    index.js            createCore(): CGB mode for Color ROMs
+    gameboy.js          System: memory map, I/O registers, OAM DMA, HDMA, speed
+                        switch, frame loop, save states; implements Core
+    cpu.js              SM83 CPU, M-cycle accurate
+    ppu.js              PPU: mode/STAT timing, line renderer, DMG and CGB
+    apu.js              APU: 4 channels, frame sequencer, mixing, filtering
+    timer.js            DIV/TIMA from the 16-bit system counter (falling edges)
+    cartridge.js        Header parsing and mappers (ROM, MBC1/2/3/5, HuC1)
+    rtc.js              MBC3 real-time clock (wall clock) and its save format
+    joypad.js, serial.js
+    palettes.js         DMG shades and CGB color conversion
+    constants.js        Clock rate, frame size, interrupt bits
   test/test-core.js     Stand-in core: test pattern, button tones, a Start-press
                         counter in battery RAM, save states
 src/video/
@@ -97,7 +117,11 @@ src/ui/
   files.js              Accepted file types and limits
 src/util/crc32.js
 tools/serve.js          Dev static server
-tests/                  node:test unit tests (+ helpers.js for fake ROMs/zips)
+tools/fetch-test-roms.js  Downloads the test ROM collection into tests/roms/
+tests/                  node:test tests (+ helpers.js for fake ROMs/zips, png.js
+                        to compare screenshots)
+  gb-core.test.js       Game Boy core unit tests (hand-assembled programs, mappers)
+  gb-test-roms.test.js  Runs the downloaded test ROMs; lists known failures
 ```
 
 ### Data flow per animation frame
@@ -119,6 +143,34 @@ To add a core: create `src/core/<name>/index.js` exporting
 `createCore(rom, info)`, then register it in `src/core/registry.js`. Bump the
 core's `version` whenever its `saveState()` format changes; snapshots from
 other versions are refused.
+
+### Game Boy core
+
+- **Timing:** the CPU drives time. Every memory access or internal delay
+  calls `GameBoy.tick()`, which advances the timer, PPU, serial port and DMA
+  by one M-cycle (4 dots, or 2 in CGB double speed) *before* the access.
+  Timing quirks of the PPU and DMA were tuned against the Mooneye tests;
+  re-run them after touching `tick()`, the CPU or the PPU phases.
+- **PPU:** a state machine of per-line phases (`Phase` in `ppu.js`) at
+  4-dot precision: STAT mode, LY=LYC, interrupts and VRAM/OAM locks change at
+  slightly different dots. Each line is rendered in one go when drawing ends,
+  so mid-line register writes aren't shown. Frames go to a back buffer that
+  is swapped in at VBlank.
+- **APU:** lazy. `tick()` only adds to `apu.pending`; `catchUp()` runs the
+  channels up to now before any APU register access, on each frame
+  sequencer clock and at the end of `runFrame()`. Output is box-filtered to
+  48 kHz, then high-pass filtered like the hardware's output capacitor.
+- **Frames:** `runFrame()` runs until the next VBlank (or one frame's worth
+  of time while the LCD is off), so frames stay in step with the display.
+- **Save states:** each component has `sync(s)` (see `src/core/state.js`);
+  add new fields there. Bump `GameBoy.version` when the format changes.
+- **Battery saves** are the raw cartridge RAM; MBC3 clock carts append the
+  48-byte RTC block used by VBA-M/BGB/mGBA. The RTC follows the wall clock
+  (like the real cartridge, it keeps running while the game is closed), and
+  its saved form doesn't change while it runs, so it doesn't trigger writes.
+- **Not emulated:** CGB compatibility palettes for DMG games, mid-line PPU
+  effects, the DMG's OAM corruption bug and wave-RAM access quirks, the
+  infrared port, rumble, MBC6/MBC7/MMM01/HuC3/camera cartridges.
 
 ### Library, saved games and snapshots
 
@@ -155,6 +207,17 @@ Inputs report buttons pressed since the last poll even if already released,
 and the host ORs input across animation frames that run no emulated frame,
 so short taps are never lost.
 
+## Testing
+
+- `tests/gb-core.test.js`: fast unit tests that need no ROMs.
+- `tests/gb-test-roms.test.js`: Blargg's tests (serial or cartridge-RAM
+  output), the Mooneye Test Suite (Fibonacci registers over serial),
+  dmg-acid2 and cgb-acid2 (screenshot vs reference PNG). Skipped until
+  `npm run fetch-test-roms` has downloaded them (the c-sp/game-boy-test-roms
+  release). `KNOWN_FAILURES` lists the ones that don't pass yet, with reasons;
+  remove entries as they get fixed, and don't add new ones to hide
+  regressions.
+
 ## Conventions
 
 - ES modules, 2-space indent, single quotes, semicolons, `camelCase`, classes
@@ -164,13 +227,25 @@ so short taps are never lost.
 - No allocations in per-frame hot paths of cores (reuse typed arrays).
 - Wrap localStorage access in try/catch; it can throw.
 - Comments explain *why*, not *what*.
-- Never commit ROMs (see `.gitignore`); open-source test ROMs may be
-  re-included explicitly.
+- Never commit ROMs (see `.gitignore`), test ROMs included: they are
+  downloaded into `tests/roms/`.
 
 ## Roadmap
 
-1. Game Boy core: SM83 CPU, memory/MBCs, PPU, timer, APU, joypad.
-2. Game Boy Color support.
-3. GBA core (needs a BIOS: user-supplied file or high-level emulation).
-4. Possibly later: key rebinding UI, PWA/offline install, rewind,
-   audio/video recording, full backup export/import of the library.
+Done: Game Boy core (CPU, memory/MBCs, PPU, timer, APU, joypad) and Game Boy
+Color support.
+
+1. GBA core (needs a BIOS: user-supplied file or high-level emulation).
+2. Game Boy extras: DMG palette choice, CGB color correction, CGB
+   compatibility palettes for DMG games, rumble.
+3. Memory viewer/editor (inspect and edit RAM, VRAM, OAM, I/O registers
+   of the running game).
+4. Input mapping: rebind keyboard keys and controller buttons from the UI
+   (saved with the settings).
+5. FPS counter toggled from the settings (the status bar shows a basic
+   fps figure today): emulated fps, speed and time per frame, for
+   performance work.
+6. Make it a PWA: web app manifest and service worker, so it installs to
+   the home screen (fullscreen on iPhone) and works offline.
+7. Possibly later: rewind, audio/video recording, full backup export/import
+   of the library.

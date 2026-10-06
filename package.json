@@ -7,7 +7,8 @@
   "license": "MIT",
   "scripts": {
     "start": "node tools/serve.js",
-    "test": "node --test"
+    "test": "node --test",
+    "fetch-test-roms": "node tools/fetch-test-roms.js"
   },
   "engines": {
     "node": ">=20"
