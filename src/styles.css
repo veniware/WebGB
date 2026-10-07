@@ -558,4 +558,5 @@ body.dragging .drop-overlay {
   .touch-meta [data-button="SELECT"] { grid-area: left-meta; justify-self: start; }
   .touch-meta [data-action="fastForward"] { grid-area: left-meta; justify-self: end; }
   .touch-meta [data-button="START"] { grid-area: right-meta; justify-self: end; }
+  .touch-meta [data-action="rewind"] { grid-area: right-meta; justify-self: start; }
 }

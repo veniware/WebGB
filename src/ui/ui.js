@@ -122,6 +122,8 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
       if (key === 'renderer') {
         display.setRenderer(value);
         updateShaderControls();
+      } else if (key === 'rewind') {
+        emulator.setRewind(value);
       } else if (key === 'perfStats') {
         el.fps.textContent = '';
       } else if (EFFECTS.includes(key)) {
@@ -314,6 +316,7 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
   });
 
   el.volume.value = String(Math.round(settings.volume * 100));
+  emulator.setRewind(settings.rewind);
   audio.setVolume(settings.volume);
   audio.setEffects(Object.fromEntries(Object.entries(AUDIO_EFFECTS).map(([key, effect]) => [effect, settings[key]])));
   el.volume.addEventListener('input', () => audio.setVolume(Number(el.volume.value) / 100));
@@ -350,6 +353,7 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
       ? `${fps.toFixed(1)} fps · ${Math.round(speed * 100)}% · ${frameMs.toFixed(1)} ms/frame · ${display.rendererName}`
       : '';
   });
+  emulator.on('rewinding', (rewinding) => (el.fps.textContent = rewinding ? '◀◀ Rewinding' : ''));
   emulator.on('status', ({ text, error }) => flash(text, error));
   let singleStatus = '';
   emulator.on('linked', (rom) => {

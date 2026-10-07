@@ -15,6 +15,7 @@ const FILES = [
   'icons/icon-512.png',
   'src/app/emitter.js',
   'src/app/emulator.js',
+  'src/app/rewind.js',
   'src/app/settings.js',
   'src/audio/audio-output.js',
   'src/audio/audio-processor.js',

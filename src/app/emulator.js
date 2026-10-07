@@ -1,4 +1,5 @@
 import { Emitter } from './emitter.js';
+import { RewindBuffer } from './rewind.js';
 import { canLink, createCore, createLinkedCore } from '../core/registry.js';
 import { getRom, getRomData, touchRom } from '../storage/roms.js';
 import { createSave, getSave, updateSave } from '../storage/saves.js';
@@ -12,6 +13,9 @@ const MAX_FRAMES_PER_TICK = 20;
 // Longest gap (ms) we catch up on, e.g. after the tab was in the background.
 const MAX_TICK_GAP = 100;
 const SAVE_CHECK_INTERVAL = 2000;
+// Rewind: a state every this many emulated frames, played back at this many states per second (3x speed).
+const REWIND_INTERVAL = 6;
+const REWIND_STEPS_PER_SECOND = 30;
 
 /**
  * The host: owns the running core and drives it from requestAnimationFrame,
@@ -23,7 +27,7 @@ const SAVE_CHECK_INTERVAL = 2000;
  * Events: 'loaded' ({ rom, fallback }), 'stopped', 'paused' (boolean),
  * 'stats' ({ fps, speed, frameMs }: emulated frames per second, speed
  * relative to the console, CPU time per emulated frame), 'snapshots' (list changed), 'status' ({ text, error? }),
- * 'linked' (player 2's rom), 'unlinked'.
+ * 'linked' (player 2's rom), 'unlinked', 'rewinding' (boolean).
  */
 export class Emulator extends Emitter {
   /** @type {import('../core/interface.js').Core | null} */
@@ -39,6 +43,9 @@ export class Emulator extends Emitter {
   player2 = null;
   paused = false;
   speed = 1;
+  /** Keep states to rewind to (not while two games are linked). */
+  rewindEnabled = true;
+  rewinding = false;
 
   #display;
   #audio;
@@ -64,6 +71,10 @@ export class Emulator extends Emitter {
   #fpsFrames = 0;
   #fpsSince = 0;
   #coreTime = 0;
+  #rewind = new RewindBuffer({ groupSize: 20 });
+  // Emulated frames since the last rewind state; rewind steps due.
+  #rewindFrames = 0;
+  #rewindDebt = 0;
 
   /**
    * @param {{
@@ -183,9 +194,15 @@ export class Emulator extends Emitter {
     this.saveId = null;
     this.#lastSave = null;
     this.#audio.clear();
+    this.#rewind.clear();
     this.#motion?.setActive(false);
     this.#camera?.stop();
     this.#rumble?.set(0);
+  }
+
+  setRewind(enabled) {
+    this.rewindEnabled = enabled;
+    if (!enabled) this.#rewind.clear();
   }
 
   setPaused(paused) {
@@ -208,6 +225,7 @@ export class Emulator extends Emitter {
     if (!this.core) return;
     this.core.reset();
     this.#audio.clear();
+    this.#rewind.clear();
     this.#display.draw(this.core.getFrameBuffer());
   }
 
@@ -275,6 +293,7 @@ export class Emulator extends Emitter {
     this.#watchSaves(linked, true);
     this.#display.setSourceSize(linked.width, linked.height);
     this.#audio.clear();
+    this.#rewind.clear();
     this.emit('linked', this.player2.rom);
   }
 
@@ -291,6 +310,7 @@ export class Emulator extends Emitter {
     this.#display.setSourceSize(this.core.width, this.core.height);
     this.#display.draw(this.core.getFrameBuffer());
     this.#audio.clear();
+    this.#rewind.clear();
     this.emit('unlinked');
   }
 
@@ -330,6 +350,7 @@ export class Emulator extends Emitter {
     this.#lastSave = core.getSaveData()?.slice() ?? null;
     this.#watchSaves(core, true);
     this.#audio.clear();
+    this.#rewind.clear();
     this.#display.draw(core.getFrameBuffer());
     this.emit('status', { text: 'Snapshot loaded.' });
   }
@@ -358,6 +379,36 @@ export class Emulator extends Emitter {
     }
   }
 
+  /** While rewind is held: goes back through the kept states, showing each. */
+  #stepBack(core, elapsed) {
+    if (!this.rewinding) {
+      this.rewinding = true;
+      this.#rewindDebt = 1;
+      this.#pendingButtons = 0;
+      this.#audio.clear();
+      this.emit('rewinding', true);
+    }
+    this.#rewindDebt += (elapsed / 1000) * REWIND_STEPS_PER_SECOND;
+    let state = null;
+    while (this.#rewindDebt >= 1) {
+      this.#rewindDebt--;
+      const previous = this.#rewind.pop();
+      if (!previous) {
+        this.#rewindDebt = 0;
+        break;
+      }
+      state = previous;
+    }
+    if (!state) return;
+    core.loadState(state);
+    // One frame from there gives the picture of that moment.
+    core.setInput(0);
+    core.runFrame();
+    core.getAudioSamples();
+    this.#rewindFrames = 0;
+    this.#display.draw(core.getFrameBuffer());
+  }
+
   #tick = (now) => {
     requestAnimationFrame(this.#tick);
     const elapsed = Math.min(now - this.#lastTime, MAX_TICK_GAP);
@@ -369,6 +420,16 @@ export class Emulator extends Emitter {
       this.#pendingButtons = 0;
       this.#rumble?.set(0, now);
       return;
+    }
+
+    if (input.rewind && this.rewindEnabled && players === 1) {
+      this.#stepBack(core, elapsed);
+      return;
+    }
+    if (this.rewinding) {
+      this.rewinding = false;
+      this.#frameDebt = 0;
+      this.emit('rewinding', false);
     }
 
     const speed = input.fastForward ? Math.max(FAST_FORWARD_SPEED, this.speed) : this.speed;
@@ -398,6 +459,11 @@ export class Emulator extends Emitter {
     }
     this.#coreTime += performance.now() - start;
     this.#audio.flush();
+    this.#rewindFrames += frames;
+    if (this.#rewindFrames >= REWIND_INTERVAL && this.rewindEnabled && players === 1) {
+      this.#rewindFrames = 0;
+      this.#rewind.push(core.saveState());
+    }
     if (frames) {
       this.#watchSaves(core);
       this.#display.draw(core.getFrameBuffer());

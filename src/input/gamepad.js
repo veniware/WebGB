@@ -17,8 +17,9 @@ export const DEFAULT_PAD_MAP = [
   [15, Button.RIGHT],
 ];
 
-/** Right trigger holds fast-forward. */
+/** Right trigger holds fast-forward, left trigger rewinds. */
 export const FAST_FORWARD_BUTTON = 7;
+export const REWIND_BUTTON = 6;
 const STICK_DEADZONE = 0.5;
 // The right stick tilts tilt-sensor cartridges.
 const TILT_DEADZONE = 0.15;
@@ -26,15 +27,17 @@ const TILT_DEADZONE = 0.15;
 const isPressed = (button) => !!button && (button.pressed || button.value > 0.5);
 
 export class GamepadInput {
-  constructor(map = DEFAULT_PAD_MAP, fastForward = [FAST_FORWARD_BUTTON]) {
+  constructor(map = DEFAULT_PAD_MAP, fastForward = [FAST_FORWARD_BUTTON], rewind = [REWIND_BUTTON]) {
     this.map = map;
     this.fastForward = fastForward;
+    this.rewind = rewind;
   }
 
-  /** @param {{ map: Array<[number, number]>, fastForward: number[] }} bindings  See bindings.js. */
-  setBindings({ map, fastForward }) {
+  /** @param {{ map: Array<[number, number]>, fastForward: number[], rewind: number[] }} bindings  See bindings.js. */
+  setBindings({ map, fastForward, rewind }) {
     this.map = map;
     this.fastForward = fastForward;
+    this.rewind = rewind;
   }
 
   /** Rumbles the connected gamepads that support it; strength 0-1. */
@@ -55,6 +58,7 @@ export class GamepadInput {
     let buttons = 0;
     let buttons2 = 0;
     let fastForward = false;
+    let rewind = false;
     let tiltX = 0;
     let tiltY = 0;
     let connected = 0;
@@ -73,12 +77,13 @@ export class GamepadInput {
       else buttons |= pressed;
       connected++;
       if (this.fastForward.some((index) => isPressed(pad.buttons[index]))) fastForward = true;
+      if (this.rewind.some((index) => isPressed(pad.buttons[index]))) rewind = true;
       const [, , rx = 0, ry = 0] = pad.axes;
       if (Math.hypot(rx, ry) > TILT_DEADZONE) {
         tiltX += rx;
         tiltY += ry;
       }
     }
-    return { buttons, buttons2, fastForward, tiltX, tiltY };
+    return { buttons, buttons2, fastForward, rewind, tiltX, tiltY };
   }
 }

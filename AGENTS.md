@@ -74,6 +74,7 @@ src/app/
                         tilt/camera/rumble peripherals
   settings.js           Persisted user preferences (localStorage)
   emitter.js            Tiny event emitter
+  rewind.js             Rewind history: save states, delta-compressed
 src/core/
   interface.js          The Core contract (JSDoc) and CoreDescriptor
   registry.js           System -> core lookup; lazy-loads cores with import()
@@ -347,6 +348,16 @@ other versions are refused.
   wet) -> volume. `AudioOutput.setEffects()` rebuilds the chain; settings
   `audioPitch`/`audioLowpass`/`audioHighpass`/`audioEcho`.
 
+### Rewind
+
+Every 6 emulated frames the host pushes `core.saveState()` into a
+`RewindBuffer` (groups of 20: one full state, then the runs of bytes that
+differ from it; ~24 MB, oldest groups dropped). Holding the rewind input
+(R, left trigger, touch "Back") pops 30 states a second (3x speed), loading
+each and running one frame for its picture. The history is cleared wherever
+the game jumps (reset, snapshot load, link, new game) and is off while two
+games are linked. Setting `rewind`.
+
 ### Input timing
 
 Inputs report buttons pressed since the last poll even if already released,
@@ -405,5 +416,5 @@ pass, echo) and the memory viewer/editor (Settings → Tools).
    Renderer setting picks Auto / WebGL / Canvas 2D today).
 4. More video filters (HQx, CRT, LCD grid, ...; `src/video/filters.js`) and
    sound effects (`AudioOutput.setEffects`).
-5. Possibly later: rewind, audio/video recording, full backup export/import
-   of the library.
+5. Possibly later: audio/video recording, full backup export/import of the
+   library.

@@ -13,6 +13,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   volume: 0.8,
   // 'auto' (WebGL when available), 'webgl' or 'canvas'.
   renderer: 'auto',
+  // Keep the last minute or so of play to rewind (hold the rewind key).
+  rewind: true,
   // Status bar: emulated fps, speed and time per frame.
   perfStats: false,
   // Sound effects: pitch in semitones, filter cutoffs in Hz (0: off), echo preset.

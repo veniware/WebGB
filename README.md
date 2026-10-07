@@ -83,6 +83,8 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
 - **Performance stats** (Settings): emulated frame rate, speed and time per
   frame; the renderer (WebGL or 2D canvas) can be chosen too.
 - **Speed:** 1×–8×, plus hold-to-fast-forward.
+- **Rewind:** hold R (left trigger on a gamepad, Back on the touch controls)
+  to go back up to about a minute.
 
 ROMs, saved games and snapshots live in the browser's IndexedDB; settings use
 localStorage. Clearing the site's data deletes them, so export saved games you

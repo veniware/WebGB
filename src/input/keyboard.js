@@ -15,9 +15,10 @@ export const DEFAULT_KEY_MAP = {
   KeyS: Button.R,
 };
 
-/** KeyboardEvent.code -> hotkey name. 'fastForward' is held; the others fire once. */
+/** KeyboardEvent.code -> hotkey name. HELD_HOTKEYS are held; the others fire once. */
 export const DEFAULT_HOTKEYS = {
   Tab: 'fastForward',
+  KeyR: 'rewind',
   KeyP: 'pause',
   KeyF: 'fullscreen',
   F2: 'snapshot',
@@ -44,6 +45,7 @@ export const DEFAULT_TILT_KEYS = {
   KeyK: [0, 1],
 };
 
+const HELD_HOTKEYS = new Set(['fastForward', 'rewind']);
 const TEXT_FIELDS = new Set(['INPUT', 'SELECT', 'TEXTAREA']);
 
 export class KeyboardInput {
@@ -91,7 +93,7 @@ export class KeyboardInput {
     if (e.repeat) return;
     this.#down.add(e.code);
     this.#tapped.add(e.code);
-    if (hotkey && hotkey !== 'fastForward') this.onHotkey(hotkey);
+    if (hotkey && !HELD_HOTKEYS.has(hotkey)) this.onHotkey(hotkey);
   }
 
   #keyup(e) {
@@ -102,6 +104,7 @@ export class KeyboardInput {
     let buttons = 0;
     let buttons2 = 0;
     let fastForward = false;
+    let rewind = false;
     let tiltX = 0;
     let tiltY = 0;
     if (this.enabled) {
@@ -109,6 +112,9 @@ export class KeyboardInput {
         buttons |= this.keyMap[code] ?? 0;
         if (players > 1) buttons2 |= this.player2Map[code] ?? 0;
         if (this.hotkeys[code] === 'fastForward') fastForward = true;
+      }
+      for (const code of this.#down) {
+        if (this.hotkeys[code] === 'rewind') rewind = true;
       }
       for (const code of this.#down) {
         const tilt = this.tiltKeys[code];
@@ -119,6 +125,6 @@ export class KeyboardInput {
       }
     }
     this.#tapped.clear();
-    return { buttons, buttons2, fastForward, tiltX, tiltY };
+    return { buttons, buttons2, fastForward, rewind, tiltX, tiltY };
   }
 }

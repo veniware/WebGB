@@ -4,7 +4,7 @@ import { Button } from '../src/core/buttons.js';
 import {
   defaultKeyBindings, defaultPadBindings, gamepadMaps, keyboardMaps, keyName, padButtonName, withDefaults,
 } from '../src/input/bindings.js';
-import { DEFAULT_PAD_MAP, FAST_FORWARD_BUTTON } from '../src/input/gamepad.js';
+import { DEFAULT_PAD_MAP, FAST_FORWARD_BUTTON, REWIND_BUTTON } from '../src/input/gamepad.js';
 import { DEFAULT_HOTKEYS, DEFAULT_KEY_MAP } from '../src/input/keyboard.js';
 
 test('default bindings give back the default key and gamepad maps', () => {
@@ -14,6 +14,7 @@ test('default bindings give back the default key and gamepad maps', () => {
   const pad = gamepadMaps(defaultPadBindings());
   assert.deepEqual(new Set(pad.map.map(String)), new Set(DEFAULT_PAD_MAP.map(String)));
   assert.deepEqual(pad.fastForward, [FAST_FORWARD_BUTTON]);
+  assert.deepEqual(pad.rewind, [REWIND_BUTTON]);
 });
 
 test('saved bindings override the defaults, action by action', () => {

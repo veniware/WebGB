@@ -69,6 +69,7 @@
       <div class="touch-meta">
         <div class="touch-pill" data-button="SELECT">Select</div>
         <div class="touch-pill" data-button="START">Start</div>
+        <div class="touch-pill" data-action="rewind" aria-label="Rewind">Back</div>
         <div class="touch-pill" data-action="fastForward">Fast</div>
       </div>
     </div>
@@ -150,6 +151,11 @@
         <h3>Tools</h3>
         <button type="button" id="memory-open" disabled>Memory viewer…</button>
       </header>
+      <div class="fields">
+        <label for="set-rewind">Rewind</label>
+        <label class="check"><input id="set-rewind" type="checkbox" data-setting="rewind">
+          Keep the last minute to rewind (hold R, the left trigger or Back)</label>
+      </div>
     </section>
     <section>
       <header><h3>Display</h3></header>

@@ -7,13 +7,14 @@ const DPAD_DEADZONE = 0.2;
 
 /**
  * On-screen controls. Elements inside `root` declare what they do:
- * data-button="A" (a Button name), data-dpad, or data-action="fastForward".
+ * data-button="A" (a Button name), data-dpad, or data-action="fastForward" /
+ * "rewind" (held).
  * Each finger is tracked separately and can slide between controls.
  */
 export class TouchInput {
   enabled = true;
   #pointers = new Map();
-  #state = { buttons: 0, fastForward: false };
+  #state = { buttons: 0, fastForward: false, rewind: false };
   // Buttons pressed since the last poll, so a tap shorter than a frame still registers.
   #tapped = 0;
 
@@ -41,17 +42,18 @@ export class TouchInput {
   }
 
   poll() {
-    const { buttons, fastForward } = this.#state;
+    const { buttons, fastForward, rewind } = this.#state;
     const tapped = this.#tapped;
     this.#tapped = 0;
-    return this.enabled ? { buttons: buttons | tapped, fastForward } : { buttons: 0, fastForward: false };
+    return this.enabled ? { buttons: buttons | tapped, fastForward, rewind } : { buttons: 0, fastForward: false };
   }
 
+  /** What a finger at (x, y) presses: { buttons, action }. */
   #hit(x, y) {
     const el = document.elementFromPoint(x, y)?.closest('[data-button], [data-dpad], [data-action]');
-    if (!el || !this.root.contains(el)) return { buttons: 0, fastForward: false };
-    if (el.dataset.action === 'fastForward') return { buttons: 0, fastForward: true };
-    if (el.dataset.button) return { buttons: Button[el.dataset.button] ?? 0, fastForward: false };
+    if (!el || !this.root.contains(el)) return { buttons: 0, action: null };
+    if (el.dataset.action) return { buttons: 0, action: el.dataset.action };
+    if (el.dataset.button) return { buttons: Button[el.dataset.button] ?? 0, action: null };
 
     const rect = el.getBoundingClientRect();
     const dx = (x - rect.left) / rect.width - 0.5;
@@ -61,26 +63,26 @@ export class TouchInput {
     let buttons = 0;
     if (ax > DPAD_DEADZONE / 2 && ay < ax * DIAGONAL_RATIO) buttons |= dx < 0 ? Button.LEFT : Button.RIGHT;
     if (ay > DPAD_DEADZONE / 2 && ax < ay * DIAGONAL_RATIO) buttons |= dy < 0 ? Button.UP : Button.DOWN;
-    return { buttons, fastForward: false };
+    return { buttons, action: null };
   }
 
   #refresh() {
     let buttons = 0;
-    let fastForward = false;
+    const actions = new Set();
     for (const state of this.#pointers.values()) {
       buttons |= state.buttons;
-      fastForward ||= state.fastForward;
+      if (state.action) actions.add(state.action);
     }
     const pressed = buttons & ~this.#state.buttons;
     if (pressed) navigator.vibrate?.(8);
     this.#tapped |= pressed;
-    this.#state = { buttons, fastForward };
+    this.#state = { buttons, fastForward: actions.has('fastForward'), rewind: actions.has('rewind') };
 
     for (const el of this.root.querySelectorAll('[data-button]')) {
       el.classList.toggle('pressed', !!(buttons & Button[el.dataset.button]));
     }
-    for (const el of this.root.querySelectorAll('[data-action="fastForward"]')) {
-      el.classList.toggle('pressed', fastForward);
+    for (const el of this.root.querySelectorAll('[data-action]')) {
+      el.classList.toggle('pressed', actions.has(el.dataset.action));
     }
     for (const el of this.root.querySelectorAll('[data-dpad]')) {
       for (const dir of ['UP', 'DOWN', 'LEFT', 'RIGHT']) {

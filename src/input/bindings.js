@@ -1,10 +1,10 @@
 import { Button } from '../core/buttons.js';
 import { DEFAULT_HOTKEYS, DEFAULT_KEY_MAP } from './keyboard.js';
-import { DEFAULT_PAD_MAP, FAST_FORWARD_BUTTON } from './gamepad.js';
+import { DEFAULT_PAD_MAP, FAST_FORWARD_BUTTON, REWIND_BUTTON } from './gamepad.js';
 
 /**
  * What the user can bind: console buttons (keyboard and gamepad) and the
- * hotkeys (keyboard; fast-forward also on the gamepad). Bindings are kept as
+ * hotkeys (keyboard; fast-forward and rewind also on the gamepad). Bindings are kept as
  * { [action id]: [KeyboardEvent.code or gamepad button index, ...] }.
  */
 export const ACTIONS = [
@@ -19,6 +19,7 @@ export const ACTIONS = [
   { id: 'START', name: 'Start', button: Button.START },
   { id: 'SELECT', name: 'Select', button: Button.SELECT },
   { id: 'fastForward', name: 'Fast-forward (hold)', hotkey: true, pad: true },
+  { id: 'rewind', name: 'Rewind (hold)', hotkey: true, pad: true },
   { id: 'pause', name: 'Pause', hotkey: true },
   { id: 'fullscreen', name: 'Fullscreen', hotkey: true },
   { id: 'snapshot', name: 'Take snapshot', hotkey: true },
@@ -42,6 +43,7 @@ export function defaultPadBindings() {
     bindings[BUTTON_ACTIONS.find((action) => action.button === button).id].push(index);
   }
   bindings.fastForward.push(FAST_FORWARD_BUTTON);
+  bindings.rewind.push(REWIND_BUTTON);
   return bindings;
 }
 
@@ -67,13 +69,13 @@ export function keyboardMaps(bindings) {
   return { keyMap, hotkeys };
 }
 
-/** Gamepad bindings as GamepadInput's map and fast-forward buttons. */
+/** Gamepad bindings as GamepadInput's map and fast-forward and rewind buttons. */
 export function gamepadMaps(bindings) {
   const map = [];
   for (const action of BUTTON_ACTIONS) {
     for (const index of bindings[action.id] ?? []) map.push([index, action.button]);
   }
-  return { map, fastForward: bindings.fastForward ?? [] };
+  return { map, fastForward: bindings.fastForward ?? [], rewind: bindings.rewind ?? [] };
 }
 
 const KEY_NAMES = {

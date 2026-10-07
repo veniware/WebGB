@@ -6,7 +6,7 @@ const VERTICAL = Button.UP | Button.DOWN;
 /**
  * Merges input sources (keyboard, gamepad, touch, motion, ...). A source is
  * any object with poll(): { buttons: number, fastForward: boolean } and
- * optionally tiltX/tiltY (in g, for tilt-sensor cartridges).
+ * optionally rewind (held) and tiltX/tiltY (in g, for tilt-sensor cartridges).
  */
 export class InputManager {
   constructor(sources = []) {
@@ -25,6 +25,7 @@ export class InputManager {
     let buttons = 0;
     let buttons2 = 0;
     let fastForward = false;
+    let rewind = false;
     let tiltX = 0;
     let tiltY = 0;
     for (const source of this.sources) {
@@ -32,6 +33,7 @@ export class InputManager {
       buttons |= state.buttons;
       buttons2 |= state.buttons2 ?? 0;
       fastForward ||= state.fastForward;
+      rewind ||= Boolean(state.rewind);
       tiltX += state.tiltX ?? 0;
       tiltY += state.tiltY ?? 0;
     }
@@ -40,6 +42,7 @@ export class InputManager {
       buttons: cancelOpposites(buttons),
       buttons2: cancelOpposites(buttons2),
       fastForward,
+      rewind,
       tiltX: clampTilt(tiltX),
       tiltY: clampTilt(tiltY),
     };
