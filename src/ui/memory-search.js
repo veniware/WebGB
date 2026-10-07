@@ -3,11 +3,11 @@
 
 /** Conditions on a byte: its value now, the value searched for, its value at the last search. */
 export const CONDITIONS = {
-    equal: { name: 'Equal to', test: (now, value) => now === value, needsValue: true },
-    changed: { name: 'Changed', test: (now, _, before) => now !== before },
-    unchanged: { name: 'Unchanged', test: (now, _, before) => now === before },
-    increased: { name: 'Increased', test: (now, _, before) => now > before },
-    decreased: { name: 'Decreased', test: (now, _, before) => now < before },
+    equal: { name: "Equal to", test: (now, value) => now === value, needsValue: true },
+    changed: { name: "Changed", test: (now, _, before) => now !== before },
+    unchanged: { name: "Unchanged", test: (now, _, before) => now === before },
+    increased: { name: "Increased", test: (now, _, before) => now > before },
+    decreased: { name: "Decreased", test: (now, _, before) => now < before },
 };
 
 export class MemorySearch {

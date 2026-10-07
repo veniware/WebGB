@@ -1,4 +1,4 @@
-import { Button } from '../core/buttons.js';
+import { Button } from "../core/buttons.js";
 
 /** KeyboardEvent.code -> Button. */
 export const DEFAULT_KEY_MAP = {
@@ -17,13 +17,13 @@ export const DEFAULT_KEY_MAP = {
 
 /** KeyboardEvent.code -> hotkey name. HELD_HOTKEYS are held; the others fire once. */
 export const DEFAULT_HOTKEYS = {
-    Tab: 'fastForward',
-    KeyR: 'rewind',
-    KeyP: 'pause',
-    KeyF: 'fullscreen',
-    F2: 'snapshot',
-    F4: 'loadSnapshot',
-    F9: 'record',
+    Tab: "fastForward",
+    KeyR: "rewind",
+    KeyP: "pause",
+    KeyF: "fullscreen",
+    F2: "snapshot",
+    F4: "loadSnapshot",
+    F9: "record",
 };
 
 /** Player 2 (two linked games): WASD, G = B, H = A, T = Select, Y = Start. */
@@ -46,8 +46,8 @@ export const DEFAULT_TILT_KEYS = {
     KeyK: [0, 1],
 };
 
-const HELD_HOTKEYS = new Set(['fastForward', 'rewind']);
-const TEXT_FIELDS = new Set(['INPUT', 'SELECT', 'TEXTAREA']);
+const HELD_HOTKEYS = new Set(["fastForward", "rewind"]);
+const TEXT_FIELDS = new Set(["INPUT", "SELECT", "TEXTAREA"]);
 
 export class KeyboardInput {
     enabled = true;
@@ -70,9 +70,9 @@ export class KeyboardInput {
         this.hotkeys = hotkeys;
         this.tiltKeys = tiltKeys;
         this.onHotkey = onHotkey;
-        window.addEventListener('keydown', (e) => this.#keydown(e));
-        window.addEventListener('keyup', (e) => this.#keyup(e));
-        window.addEventListener('blur', () => {
+        window.addEventListener("keydown", (e) => this.#keydown(e));
+        window.addEventListener("keyup", (e) => this.#keyup(e));
+        window.addEventListener("blur", () => {
             this.#down.clear();
             this.#tapped.clear();
         });
@@ -112,10 +112,10 @@ export class KeyboardInput {
             for (const code of [...this.#down, ...this.#tapped]) {
                 buttons |= this.keyMap[code] ?? 0;
                 if (players > 1) buttons2 |= this.player2Map[code] ?? 0;
-                if (this.hotkeys[code] === 'fastForward') fastForward = true;
+                if (this.hotkeys[code] === "fastForward") fastForward = true;
             }
             for (const code of this.#down) {
-                if (this.hotkeys[code] === 'rewind') rewind = true;
+                if (this.hotkeys[code] === "rewind") rewind = true;
             }
             for (const code of this.#down) {
                 const tilt = this.tiltKeys[code];

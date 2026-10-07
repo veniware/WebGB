@@ -1,16 +1,16 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { Button } from '../src/core/buttons.js';
-import { TestCore } from '../src/core/test/test-core.js';
-import { InputManager } from '../src/input/input-manager.js';
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { Button } from "../src/core/buttons.js";
+import { TestCore } from "../src/core/test/test-core.js";
+import { InputManager } from "../src/input/input-manager.js";
 
-test('test core uses the native resolution of each system', () => {
-    assert.deepEqual([new TestCore('gb').width, new TestCore('gb').height], [160, 144]);
-    assert.deepEqual([new TestCore('gba').width, new TestCore('gba').height], [240, 160]);
-    assert.equal(new TestCore('gba').getFrameBuffer().length, 240 * 160 * 4);
+test("test core uses the native resolution of each system", () => {
+    assert.deepEqual([new TestCore("gb").width, new TestCore("gb").height], [160, 144]);
+    assert.deepEqual([new TestCore("gba").width, new TestCore("gba").height], [240, 160]);
+    assert.equal(new TestCore("gba").getFrameBuffer().length, 240 * 160 * 4);
 });
 
-test('test core produces audio at its sample rate', () => {
+test("test core produces audio at its sample rate", () => {
     const core = new TestCore();
     core.setInput(Button.A);
     const videoFrames = 120;
@@ -24,7 +24,7 @@ test('test core produces audio at its sample rate', () => {
     assert.ok(core.getAudioSamples().some((s) => s !== 0));
 });
 
-test('test core state round-trips through saveState/loadState', () => {
+test("test core state round-trips through saveState/loadState", () => {
     const core = new TestCore();
     core.setInput(Button.B | Button.UP);
     for (let i = 0; i < 10; i++) core.runFrame();
@@ -40,13 +40,13 @@ test('test core state round-trips through saveState/loadState', () => {
     assert.throws(() => core.loadState(new Uint8Array(3)));
 });
 
-test('input manager merges sources, cancels opposite directions and limits tilt', () => {
+test("input manager merges sources, cancels opposite directions and limits tilt", () => {
     const source = (buttons, fastForward = false, tiltX = 0, rewind = undefined) => ({ poll: () => ({ buttons, fastForward, tiltX, rewind }) });
     const input = new InputManager([source(Button.A | Button.LEFT, false, 1, true), source(Button.RIGHT | Button.UP, true, 1)]);
     assert.deepEqual(input.poll(), { buttons: Button.A | Button.UP, buttons2: 0, fastForward: true, rewind: true, tiltX: 1.5, tiltY: 0 });
 });
 
-test('test core counts Start presses in battery RAM', () => {
+test("test core counts Start presses in battery RAM", () => {
     const core = new TestCore();
     for (let i = 0; i < 3; i++) {
         core.setInput(Button.START);

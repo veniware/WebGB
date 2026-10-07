@@ -1,6 +1,6 @@
-import { Emitter } from '../app/emitter.js';
+import { Emitter } from "../app/emitter.js";
 
-const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'keydown'];
+const UNLOCK_EVENTS = ["pointerdown", "pointerup", "touchend", "keydown"];
 // Echo presets: delay (s), feedback and level of the echoes.
 const ECHOES = {
     room: { delay: 0.08, feedback: 0.3, wet: 0.3 },
@@ -23,13 +23,13 @@ export class AudioOutput extends Emitter {
     #length = 0;
     #rate = 48000;
     #volume = 1;
-    #effects = { pitch: 0, highpass: 0, lowpass: 0, bass: 0, echo: 'off', mono: false };
+    #effects = { pitch: 0, highpass: 0, lowpass: 0, bass: 0, echo: "off", mono: false };
     // Effect nodes currently connected.
     #chain = [];
 
     /** True while the browser blocks playback until the next user gesture. */
     get blocked() {
-        return this.#context?.state === 'suspended';
+        return this.#context?.state === "suspended";
     }
 
     /**
@@ -42,14 +42,14 @@ export class AudioOutput extends Emitter {
         const Context = globalThis.AudioContext ?? globalThis.webkitAudioContext;
         if (!Context || !globalThis.AudioWorkletNode) return (this.#ready = Promise.resolve(false));
 
-        const context = (this.#context = new Context({ latencyHint: 'interactive' }));
-        context.addEventListener('statechange', () => this.emit('state', context.state));
+        const context = (this.#context = new Context({ latencyHint: "interactive" }));
+        context.addEventListener("statechange", () => this.emit("state", context.state));
         this.#unlockOnGesture();
 
         this.#ready = context.audioWorklet
-            .addModule(new URL('./audio-processor.js', import.meta.url))
+            .addModule(new URL("./audio-processor.js", import.meta.url))
             .then(() => {
-                this.#node = new AudioWorkletNode(context, 'emulator-audio', {
+                this.#node = new AudioWorkletNode(context, "emulator-audio", {
                     numberOfInputs: 0,
                     outputChannelCount: [2],
                 });
@@ -60,7 +60,7 @@ export class AudioOutput extends Emitter {
                 return true;
             })
             .catch((err) => {
-                console.error('Audio unavailable:', err);
+                console.error("Audio unavailable:", err);
                 return false;
             });
         return this.#ready;
@@ -68,14 +68,14 @@ export class AudioOutput extends Emitter {
 
     #unlockOnGesture() {
         const unlock = () => {
-            if (this.#context.state === 'running') {
+            if (this.#context.state === "running") {
                 for (const type of UNLOCK_EVENTS) window.removeEventListener(type, unlock, true);
             } else {
                 this.#context.resume().catch(() => {});
             }
         };
         for (const type of UNLOCK_EVENTS) window.addEventListener(type, unlock, true);
-        this.#context.addEventListener('statechange', unlock);
+        this.#context.addEventListener("statechange", unlock);
     }
 
     /** @param {number} volume 0..1 */
@@ -109,11 +109,11 @@ export class AudioOutput extends Emitter {
             last = node;
         };
         if (pitch) {
-            const shifter = new AudioWorkletNode(context, 'pitch-shift', { outputChannelCount: [2] });
-            shifter.parameters.get('ratio').value = 2 ** (pitch / 12);
+            const shifter = new AudioWorkletNode(context, "pitch-shift", { outputChannelCount: [2] });
+            shifter.parameters.get("ratio").value = 2 ** (pitch / 12);
             add(shifter);
         }
-        for (const [type, frequency] of [['highpass', highpass], ['lowpass', lowpass]]) {
+        for (const [type, frequency] of [["highpass", highpass], ["lowpass", lowpass]]) {
             if (!frequency) continue;
             const filter = context.createBiquadFilter();
             filter.type = type;
@@ -122,7 +122,7 @@ export class AudioOutput extends Emitter {
         }
         if (bass) {
             const shelf = context.createBiquadFilter();
-            shelf.type = 'lowshelf';
+            shelf.type = "lowshelf";
             shelf.frequency.value = 200;
             shelf.gain.value = bass;
             add(shelf);
@@ -147,7 +147,7 @@ export class AudioOutput extends Emitter {
         }
         if (mono) {
             // Mixed down to one channel here; the output plays it on both sides.
-            add(new GainNode(context, { channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers' }));
+            add(new GainNode(context, { channelCount: 1, channelCountMode: "explicit", channelInterpretation: "speakers" }));
         }
         last.connect(this.#gain);
     }
@@ -165,7 +165,7 @@ export class AudioOutput extends Emitter {
 
     /** Queues interleaved stereo samples produced at `rate`. */
     push(samples, rate) {
-        if (!this.#node || this.#context.state !== 'running') return;
+        if (!this.#node || this.#context.state !== "running") return;
         if (rate !== this.#rate) {
             this.flush();
             this.#rate = rate;
@@ -185,12 +185,12 @@ export class AudioOutput extends Emitter {
         if (!this.#length) return;
         const samples = this.#staging.slice(0, this.#length);
         this.#length = 0;
-        this.#node?.port.postMessage({ type: 'samples', samples, rate: this.#rate }, [samples.buffer]);
+        this.#node?.port.postMessage({ type: "samples", samples, rate: this.#rate }, [samples.buffer]);
     }
 
     /** Drops everything buffered (after reset, ROM change or snapshot load). */
     clear() {
         this.#length = 0;
-        this.#node?.port.postMessage({ type: 'clear' });
+        this.#node?.port.postMessage({ type: "clear" });
     }
 }

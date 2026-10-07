@@ -1,4 +1,4 @@
-import { bytesRegion } from '../memory.js';
+import { bytesRegion } from "../memory.js";
 
 /**
  * Memory regions of a GBA for the memory viewer, at their addresses on the
@@ -11,10 +11,10 @@ import { bytesRegion } from '../memory.js';
 export function memoryRegions(gba) {
     const { bus, ppu, backup } = gba;
     const regions = [
-        bytesRegion('Work RAM (on board)', 0x02000000, bus.ewram),
-        bytesRegion('Work RAM (in chip)', 0x03000000, bus.iwram),
+        bytesRegion("Work RAM (on board)", 0x02000000, bus.ewram),
+        bytesRegion("Work RAM (in chip)", 0x03000000, bus.iwram),
         {
-            name: 'I/O registers',
+            name: "I/O registers",
             base: 0x04000000,
             size: 0x400,
             read: (offset) => {
@@ -23,14 +23,14 @@ export function memoryRegions(gba) {
             },
             write: (offset, value) => gba.write8(offset, value),
         },
-        bytesRegion('Palettes', 0x05000000, ppu.palette),
-        bytesRegion('Video RAM', 0x06000000, ppu.vram),
-        bytesRegion('Sprites (OAM)', 0x07000000, ppu.oam),
-        bytesRegion('ROM', 0x08000000, bus.rom, null),
+        bytesRegion("Palettes", 0x05000000, ppu.palette),
+        bytesRegion("Video RAM", 0x06000000, ppu.vram),
+        bytesRegion("Sprites (OAM)", 0x07000000, ppu.oam),
+        bytesRegion("ROM", 0x08000000, bus.rom, null),
     ];
-    if (backup.type !== 'none') {
+    if (backup.type !== "none") {
         const data = backup.getSaveData();
-        const kind = { sram: 'SRAM', flash64: 'Flash', flash128: 'Flash', eeprom: 'EEPROM' }[backup.type];
+        const kind = { sram: "SRAM", flash64: "Flash", flash128: "Flash", eeprom: "EEPROM" }[backup.type];
         regions.push(bytesRegion(`Save memory (${kind})`, backup.eeprom ? 0 : 0x0e000000, data, () => backup.writes++));
     }
     return regions;

@@ -1,7 +1,7 @@
 // Thumb (16-bit) instructions of the ARM7TDMI. buildThumbTable() returns one
 // handler per decode index: the top 10 bits of the opcode.
 
-import { addFlags, multiplyCycles, ror, setNZ, shift, shifter, subFlags } from './arm.js';
+import { addFlags, multiplyCycles, ror, setNZ, shift, shifter, subFlags } from "./arm.js";
 
 export function buildThumbTable(cpu) {
     const r = cpu.r;

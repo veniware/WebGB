@@ -1,4 +1,4 @@
-import { NoiseChannel, SquareChannel, WaveChannel } from '../gb/apu.js';
+import { NoiseChannel, SquareChannel, WaveChannel } from "../gb/apu.js";
 
 export const SAMPLE_RATE = 48000;
 const CLOCK_RATE = 16777216;
@@ -174,7 +174,7 @@ export class Apu {
         this.time = s.f64(this.time);
         this.sequencerTimer = s.u32(this.sequencerTimer);
         this.frameStep = s.u8(this.frameStep);
-        for (const field of ['sumLeft', 'sumRight', 'capLeft', 'capRight']) this[field] = s.f64(this[field]);
+        for (const field of ["sumLeft", "sumRight", "capLeft", "capRight"]) this[field] = s.f64(this[field]);
         this.sumCycles = s.u32(this.sumCycles);
         this.sampleClock = s.u32(this.sampleClock);
         this.dirty = true;

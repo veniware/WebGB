@@ -1,6 +1,6 @@
-import { buildArmTable } from './arm.js';
-import { IdleLoops } from './idle.js';
-import { buildThumbTable } from './thumb.js';
+import { buildArmTable } from "./arm.js";
+import { IdleLoops } from "./idle.js";
+import { buildThumbTable } from "./thumb.js";
 
 /** Processor modes (CPSR bits 0-4). */
 export const Mode = {
@@ -91,8 +91,8 @@ export class Arm7 {
         s.bytes(this.bankSpsr);
         s.bytes(this.fiqRegs);
         s.bytes(this.usrRegs);
-        for (const flag of ['n', 'z', 'c', 'v']) this[flag] = s.u8(this[flag]);
-        for (const flag of ['irqDisable', 'fiqDisable', 'thumb', 'halted']) this[flag] = s.bool(this[flag]);
+        for (const flag of ["n", "z", "c", "v"]) this[flag] = s.u8(this[flag]);
+        for (const flag of ["irqDisable", "fiqDisable", "thumb", "halted"]) this[flag] = s.bool(this[flag]);
         this.mode = s.u8(this.mode);
         this.pc = s.u32(this.pc >>> 0) | 0;
         this.pipeA = s.i32(this.pipeA);

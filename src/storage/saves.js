@@ -1,4 +1,4 @@
-import { requestPersistence, transaction } from './db.js';
+import { requestPersistence, transaction } from "./db.js";
 
 /**
  * Saved games: battery-backed cartridge memory (the game's own saves). A ROM
@@ -16,8 +16,8 @@ import { requestPersistence, transaction } from './db.js';
 
 /** @returns {Promise<SavedGame[]>} Most recently updated first. */
 export async function listSaves(romKey) {
-    const saves = await transaction('saves', 'readonly', (tx) => {
-        const request = tx.objectStore('saves').index('romKey').getAll(romKey);
+    const saves = await transaction("saves", "readonly", (tx) => {
+        const request = tx.objectStore("saves").index("romKey").getAll(romKey);
         return () => request.result;
     });
     return saves.sort((a, b) => b.updated - a.updated);
@@ -25,8 +25,8 @@ export async function listSaves(romKey) {
 
 /** @returns {Promise<SavedGame | null>} */
 export function getSave(id) {
-    return transaction('saves', 'readonly', (tx) => {
-        const request = tx.objectStore('saves').get(id);
+    return transaction("saves", "readonly", (tx) => {
+        const request = tx.objectStore("saves").get(id);
         return () => request.result ?? null;
     });
 }
@@ -39,9 +39,9 @@ export function getSave(id) {
  * @returns {Promise<number>} The new saved game's id.
  */
 export async function createSave(romKey, data, name, thumbnail = null) {
-    const id = await transaction('saves', 'readwrite', (tx) => {
-        const store = tx.objectStore('saves');
-        const existing = store.index('romKey').getAll(romKey);
+    const id = await transaction("saves", "readwrite", (tx) => {
+        const store = tx.objectStore("saves");
+        const existing = store.index("romKey").getAll(romKey);
         let request;
         existing.onsuccess = () => {
             const now = Date.now();
@@ -58,8 +58,8 @@ export async function createSave(romKey, data, name, thumbnail = null) {
  * @returns {Promise<boolean>} False when the saved game no longer exists.
  */
 export function updateSave(id, data, thumbnail = null) {
-    return transaction('saves', 'readwrite', (tx) => {
-        const store = tx.objectStore('saves');
+    return transaction("saves", "readwrite", (tx) => {
+        const store = tx.objectStore("saves");
         const request = store.get(id);
         let found = false;
         request.onsuccess = () => {
@@ -73,8 +73,8 @@ export function updateSave(id, data, thumbnail = null) {
 }
 
 export function deleteSave(id) {
-    return transaction('saves', 'readwrite', (tx) => {
-        tx.objectStore('saves').delete(id);
+    return transaction("saves", "readwrite", (tx) => {
+        tx.objectStore("saves").delete(id);
     });
 }
 

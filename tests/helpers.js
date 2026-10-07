@@ -1,11 +1,11 @@
-import { deflateRawSync } from 'node:zlib';
-import { crc32 } from '../src/util/crc32.js';
+import { deflateRawSync } from "node:zlib";
+import { crc32 } from "../src/util/crc32.js";
 
 /**
  * Minimal Game Boy ROM with a valid-looking header. `code` is placed at
  * 0x150, where the entry point at 0x100 jumps to.
  */
-export function makeGbRom({ title = 'TEST', cgb = 0x00, size = 0x8000, cartType = 0, ramSize = 0, code = [] } = {}) {
+export function makeGbRom({ title = "TEST", cgb = 0x00, size = 0x8000, cartType = 0, ramSize = 0, code = [] } = {}) {
     const rom = new Uint8Array(size);
     rom.set([0xc3, 0x50, 0x01], 0x100); // JP $0150
     rom.set([0xce, 0xed, 0x66, 0x66], 0x104);
@@ -18,7 +18,7 @@ export function makeGbRom({ title = 'TEST', cgb = 0x00, size = 0x8000, cartType 
 }
 
 /** Minimal GBA ROM with a valid-looking header. */
-export function makeGbaRom({ title = 'TESTGAME', code = 'ATST', size = 0x1000 } = {}) {
+export function makeGbaRom({ title = "TESTGAME", code = "ATST", size = 0x1000 } = {}) {
     const rom = new Uint8Array(size);
     rom.set([0x24, 0xff, 0xae, 0x51], 0x04);
     rom.set(new TextEncoder().encode(title), 0xa0);

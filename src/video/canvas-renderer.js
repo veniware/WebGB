@@ -1,15 +1,15 @@
-import { getFilter } from './filters.js';
+import { getFilter } from "./filters.js";
 
 /** Fallback renderer for browsers without WebGL2: nearest or smooth scaling only, no effects. */
 export class CanvasRenderer {
     supportsShaders = false;
-    name = 'Canvas 2D';
+    name = "Canvas 2D";
 
     constructor(canvas) {
         this.canvas = canvas;
-        this.context = canvas.getContext('2d', { alpha: false });
-        this.source = document.createElement('canvas');
-        this.sourceContext = this.source.getContext('2d');
+        this.context = canvas.getContext("2d", { alpha: false });
+        this.source = document.createElement("canvas");
+        this.sourceContext = this.source.getContext("2d");
         this.filter = getFilter();
         this.image = null;
     }
@@ -40,7 +40,7 @@ export class CanvasRenderer {
             if (this.image?.data !== frame) this.image = new ImageData(frame, source.width, source.height);
             this.sourceContext.putImageData(this.image, 0, 0);
         }
-        context.imageSmoothingEnabled = this.filter.canvas === 'smooth';
+        context.imageSmoothingEnabled = this.filter.canvas === "smooth";
         context.drawImage(source, 0, 0, canvas.width, canvas.height);
     }
 }

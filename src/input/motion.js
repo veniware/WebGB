@@ -19,7 +19,7 @@ export class MotionInput {
     }
 
     get available() {
-        return typeof window !== 'undefined' && 'DeviceOrientationEvent' in window;
+        return typeof window !== "undefined" && "DeviceOrientationEvent" in window;
     }
 
     setActive(active) {
@@ -34,7 +34,7 @@ export class MotionInput {
         const request = window.DeviceOrientationEvent?.requestPermission;
         if (!request) return true;
         try {
-            return (await request.call(window.DeviceOrientationEvent)) === 'granted';
+            return (await request.call(window.DeviceOrientationEvent)) === "granted";
         } catch {
             return false;
         }
@@ -48,11 +48,11 @@ export class MotionInput {
 
     #listen() {
         if (this.#listening || !this.available) return;
-        if (typeof window.DeviceOrientationEvent.requestPermission === 'function') {
+        if (typeof window.DeviceOrientationEvent.requestPermission === "function") {
             // iOS: only after a tap.
             this.onNeedsPermission();
         }
-        window.addEventListener('deviceorientation', this.handle);
+        window.addEventListener("deviceorientation", this.handle);
         this.#listening = true;
     }
 

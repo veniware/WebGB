@@ -1,10 +1,10 @@
-import { Emitter } from './emitter.js';
-import { RewindBuffer } from './rewind.js';
-import { canLink, createCore, createLinkedCore } from '../core/registry.js';
-import { getRom, getRomData, touchRom } from '../storage/roms.js';
-import { createSave, getSave, updateSave } from '../storage/saves.js';
-import { addSnapshot, getSnapshot, listSnapshots } from '../storage/snapshots.js';
-import { frameToBlob } from '../video/thumbnail.js';
+import { Emitter } from "./emitter.js";
+import { RewindBuffer } from "./rewind.js";
+import { canLink, createCore, createLinkedCore } from "../core/registry.js";
+import { getRom, getRomData, touchRom } from "../storage/roms.js";
+import { createSave, getSave, updateSave } from "../storage/saves.js";
+import { addSnapshot, getSnapshot, listSnapshots } from "../storage/snapshots.js";
+import { frameToBlob } from "../video/thumbnail.js";
 
 /** Speed while the fast-forward hotkey is held (unless the selected speed is higher). */
 export const FAST_FORWARD_SPEED = 4;
@@ -95,8 +95,8 @@ export class Emulator extends Emitter {
         this.#camera = camera;
         this.#rumble = rumble;
         setInterval(() => this.flushSave(), SAVE_CHECK_INTERVAL);
-        document.addEventListener('visibilitychange', () => document.hidden && this.flushSave());
-        window.addEventListener('pagehide', () => this.flushSave());
+        document.addEventListener("visibilitychange", () => document.hidden && this.flushSave());
+        window.addEventListener("pagehide", () => this.flushSave());
     }
 
     start() {
@@ -124,7 +124,7 @@ export class Emulator extends Emitter {
      */
     async launch(key, options) {
         const [rom, data] = await Promise.all([getRom(key), getRomData(key)]);
-        if (!rom || !data) throw new Error('This ROM is no longer in the library.');
+        if (!rom || !data) throw new Error("This ROM is no longer in the library.");
         await this.play(rom, data, options);
     }
 
@@ -160,7 +160,7 @@ export class Emulator extends Emitter {
         this.#display.draw(core.getFrameBuffer());
         this.setPaused(false);
         touchRom(rom.key).catch(() => {});
-        this.emit('loaded', { rom: this.rom, fallback });
+        this.emit("loaded", { rom: this.rom, fallback });
         this.#startPeripherals(core);
     }
 
@@ -170,7 +170,7 @@ export class Emulator extends Emitter {
             const { width, height } = core.cameraSize;
             this.#camera.start(width, height).then((ok) => {
                 if (!ok && this.core === core) {
-                    this.emit('status', { text: 'No camera available: the Game Boy Camera shows a test image.', error: true });
+                    this.emit("status", { text: "No camera available: the Game Boy Camera shows a test image.", error: true });
                 }
             });
         }
@@ -180,7 +180,7 @@ export class Emulator extends Emitter {
     async stop() {
         if (!this.core) return;
         await this.#unload();
-        this.emit('stopped');
+        this.emit("stopped");
     }
 
     async #unload() {
@@ -207,7 +207,7 @@ export class Emulator extends Emitter {
 
     setPaused(paused) {
         this.paused = paused;
-        this.emit('paused', paused);
+        this.emit("paused", paused);
     }
 
     /** Runs one frame with no buttons and no sound, e.g. while paused in the memory viewer. */
@@ -259,10 +259,10 @@ export class Emulator extends Emitter {
             if (slot.saveId === null || !(await updateSave(slot.saveId, copy, thumbnail))) {
                 const id = await createSave(slot.rom.key, copy, undefined, thumbnail);
                 if (this.core === core) slot.saveId = id;
-                this.emit('status', { text: player ? 'Started a new saved game for player 2.' : 'Started a new saved game.' });
+                this.emit("status", { text: player ? "Started a new saved game for player 2." : "Started a new saved game." });
             }
         } catch (err) {
-            this.emit('status', { text: `Could not store the saved game: ${err.message}`, error: true });
+            this.emit("status", { text: `Could not store the saved game: ${err.message}`, error: true });
         }
     }
 
@@ -279,9 +279,9 @@ export class Emulator extends Emitter {
      */
     async link(key, { saveId = null, vertical = false } = {}) {
         const [rom, data] = await Promise.all([getRom(key), getRomData(key)]);
-        if (!rom || !data) throw new Error('This ROM is no longer in the library.');
+        if (!rom || !data) throw new Error("This ROM is no longer in the library.");
         if (!this.canLink(rom.info)) {
-            throw new Error('Only Game Boy / Game Boy Color games can be linked with each other, and GBA games with each other.');
+            throw new Error("Only Game Boy / Game Boy Color games can be linked with each other, and GBA games with each other.");
         }
         const save = saveId !== null ? await getSave(saveId) : null;
         const single = this.core;
@@ -296,7 +296,7 @@ export class Emulator extends Emitter {
         this.#display.setSourceSize(linked.width, linked.height);
         this.#audio.clear();
         this.#rewind.clear();
-        this.emit('linked', this.player2.rom);
+        this.emit("linked", this.player2.rom);
     }
 
     /** Disconnects player 2 (after storing its save); player 1 keeps playing. */
@@ -313,13 +313,13 @@ export class Emulator extends Emitter {
         this.#display.draw(this.core.getFrameBuffer());
         this.#audio.clear();
         this.#rewind.clear();
-        this.emit('unlinked');
+        this.emit("unlinked");
     }
 
     async takeSnapshot() {
         const { core, rom } = this;
         if (!core) return;
-        if (this.player2) throw new Error('Snapshots are not available while two games are linked.');
+        if (this.player2) throw new Error("Snapshots are not available while two games are linked.");
         // The state and screen of this moment, before anything async.
         const state = core.saveState();
         const shot = screenshot(core);
@@ -334,15 +334,15 @@ export class Emulator extends Emitter {
             thumbnail,
             state,
         });
-        this.emit('snapshots');
-        this.emit('status', { text: 'Snapshot saved.' });
+        this.emit("snapshots");
+        this.emit("status", { text: "Snapshot saved." });
     }
 
     /** Restores a snapshot of the running game in place. */
     async loadSnapshot(id) {
         const { core, rom } = this;
         if (!core) return;
-        if (this.player2) throw new Error('Disconnect the link cable to load a snapshot.');
+        if (this.player2) throw new Error("Disconnect the link cable to load a snapshot.");
         const snapshot = await getSnapshot(id);
         checkSnapshot(snapshot, rom.key, core);
         const save = snapshot.saveId != null ? await getSave(snapshot.saveId) : null;
@@ -354,13 +354,13 @@ export class Emulator extends Emitter {
         this.#audio.clear();
         this.#rewind.clear();
         this.#display.draw(core.getFrameBuffer());
-        this.emit('status', { text: 'Snapshot loaded.' });
+        this.emit("status", { text: "Snapshot loaded." });
     }
 
     async loadLatestSnapshot() {
         if (!this.core) return;
         const [latest] = await listSnapshots(this.rom.key);
-        if (!latest) throw new Error('No snapshots for this game yet.');
+        if (!latest) throw new Error("No snapshots for this game yet.");
         await this.loadSnapshot(latest.id);
     }
 
@@ -388,7 +388,7 @@ export class Emulator extends Emitter {
             this.#rewindDebt = 1;
             this.#pendingButtons = 0;
             this.#audio.clear();
-            this.emit('rewinding', true);
+            this.emit("rewinding", true);
         }
         this.#rewindDebt += (elapsed / 1000) * REWIND_STEPS_PER_SECOND;
         let state = null;
@@ -431,7 +431,7 @@ export class Emulator extends Emitter {
         if (this.rewinding) {
             this.rewinding = false;
             this.#frameDebt = 0;
-            this.emit('rewinding', false);
+            this.emit("rewinding", false);
         }
 
         const speed = input.fastForward ? Math.max(FAST_FORWARD_SPEED, this.speed) : this.speed;
@@ -476,7 +476,7 @@ export class Emulator extends Emitter {
         if (now - this.#fpsSince >= 500) {
             const fps = (this.#fpsFrames * 1000) / (now - this.#fpsSince);
             const frameMs = this.#fpsFrames ? this.#coreTime / this.#fpsFrames : 0;
-            this.emit('stats', { fps, speed: fps / core.fps, frameMs });
+            this.emit("stats", { fps, speed: fps / core.fps, frameMs });
             this.#fpsFrames = 0;
             this.#coreTime = 0;
             this.#fpsSince = now;
@@ -485,9 +485,9 @@ export class Emulator extends Emitter {
 }
 
 function checkSnapshot(snapshot, romKey, core) {
-    if (!snapshot || snapshot.romKey !== romKey) throw new Error('Snapshot not found for this game.');
+    if (!snapshot || snapshot.romKey !== romKey) throw new Error("Snapshot not found for this game.");
     if (snapshot.coreId !== core.id || snapshot.coreVersion !== core.version) {
-        throw new Error('This snapshot was made with a different emulator core version.');
+        throw new Error("This snapshot was made with a different emulator core version.");
     }
 }
 

@@ -1,13 +1,13 @@
 // GBA core unit tests: hand-assembled programs and the components on their own.
 
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { createCore } from '../src/core/registry.js';
-import { BackupType, detectBackup } from '../src/core/gba/backup.js';
-import { Gba } from '../src/core/gba/gba.js';
-import { Gpio } from '../src/core/gba/gpio.js';
-import { Timers } from '../src/core/gba/timers.js';
-import { Button } from '../src/core/buttons.js';
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { createCore } from "../src/core/registry.js";
+import { BackupType, detectBackup } from "../src/core/gba/backup.js";
+import { Gba } from "../src/core/gba/gba.js";
+import { Gpio } from "../src/core/gba/gpio.js";
+import { Timers } from "../src/core/gba/timers.js";
+import { Button } from "../src/core/buttons.js";
 
 const IDLE = 0xeafffffe; // b .
 
@@ -15,7 +15,7 @@ const IDLE = 0xeafffffe; // b .
  * A cartridge: a jump over the header to `code` (ARM words at 0x080000C0),
  * then an idle loop followed by `after` words.
  */
-function cart(code = [], { gameCode = 'TEST', after = [], extra = '' } = {}) {
+function cart(code = [], { gameCode = "TEST", after = [], extra = "" } = {}) {
     const rom = new Uint8Array(0x1000);
     const view = new DataView(rom.buffer);
     view.setUint32(0, 0xea00002e, true); // b 0x080000C0
@@ -47,14 +47,14 @@ function collectAudio(gba, frames) {
     return out;
 }
 
-test('the registry runs GBA games on the GBA core', async () => {
-    const { core, fallback } = await createCore(cart(), { system: 'gba' });
+test("the registry runs GBA games on the GBA core", async () => {
+    const { core, fallback } = await createCore(cart(), { system: "gba" });
     assert.equal(fallback, false);
-    assert.equal(core.id, 'gba');
+    assert.equal(core.id, "gba");
     assert.deepEqual([core.width, core.height], [240, 160]);
 });
 
-test('BIOS calls leave the BIOS\'s values in the other registers', () => {
+test("BIOS calls leave the BIOS's values in the other registers", () => {
     // Div(100, 7): r0 quotient, r1 remainder, r3 |quotient|.
     let gba = new Gba(cart([0xe3a00064, 0xe3a01007, 0xef060000]));
     run(gba, 2);
@@ -69,7 +69,7 @@ test('BIOS calls leave the BIOS\'s values in the other registers', () => {
     assert.deepEqual([gba.cpu.r[1] >>> 0, gba.cpu.r[3]], [0xffffc000, 0x8000]);
 });
 
-test('code changed just ahead of the PC still runs from the pipeline', () => {
+test("code changed just ahead of the PC still runs from the pipeline", () => {
     // In IWRAM: an STR overwrites the instruction two ahead (already fetched).
     const gba = new Gba(cart([0xe3a0f403])); // mov pc, #0x03000000
     const program = [
@@ -87,7 +87,7 @@ test('code changed just ahead of the PC still runs from the pipeline', () => {
     assert.equal(view.getUint32(0x10, true), 0);
 });
 
-test('write-only I/O registers read as open bus (the prefetched opcode)', () => {
+test("write-only I/O registers read as open bus (the prefetched opcode)", () => {
     const gba = new Gba(cart([], { after: [0, 0xcafebabe] }));
     run(gba, 1);
     // The idle loop is at 0x080000C0; the opcode two ahead is the marker.
@@ -99,7 +99,7 @@ test('write-only I/O registers read as open bus (the prefetched opcode)', () => 
     assert.equal(gba.bus.read16(0x04000066), 0);
 });
 
-test('KEYINPUT and the keypad interrupt', () => {
+test("KEYINPUT and the keypad interrupt", () => {
     const gba = new Gba(cart());
     run(gba, 1);
     gba.setInput(Button.A | Button.START);
@@ -110,7 +110,7 @@ test('KEYINPUT and the keypad interrupt', () => {
     assert.equal(gba.irq.if & 0x1000, 0x1000);
 });
 
-test('timers: prescaler ticks on a shared clock, overflows reload and cascade', () => {
+test("timers: prescaler ticks on a shared clock, overflows reload and cascade", () => {
     let now = 100;
     const irqs = [];
     const timers = new Timers({
@@ -138,7 +138,7 @@ test('timers: prescaler ticks on a shared clock, overflows reload and cascade', 
     assert.equal(timers.read16(0x100), 0xffff);
 });
 
-test('sound: a Game Boy channel and a DMA-fed FIFO play at the right pitch', () => {
+test("sound: a Game Boy channel and a DMA-fed FIFO play at the right pitch", () => {
     const gba = new Gba(cart());
     run(gba, 1);
     const w = (address, value) => gba.write16(address, value);
@@ -161,10 +161,10 @@ test('sound: a Game Boy channel and a DMA-fed FIFO play at the right pitch', () 
     w(0x102, 0x80);
     samples = collectAudio(gba, 30).slice(24000);
     assert.ok(Math.abs(frequency(samples) - 512) < 5, `sawtooth at ${frequency(samples)} Hz`);
-    assert.ok(Math.max(...samples) > 0.5, 'FIFO at full volume');
+    assert.ok(Math.max(...samples) > 0.5, "FIFO at full volume");
 });
 
-test('video capture DMA copies once per line on lines 2-161, then stops', () => {
+test("video capture DMA copies once per line on lines 2-161, then stops", () => {
     // Waits for line 170, then starts DMA 3: special timing, repeat, 16-bit,
     // one unit per line from EWRAM to IWRAM.
     const gba = new Gba(cart([
@@ -183,11 +183,11 @@ test('video capture DMA copies once per line on lines 2-161, then stops', () => 
     assert.equal(gba.read16(0xde) & 0x8000, 0);
 });
 
-test('save memory type is detected from the SDK\'s ID string', () => {
-    assert.equal(detectBackup(cart([], { extra: 'FLASH1M_V103' })), BackupType.FLASH128);
-    assert.equal(detectBackup(cart([], { extra: 'FLASH512_V131' })), BackupType.FLASH64);
-    assert.equal(detectBackup(cart([], { extra: 'EEPROM_V124' })), BackupType.EEPROM);
-    assert.equal(detectBackup(cart([], { extra: 'SRAM_V113' })), BackupType.SRAM);
+test("save memory type is detected from the SDK's ID string", () => {
+    assert.equal(detectBackup(cart([], { extra: "FLASH1M_V103" })), BackupType.FLASH128);
+    assert.equal(detectBackup(cart([], { extra: "FLASH512_V131" })), BackupType.FLASH64);
+    assert.equal(detectBackup(cart([], { extra: "EEPROM_V124" })), BackupType.EEPROM);
+    assert.equal(detectBackup(cart([], { extra: "SRAM_V113" })), BackupType.SRAM);
     assert.equal(detectBackup(cart()), BackupType.NONE);
 });
 
@@ -227,9 +227,9 @@ function rtc(gpio) {
     };
 }
 
-test('cartridge clock: date and time in BCD, following the wall clock', () => {
+test("cartridge clock: date and time in BCD, following the wall clock", () => {
     let now = Date.UTC(2026, 9, 7, 14, 30, 5);
-    const rom = cart([], { gameCode: 'BPEE' });
+    const rom = cart([], { gameCode: "BPEE" });
     const gpio = new Gpio(rom, { now: () => now });
     assert.equal(gpio.present, true);
     const clock = rtc(gpio);
@@ -246,7 +246,7 @@ test('cartridge clock: date and time in BCD, following the wall clock', () => {
     assert.equal(new Gpio(cart()).present, false);
 });
 
-test('snapshots restore the whole machine, sound and timers included', () => {
+test("snapshots restore the whole machine, sound and timers included", () => {
     const gba = new Gba(cart());
     run(gba, 1);
     gba.write16(0x84, 0x80);
@@ -276,40 +276,40 @@ test('snapshots restore the whole machine, sound and timers included', () => {
     assert.throws(() => new Gba(cart([0]).subarray(0, 0x800)).loadState(state), /different game/);
 });
 
-test('memory regions: RAM, I/O, video memory, ROM and save memory', () => {
-    const gba = new Gba(cart([], { extra: 'SRAM_V113' }));
+test("memory regions: RAM, I/O, video memory, ROM and save memory", () => {
+    const gba = new Gba(cart([], { extra: "SRAM_V113" }));
     const regions = gba.getMemoryRegions();
     const byName = (name) => regions.find((r) => r.name.startsWith(name));
-    const ewram = byName('Work RAM (on board)');
+    const ewram = byName("Work RAM (on board)");
     assert.equal(ewram.base, 0x02000000);
     ewram.write(5, 0xab);
     assert.equal(gba.bus.read8(0x02000005), 0xab);
 
-    const io = byName('I/O registers');
+    const io = byName("I/O registers");
     io.write(0x200, 0x01);
-    assert.equal(gba.irq.ie & 0xff, 0x01, 'IE written through the registers');
+    assert.equal(gba.irq.ie & 0xff, 0x01, "IE written through the registers");
     assert.equal(io.read(0x200), 0x01);
-    assert.equal(io.read(0x0e0), -1, 'unused register');
+    assert.equal(io.read(0x0e0), -1, "unused register");
 
-    const rom = byName('ROM');
+    const rom = byName("ROM");
     assert.equal(rom.write, null);
-    assert.equal(rom.read(0xac), 'T'.charCodeAt(0));
+    assert.equal(rom.read(0xac), "T".charCodeAt(0));
 
-    const save = byName('Save memory');
-    assert.equal(save.name, 'Save memory (SRAM)');
+    const save = byName("Save memory");
+    assert.equal(save.name, "Save memory (SRAM)");
     const writes = gba.getSaveWrites();
     save.write(0, 0x12);
     assert.equal(gba.getSaveData()[0], 0x12);
     assert.notEqual(gba.getSaveWrites(), writes);
 });
 
-test('a BIOS file: intro or straight to the game, and snapshots that do not mix', () => {
+test("a BIOS file: intro or straight to the game, and snapshots that do not mix", () => {
     const bios = new Uint8Array(0x4000);
     const rom = cart();
     const intro = new Gba(rom, { bios, biosIntro: true });
-    assert.equal(intro.cpu.pc, 0, 'starts at the reset vector');
+    assert.equal(intro.cpu.pc, 0, "starts at the reset vector");
     const direct = new Gba(rom, { bios });
-    assert.equal(direct.cpu.pc, 0x08000000, 'starts at the game');
+    assert.equal(direct.cpu.pc, 0x08000000, "starts at the game");
     const builtIn = new Gba(rom);
     assert.throws(() => builtIn.loadState(direct.saveState()), /with the BIOS file/);
     assert.throws(() => direct.loadState(builtIn.saveState()), /without the BIOS file/);
@@ -321,9 +321,9 @@ function romWithCode(code) {
     return cart([], { gameCode: code });
 }
 
-test('Boktai solar sensor: more light, fewer clocks until pin 3 rises', () => {
+test("Boktai solar sensor: more light, fewer clocks until pin 3 rises", () => {
     const clocks = (light) => {
-        const gpio = new Gpio(romWithCode('U3IJ'));
+        const gpio = new Gpio(romWithCode("U3IJ"));
         gpio.light = light;
         gpio.write(0xc8, 1);
         gpio.write(0xc6, 7);
@@ -336,7 +336,7 @@ test('Boktai solar sensor: more light, fewer clocks until pin 3 rises', () => {
         }
         return Infinity;
     };
-    assert.ok(hasSolarAndClock('U3IJ'));
+    assert.ok(hasSolarAndClock("U3IJ"));
     assert.equal(clocks(0), 0xff - 0x16);
     assert.equal(clocks(10), 0xff - 0x16 - 183);
     assert.ok(clocks(5) < clocks(1));
@@ -347,9 +347,9 @@ function hasSolarAndClock(code) {
     return gpio.present && gpio.solar && gpio.rtc;
 }
 
-test('WarioWare Twisted gyro: 16 bits per sample, centered at 0x6C0', () => {
+test("WarioWare Twisted gyro: 16 bits per sample, centered at 0x6C0", () => {
     const read = (rotation) => {
-        const gpio = new Gpio(romWithCode('RZWE'));
+        const gpio = new Gpio(romWithCode("RZWE"));
         gpio.rotation = rotation;
         gpio.write(0xc8, 1);
         gpio.write(0xc6, 0xb); // pins 0, 1 and the motor
@@ -368,9 +368,9 @@ test('WarioWare Twisted gyro: 16 bits per sample, centered at 0x6C0', () => {
     assert.equal(read(-1), 0x6c0 - 0x300);
 });
 
-test('rumble: the share of time the motor ran', () => {
+test("rumble: the share of time the motor ran", () => {
     let cycles = 0;
-    const gpio = new Gpio(romWithCode('V49E'), { cycles: () => cycles });
+    const gpio = new Gpio(romWithCode("V49E"), { cycles: () => cycles });
     gpio.write(0xc6, 8);
     gpio.write(0xc4, 8);
     cycles = 30;
@@ -380,11 +380,11 @@ test('rumble: the share of time the motor ran', () => {
     cycles = 100;
     assert.equal(gpio.rumbleLevel(0), 0.7);
     cycles = 200;
-    assert.equal(gpio.rumbleLevel(100), 1, 'still running');
+    assert.equal(gpio.rumbleLevel(100), 1, "still running");
 });
 
-test('Yoshi Topsy-Turvy accelerometer: sampled by writes in the save area', () => {
-    const gba = new Gba(romWithCode('KYGE'));
+test("Yoshi Topsy-Turvy accelerometer: sampled by writes in the save area", () => {
+    const gba = new Gba(romWithCode("KYGE"));
     assert.ok(gba.wantsTilt);
     gba.setTilt(1, -0.5);
     gba.bus.write8(0x0e008000, 0x55);
@@ -395,7 +395,7 @@ test('Yoshi Topsy-Turvy accelerometer: sampled by writes in the save area', () =
     assert.equal(x, 0x3a0 + 0x100);
     assert.equal(y, 0x3a0 - 0x80);
     // Snapshots keep the sample.
-    const again = new Gba(romWithCode('KYGE'));
+    const again = new Gba(romWithCode("KYGE"));
     again.loadState(gba.saveState());
     assert.equal(again.bus.read8(0x0e008200), x & 0xff);
 });
@@ -410,16 +410,16 @@ function compareIdle(rom, frames) {
         run(gba, frames);
         return gba;
     });
-    assert.deepEqual(runs[0].saveState(), runs[1].saveState(), 'same state with and without skipping');
+    assert.deepEqual(runs[0].saveState(), runs[1].saveState(), "same state with and without skipping");
     return runs[0];
 }
 
-test('idle loops: a jump to itself is skipped up to each event', () => {
+test("idle loops: a jump to itself is skipped up to each event", () => {
     const gba = compareIdle(cart(), 10);
     assert.ok(gba.idleLoops.skipped > gba.bus.cycles * 0.9, `${gba.idleLoops.skipped} of ${gba.bus.cycles}`);
 });
 
-test('idle loops: polling VCOUNT keeps its exact timing', () => {
+test("idle loops: polling VCOUNT keeps its exact timing", () => {
     const gba = compareIdle(cart([
         0xe3a00301, // mov r0, #0x04000000
         0xe1d010b6, // loop: ldrh r1, [r0, #6] (VCOUNT)
@@ -428,11 +428,11 @@ test('idle loops: polling VCOUNT keeps its exact timing', () => {
         0xe2822001, // add r2, r2, #1 (counts passes while on line 100)
         0xeafffffa, // b loop
     ]), 5);
-    assert.ok(gba.cpu.r[2] > 0, 'reached line 100');
-    assert.ok(gba.idleLoops.skipped > gba.bus.cycles * 0.5, 'most of the waiting skipped');
+    assert.ok(gba.cpu.r[2] > 0, "reached line 100");
+    assert.ok(gba.idleLoops.skipped > gba.bus.cycles * 0.5, "most of the waiting skipped");
 });
 
-test('idle loops: reading a timer is never skipped', () => {
+test("idle loops: reading a timer is never skipped", () => {
     const gba = compareIdle(cart([
         0xe3a00301, // mov r0, #0x04000000
         0xe2800c01, // add r0, r0, #0x100
@@ -446,27 +446,27 @@ test('idle loops: reading a timer is never skipped', () => {
 // --- Link cable ------------------------------------------------------------------------
 
 async function linkedPair() {
-    const { createLinkedCore } = await import('../src/core/gba/index.js');
+    const { createLinkedCore } = await import("../src/core/gba/index.js");
     const first = new Gba(cart());
     run(first, 3); // already running, so the clocks differ
-    const linked = createLinkedCore(first, cart(), { system: 'gba' }, {});
+    const linked = createLinkedCore(first, cart(), { system: "gba" }, {});
     return { linked, a: linked.machines[0], b: linked.machines[1] };
 }
 
-test('GBA games link with GBA games only', async () => {
-    const { canLink } = await import('../src/core/registry.js');
+test("GBA games link with GBA games only", async () => {
+    const { canLink } = await import("../src/core/registry.js");
     const gba = new Gba(cart());
-    assert.equal(canLink(gba, { system: 'gba' }), true);
-    assert.equal(canLink(gba, { system: 'gb' }), false);
+    assert.equal(canLink(gba, { system: "gba" }), true);
+    assert.equal(canLink(gba, { system: "gb" }), false);
     const { linked } = await linkedPair();
-    assert.equal(canLink(linked, { system: 'gba' }), false, 'not a third one');
+    assert.equal(canLink(linked, { system: "gba" }), false, "not a third one");
     assert.equal(linked.width, 480);
     linked.runFrame();
     assert.ok(linked.getAudioSamples().length > 0);
     assert.equal(linked.screenshot(1).width, 240);
 });
 
-test('link cable: a multiplayer transfer swaps both words and interrupts both', async () => {
+test("link cable: a multiplayer transfer swaps both words and interrupts both", async () => {
     const { linked, a, b } = await linkedPair();
     for (const [gba, word] of [[a, 0x1234], [b, 0xabcd]]) {
         gba.write16(0x134, 0); // RCNT: SIO
@@ -474,21 +474,21 @@ test('link cable: a multiplayer transfer swaps both words and interrupts both', 
         gba.write16(0x12a, word);
         gba.write16(0x200, 0x80); // IE: serial
     }
-    assert.equal(a.read16(0x128) & 0x0c, 0x08, 'parent: SI low, SD high');
-    assert.equal(b.read16(0x128) & 0x0c, 0x0c, 'child: SI high, SD high');
+    assert.equal(a.read16(0x128) & 0x0c, 0x08, "parent: SI low, SD high");
+    assert.equal(b.read16(0x128) & 0x0c, 0x0c, "child: SI high, SD high");
     b.write16(0x128, 0x6083);
-    assert.equal(b.read16(0x128) & 0x80, 0, 'only the parent starts');
+    assert.equal(b.read16(0x128) & 0x80, 0, "only the parent starts");
     a.write16(0x128, 0x6083);
-    assert.equal(b.read16(0x128) & 0x80, 0x80, 'both busy');
+    assert.equal(b.read16(0x128) & 0x80, 0x80, "both busy");
     linked.runFrame();
     for (const [gba, id] of [[a, 0], [b, 1]]) {
         assert.deepEqual([0x120, 0x122, 0x124, 0x126].map((r) => gba.read16(r)), [0x1234, 0xabcd, 0xffff, 0xffff]);
-        assert.equal(gba.read16(0x128) & 0xf0, id << 4, 'done, with its ID');
-        assert.equal(gba.irq.if & 0x80, 0x80, 'serial interrupt');
+        assert.equal(gba.read16(0x128) & 0xf0, id << 4, "done, with its ID");
+        assert.equal(gba.irq.if & 0x80, 0x80, "serial interrupt");
     }
 });
 
-test('link cable: a Normal-mode transfer swaps words with a slave that waits', async () => {
+test("link cable: a Normal-mode transfer swaps words with a slave that waits", async () => {
     const { linked, a, b } = await linkedPair();
     const setWord = (gba, word) => {
         gba.write16(0x120, word & 0xffff);
@@ -504,31 +504,31 @@ test('link cable: a Normal-mode transfer swaps words with a slave that waits', a
     linked.runFrame();
     assert.equal(word(a), 0xcafebabe);
     assert.equal(word(b), 0x12345678);
-    assert.equal((a.read16(0x128) | b.read16(0x128)) & 0x80, 0, 'both done');
+    assert.equal((a.read16(0x128) | b.read16(0x128)) & 0x80, 0, "both done");
     // Without a waiting slave, the master reads the line's idle level.
     a.write16(0x128, 0x5083);
     linked.runFrame();
     assert.equal(word(a), 0xffffffff);
-    assert.equal(word(b), 0x12345678, 'the slave took no part');
+    assert.equal(word(b), 0x12345678, "the slave took no part");
 });
 
-test('link cable: UART sends bytes at the baud rate, through the FIFOs', async () => {
+test("link cable: UART sends bytes at the baud rate, through the FIFOs", async () => {
     const { linked, a, b } = await linkedPair();
     for (const gba of [a, b]) {
         gba.write16(0x134, 0); // RCNT: SIO
         gba.write16(0x128, 0x7f83); // UART, 115200 bps, 8 bits, FIFO, send + receive, IRQ
         gba.write16(0x200, 0x80);
     }
-    assert.equal(b.read16(0x128) & 0x30, 0x20, 'nothing received yet');
+    assert.equal(b.read16(0x128) & 0x30, 0x20, "nothing received yet");
     for (const byte of [0x48, 0x69, 0x21, 0x0a]) a.write16(0x12a, byte);
-    assert.equal(a.read16(0x128) & 0x10, 0x10, 'send FIFO full');
+    assert.equal(a.read16(0x128) & 0x10, 0x10, "send FIFO full");
     a.write16(0x12a, 0x99); // dropped
     linked.runFrame();
-    assert.equal(a.read16(0x128) & 0x10, 0, 'all sent');
+    assert.equal(a.read16(0x128) & 0x10, 0, "all sent");
     const received = [];
     while (!(b.read16(0x128) & 0x20)) received.push(b.read16(0x12a) & 0xff);
     assert.deepEqual(received, [0x48, 0x69, 0x21, 0x0a]);
-    assert.equal(b.irq.if & 0x80, 0x80, 'receive interrupt');
+    assert.equal(b.irq.if & 0x80, 0x80, "receive interrupt");
     // Without a link nothing changes: writes are ignored, the receiver stays empty.
     linked.unlink();
     a.write16(0x128, 0x7f83);

@@ -1,6 +1,6 @@
-import { Interrupt, SCREEN_HEIGHT, SCREEN_WIDTH } from './constants.js';
-import { LOGGED_REGISTERS, PixelFifo } from './fifo.js';
-import { cgbToPixel, DEFAULT_DMG_PALETTE, rgbToPixel } from './palettes.js';
+import { Interrupt, SCREEN_HEIGHT, SCREEN_WIDTH } from "./constants.js";
+import { LOGGED_REGISTERS, PixelFifo } from "./fifo.js";
+import { cgbToPixel, DEFAULT_DMG_PALETTE, rgbToPixel } from "./palettes.js";
 
 const LINE_DOTS = 456;
 const MAX_SPRITES_PER_LINE = 10;
@@ -139,14 +139,14 @@ export class Ppu {
         s.bytes(this.oam);
         s.bytes(this.bgPaletteRam);
         s.bytes(this.objPaletteRam);
-        for (const r of ['vramBank', 'lcdc', 'statEnables', 'scy', 'scx', 'ly', 'lyc', 'bgp', 'obp0', 'obp1', 'wy', 'wx',
-            'bcps', 'ocps', 'opri', 'mode', 'irqMode', 'phase', 'windowLine', 'spriteCount']) {
+        for (const r of ["vramBank", "lcdc", "statEnables", "scy", "scx", "ly", "lyc", "bgp", "obp0", "obp1", "wy", "wx",
+            "bcps", "ocps", "opri", "mode", "irqMode", "phase", "windowLine", "spriteCount"]) {
             this[r] = s.u8(this[r]);
         }
         this.dot = s.u16(this.dot);
         this.nextEvent = s.u16(this.nextEvent);
-        for (const flag of ['oamReadBlocked', 'oamWriteBlocked', 'vramReadBlocked', 'vramWriteBlocked', 'windowTriggered',
-            'coincidence', 'statSignal', 'frameDone', 'skipFrame', 'drawing', 'oamScan']) {
+        for (const flag of ["oamReadBlocked", "oamWriteBlocked", "vramReadBlocked", "vramWriteBlocked", "windowTriggered",
+            "coincidence", "statSignal", "frameDone", "skipFrame", "drawing", "oamScan"]) {
             this[flag] = s.bool(this[flag]);
         }
         s.bytes(this.lineSprites);

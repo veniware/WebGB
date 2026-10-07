@@ -1,4 +1,4 @@
-import { crc32 } from './crc32.js';
+import { crc32 } from "./crc32.js";
 
 // Minimal zip writer: stored (uncompressed) entries, UTF-8 names, no zip64
 // (so under 4 GB). Readable by src/rom/zip.js and any unzip tool.
@@ -51,7 +51,7 @@ export function createZip(entries) {
     end.setUint16(10, entries.length, true);
     end.setUint32(12, centralSize, true);
     end.setUint32(16, offset, true);
-    return new Blob([...parts, ...central, end], { type: 'application/zip' });
+    return new Blob([...parts, ...central, end], { type: "application/zip" });
 }
 
 /** MS-DOS time and date fields (local time, 2-second precision). */

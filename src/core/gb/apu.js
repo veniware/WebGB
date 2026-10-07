@@ -1,4 +1,4 @@
-import { CLOCK_RATE } from './constants.js';
+import { CLOCK_RATE } from "./constants.js";
 
 export const SAMPLE_RATE = 48000;
 
@@ -44,8 +44,8 @@ class Channel {
     }
 
     sync(s) {
-        for (const flag of ['enabled', 'dacOn', 'lengthEnabled', 'envelopeUp', 'envelopeDone']) this[flag] = s.bool(this[flag]);
-        for (const field of ['length', 'frequency', 'volume', 'envelopeInitial', 'envelopePeriod', 'envelopeTimer']) {
+        for (const flag of ["enabled", "dacOn", "lengthEnabled", "envelopeUp", "envelopeDone"]) this[flag] = s.bool(this[flag]);
+        for (const field of ["length", "frequency", "volume", "envelopeInitial", "envelopePeriod", "envelopeTimer"]) {
             this[field] = s.u16(this[field]);
         }
         this.timer = s.i32(this.timer);
@@ -125,10 +125,10 @@ export class SquareChannel extends Channel {
 
     sync(s) {
         super.sync(s);
-        for (const field of ['duty', 'dutyStep', 'sweepPeriod', 'sweepShift', 'sweepTimer', 'sweepFrequency']) {
+        for (const field of ["duty", "dutyStep", "sweepPeriod", "sweepShift", "sweepTimer", "sweepFrequency"]) {
             this[field] = s.u16(this[field]);
         }
-        for (const flag of ['sweepDown', 'sweepEnabled', 'sweepSubtracted']) this[flag] = s.bool(this[flag]);
+        for (const flag of ["sweepDown", "sweepEnabled", "sweepSubtracted"]) this[flag] = s.bool(this[flag]);
     }
 
     get output() {
@@ -358,7 +358,7 @@ export class Apu {
         s.bytes(this.regs);
         this.power = s.bool(this.power);
         this.frameStep = s.u8(this.frameStep);
-        for (const field of ['sumLeft', 'sumRight', 'capLeft', 'capRight']) this[field] = s.f64(this[field]);
+        for (const field of ["sumLeft", "sumRight", "capLeft", "capRight"]) this[field] = s.f64(this[field]);
         this.sumCycles = s.u32(this.sumCycles);
         this.sampleClock = s.u32(this.sampleClock);
         this.dirty = true;

@@ -1,17 +1,17 @@
-import { StateReader, StateWriter } from '../state.js';
-import { Apu, SAMPLE_RATE } from './apu.js';
-import { Backup, detectBackup } from './backup.js';
-import { bootState, createBios, createHleBios } from './bios.js';
-import { Bus } from './bus.js';
-import { Arm7 } from './cpu.js';
-import { Dma, Timing } from './dma.js';
-import { Gpio } from './gpio.js';
-import { IdleLoops } from './idle.js';
-import { TILT_GAMES, TiltSensor } from './tilt.js';
-import { memoryRegions } from './memory.js';
-import { LINE_CYCLES, Ppu, SCREEN_HEIGHT, SCREEN_WIDTH } from './ppu.js';
-import { Sio } from './sio.js';
-import { Timers } from './timers.js';
+import { StateReader, StateWriter } from "../state.js";
+import { Apu, SAMPLE_RATE } from "./apu.js";
+import { Backup, detectBackup } from "./backup.js";
+import { bootState, createBios, createHleBios } from "./bios.js";
+import { Bus } from "./bus.js";
+import { Arm7 } from "./cpu.js";
+import { Dma, Timing } from "./dma.js";
+import { Gpio } from "./gpio.js";
+import { IdleLoops } from "./idle.js";
+import { TILT_GAMES, TiltSensor } from "./tilt.js";
+import { memoryRegions } from "./memory.js";
+import { LINE_CYCLES, Ppu, SCREEN_HEIGHT, SCREEN_WIDTH } from "./ppu.js";
+import { Sio } from "./sio.js";
+import { Timers } from "./timers.js";
 
 /** CPU clock: 2^24 Hz. */
 export const CLOCK_RATE = 16777216;
@@ -51,7 +51,7 @@ class Interrupts {
  * the Core interface (src/core/interface.js).
  */
 export class Gba {
-    id = 'gba';
+    id = "gba";
     version = 1;
     width = SCREEN_WIDTH;
     height = SCREEN_HEIGHT;
@@ -371,7 +371,7 @@ export class Gba {
     getSaveData() {
         // The clock's settings follow the save memory, if the game changed them.
         const clock = this.gpio.rtc ? this.gpio.toSave() : new Uint8Array(0);
-        if (this.backup.type === 'none' && !clock.length && !this.backup.data.some((b) => b !== 0xff)) return null;
+        if (this.backup.type === "none" && !clock.length && !this.backup.data.some((b) => b !== 0xff)) return null;
         const data = this.backup.getSaveData();
         if (!clock.length) return data;
         const out = new Uint8Array(data.length + clock.length);
@@ -400,15 +400,15 @@ export class Gba {
         const s = new StateReader(data);
         const magic = s.u32();
         if (magic === (this.realBios ? STATE_MAGIC : STATE_MAGIC_BIOS)) {
-            throw new Error(this.realBios ? 'This snapshot was taken without the BIOS file.' : 'This snapshot was taken with the BIOS file.');
+            throw new Error(this.realBios ? "This snapshot was taken without the BIOS file." : "This snapshot was taken with the BIOS file.");
         }
         if (magic !== (this.realBios ? STATE_MAGIC_BIOS : STATE_MAGIC) || s.u32() !== this.rom.length) {
-            throw new Error('This snapshot is for a different game or system.');
+            throw new Error("This snapshot is for a different game or system.");
         }
         const backup = this.saveState();
         try {
             this.#sync(s);
-            if (!s.done) throw new Error('Invalid save state.');
+            if (!s.done) throw new Error("Invalid save state.");
         } catch (err) {
             const restore = new StateReader(backup);
             restore.u32();

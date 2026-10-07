@@ -464,7 +464,8 @@ so short taps are never lost.
 
 ## Conventions
 
-- ES modules, 4-space indent, single quotes, semicolons, `camelCase`, classes
+- ES modules, 4-space indent, double quotes (single quotes only around
+  strings that contain double quotes), semicolons, `camelCase`, classes
   in `PascalCase`. Private class members use `#fields`.
 - Keep modules small and single-purpose; wire them together in `main.js`
   rather than importing across layers (e.g. cores never touch the DOM).

@@ -1,17 +1,17 @@
-import { StateReader, StateWriter } from '../state.js';
-import { Apu, SAMPLE_RATE } from './apu.js';
-import { createCartridge } from './cartridge.js';
-import { Camera, SENSOR_HEIGHT, SENSOR_WIDTH } from './mappers/camera.js';
-import { Mbc7 } from './mappers/mbc7.js';
-import { CLOCK_RATE, FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, SGB_CLOCK_RATE } from './constants.js';
-import { Cpu } from './cpu.js';
-import { DMG_PALETTES, GBC_PRESETS, gbcCombination, gbcCombinationFor, SGB_PALETTES } from './palettes.js';
-import { Joypad } from './joypad.js';
-import { memoryRegions } from './memory.js';
-import { Ppu } from './ppu.js';
-import { Serial } from './serial.js';
-import { Sgb } from './sgb.js';
-import { Timer } from './timer.js';
+import { StateReader, StateWriter } from "../state.js";
+import { Apu, SAMPLE_RATE } from "./apu.js";
+import { createCartridge } from "./cartridge.js";
+import { Camera, SENSOR_HEIGHT, SENSOR_WIDTH } from "./mappers/camera.js";
+import { Mbc7 } from "./mappers/mbc7.js";
+import { CLOCK_RATE, FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, SGB_CLOCK_RATE } from "./constants.js";
+import { Cpu } from "./cpu.js";
+import { DMG_PALETTES, GBC_PRESETS, gbcCombination, gbcCombinationFor, SGB_PALETTES } from "./palettes.js";
+import { Joypad } from "./joypad.js";
+import { memoryRegions } from "./memory.js";
+import { Ppu } from "./ppu.js";
+import { Serial } from "./serial.js";
+import { Sgb } from "./sgb.js";
+import { Timer } from "./timer.js";
 
 // Where the DMG boot ROM leaves the PPU: line 153, this many dots in (as in Gambatte).
 const BOOT_DOT = 396;
@@ -32,7 +32,7 @@ const SPEED_SWITCH_CYCLES = 0x20008 / 4 - 2;
  * 2 dots instead of 4, so the PPU and APU run at the same real-time speed.
  */
 export class GameBoy {
-    id = 'gb';
+    id = "gb";
     version = 4;
     fps = CLOCK_RATE / FRAME_DOTS;
     sampleRate = SAMPLE_RATE;
@@ -81,7 +81,7 @@ export class GameBoy {
     }
 
     get model() {
-        return this.cgb ? 'Game Boy Color' : this.sgb ? 'Super Game Boy' : 'Game Boy';
+        return this.cgb ? "Game Boy Color" : this.sgb ? "Super Game Boy" : "Game Boy";
     }
 
     /** Controllers read: 2 when a Super Game Boy game asks for multiplayer. */
@@ -98,7 +98,7 @@ export class GameBoy {
      *     name. colorCorrection: mimic the Game Boy Color's LCD instead of raw
      *     colors. sgbBorder: show the Super Game Boy's border (changes the size).
      */
-    configure({ gbPalette = 'auto', colorCorrection = false, sgbBorder = true } = {}) {
+    configure({ gbPalette = "auto", colorCorrection = false, sgbBorder = true } = {}) {
         if (this.sgb) {
             // The game picks its colors.
             if (this.sgb.showBorder !== sgbBorder) {
@@ -110,13 +110,13 @@ export class GameBoy {
         this.ppu.setColorCorrection(colorCorrection);
         if (this.cgb) return;
         const known = gbcCombinationFor(this.rom);
-        const sgbPalette = SGB_PALETTES[gbPalette.replace(/^sgb-/, '')];
+        const sgbPalette = SGB_PALETTES[gbPalette.replace(/^sgb-/, "")];
         if (gbPalette in DMG_PALETTES) this.ppu.setDmgPalette(DMG_PALETTES[gbPalette]);
-        else if (gbPalette.startsWith('sgb-') && sgbPalette) {
+        else if (gbPalette.startsWith("sgb-") && sgbPalette) {
             this.ppu.setCompatPalette({ bg: sgbPalette, obj0: sgbPalette, obj1: sgbPalette }, false);
         }
         else if (gbPalette in GBC_PRESETS) this.ppu.setCompatPalette(gbcCombination(GBC_PRESETS[gbPalette]));
-        else if (gbPalette === 'gbc' || known >= 0) this.ppu.setCompatPalette(gbcCombination(Math.max(known, 0)));
+        else if (gbPalette === "gbc" || known >= 0) this.ppu.setCompatPalette(gbcCombination(Math.max(known, 0)));
         else this.ppu.setDmgPalette(DMG_PALETTES.green);
     }
 
@@ -241,11 +241,11 @@ export class GameBoy {
         s.bytes(this.wram);
         s.bytes(this.hram);
         s.bytes(this.extraRegs);
-        for (const r of ['ie', 'if', 'svbk', 'dmaRegister', 'dmaIndex', 'dmaDelay', 'hdmaLength', 'rp']) this[r] = s.u8(this[r]);
+        for (const r of ["ie", "if", "svbk", "dmaRegister", "dmaIndex", "dmaDelay", "hdmaLength", "rp"]) this[r] = s.u8(this[r]);
         this.dmaSource = s.u16(this.dmaSource);
         this.hdmaSource = s.u16(this.hdmaSource);
         this.hdmaDest = s.u16(this.hdmaDest);
-        for (const flag of ['doubleSpeed', 'speedArmed', 'dmaActive', 'hdmaActive']) this[flag] = s.bool(this[flag]);
+        for (const flag of ["doubleSpeed", "speedArmed", "dmaActive", "hdmaActive"]) this[flag] = s.bool(this[flag]);
         this.frameBudget = s.i32(this.frameBudget);
         this.wramBank = this.svbk || 1;
     }
@@ -331,7 +331,7 @@ export class GameBoy {
     /** Infrared light from outside (another Game Boy); light this one emits is irLight. */
     setInfrared(received) {
         this.irReceived = received;
-        if ('irReceived' in this.cart) this.cart.irReceived = received;
+        if ("irReceived" in this.cart) this.cart.irReceived = received;
     }
 
     get irLight() {
@@ -381,11 +381,11 @@ export class GameBoy {
 
     loadState(data) {
         const s = new StateReader(data);
-        if (!this.#header(s)) throw new Error('This snapshot is for a different game or system.');
+        if (!this.#header(s)) throw new Error("This snapshot is for a different game or system.");
         const backup = this.saveState();
         try {
             this.sync(s);
-            if (!s.done) throw new Error('Invalid save state.');
+            if (!s.done) throw new Error("Invalid save state.");
         } catch (err) {
             const restore = new StateReader(backup);
             this.#header(restore);

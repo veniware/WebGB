@@ -1,7 +1,7 @@
 import {
     ACTIONS, defaultKeyBindings, defaultPadBindings, keyName, padButtonName, withDefaults,
-} from '../input/bindings.js';
-import { h } from './dom.js';
+} from "../input/bindings.js";
+import { h } from "./dom.js";
 
 // Gives up waiting for a gamepad button after this long (ms).
 const PAD_WAIT = 10_000;
@@ -18,7 +18,7 @@ const PAD_WAIT = 10_000;
  * }} deps    onChange gets null for bindings back at their defaults.
  */
 export function createControlsDialog({ dialog, modals, settings, onChange }) {
-    const rows = dialog.querySelector('[data-rows]');
+    const rows = dialog.querySelector("[data-rows]");
     let keys = withDefaults(settings.keyBindings, defaultKeyBindings());
     let pads = withDefaults(settings.padBindings, defaultPadBindings());
     // The capture in progress: { stop() }.
@@ -37,19 +37,19 @@ export function createControlsDialog({ dialog, modals, settings, onChange }) {
     }
 
     function render() {
-        rows.replaceChildren(...ACTIONS.map((action) => h('tr', {},
-            h('th', { scope: 'row', textContent: action.name }),
-            h('td', {}, h('button', {
-                type: 'button',
-                className: 'binding',
-                textContent: keys[action.id].map(keyName).join(' / ') || '—',
+        rows.replaceChildren(...ACTIONS.map((action) => h("tr", {},
+            h("th", { scope: "row", textContent: action.name }),
+            h("td", {}, h("button", {
+                type: "button",
+                className: "binding",
+                textContent: keys[action.id].map(keyName).join(" / ") || "—",
                 onclick: (e) => captureKey(action, e.currentTarget),
             })),
-            h('td', {}, action.button || action.pad
-                ? h('button', {
-                    type: 'button',
-                    className: 'binding',
-                    textContent: pads[action.id].map(padButtonName).join(' / ') || '—',
+            h("td", {}, action.button || action.pad
+                ? h("button", {
+                    type: "button",
+                    className: "binding",
+                    textContent: pads[action.id].map(padButtonName).join(" / ") || "—",
                     onclick: (e) => capturePad(action, e.currentTarget),
                 })
                 : null),
@@ -58,26 +58,26 @@ export function createControlsDialog({ dialog, modals, settings, onChange }) {
 
     function captureKey(action, button) {
         capture?.stop();
-        button.textContent = 'Press a key…';
+        button.textContent = "Press a key…";
         const onKey = (e) => {
             e.preventDefault();
             e.stopPropagation();
             stop();
-            if (e.code === 'Delete') keys[action.id] = [];
-            else if (e.code !== 'Escape') bind(keys, action.id, e.code);
+            if (e.code === "Delete") keys[action.id] = [];
+            else if (e.code !== "Escape") bind(keys, action.id, e.code);
             save();
         };
         const stop = () => {
-            window.removeEventListener('keydown', onKey, true);
+            window.removeEventListener("keydown", onKey, true);
             capture = null;
         };
-        window.addEventListener('keydown', onKey, true);
+        window.addEventListener("keydown", onKey, true);
         capture = { stop };
     }
 
     function capturePad(action, button) {
         capture?.stop();
-        button.textContent = 'Press a button…';
+        button.textContent = "Press a button…";
         const pressed = () => new Set((navigator.getGamepads?.() ?? []).flatMap((pad) =>
             pad ? pad.buttons.flatMap((b, i) => (b.pressed || b.value > 0.5 ? [i] : [])) : []));
         const held = pressed();
@@ -100,30 +100,30 @@ export function createControlsDialog({ dialog, modals, settings, onChange }) {
         };
         // Esc or Delete while waiting for the gamepad.
         const onKey = (e) => {
-            if (e.code !== 'Escape' && e.code !== 'Delete') return;
+            if (e.code !== "Escape" && e.code !== "Delete") return;
             e.preventDefault();
             e.stopPropagation();
             stop();
-            if (e.code === 'Delete') {
+            if (e.code === "Delete") {
                 pads[action.id] = [];
                 save();
             } else render();
         };
         const stop = () => {
             cancelAnimationFrame(frame);
-            window.removeEventListener('keydown', onKey, true);
+            window.removeEventListener("keydown", onKey, true);
             capture = null;
         };
-        window.addEventListener('keydown', onKey, true);
+        window.addEventListener("keydown", onKey, true);
         frame = requestAnimationFrame(poll);
         capture = { stop };
     }
 
     // Esc during a capture cancels it, not the dialog.
-    dialog.addEventListener('cancel', (e) => capture && e.preventDefault());
-    dialog.addEventListener('close', () => capture?.stop());
-    dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
-    dialog.querySelector('[data-reset]').addEventListener('click', () => {
+    dialog.addEventListener("cancel", (e) => capture && e.preventDefault());
+    dialog.addEventListener("close", () => capture?.stop());
+    dialog.querySelector("[data-close]").addEventListener("click", () => dialog.close());
+    dialog.querySelector("[data-reset]").addEventListener("click", () => {
         capture?.stop();
         keys = defaultKeyBindings();
         pads = defaultPadBindings();

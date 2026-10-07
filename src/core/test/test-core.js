@@ -1,4 +1,4 @@
-import { Button, BUTTON_NAMES } from '../buttons.js';
+import { Button, BUTTON_NAMES } from "../buttons.js";
 
 const SIZES = { gb: [160, 144], gbc: [160, 144], gba: [240, 160] };
 
@@ -37,12 +37,12 @@ export function createTestCore(_rom, info) {
  * drawn in binary above the button row, to exercise saved games.
  */
 export class TestCore {
-    id = 'test';
+    id = "test";
     version = 2;
     fps = 59.7275;
     sampleRate = 48000;
 
-    constructor(system = 'gb') {
+    constructor(system = "gb") {
         [this.width, this.height] = SIZES[system] ?? SIZES.gb;
         this.frame = new Uint8ClampedArray(this.width * this.height * 4);
         this.pixels = new Uint32Array(this.frame.buffer);
@@ -107,7 +107,7 @@ export class TestCore {
     }
 
     loadState(bytes) {
-        if (bytes.byteLength !== STATE_SIZE * 8) throw new Error('Invalid test core state.');
+        if (bytes.byteLength !== STATE_SIZE * 8) throw new Error("Invalid test core state.");
         const state = new Float64Array(bytes.slice().buffer);
         this.frameCount = state[0];
         this.sampleDebt = state[1];

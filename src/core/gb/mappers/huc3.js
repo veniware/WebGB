@@ -1,4 +1,4 @@
-import { Cartridge } from './base.js';
+import { Cartridge } from "./base.js";
 
 const DAY_MINUTES = 1440;
 // Clock data appended to saved games: base time (8), alarm minutes (2), alarm days (2), alarm on (1).
@@ -34,7 +34,7 @@ export class Huc3 extends Cartridge {
     sync(s) {
         super.sync(s);
         this.base = s.f64(this.base);
-        for (const field of ['mode', 'accessIndex', 'accessFlags', 'readValue']) this[field] = s.u8(this[field]);
+        for (const field of ["mode", "accessIndex", "accessFlags", "readValue"]) this[field] = s.u8(this[field]);
         this.alarmMinutes = s.u16(this.alarmMinutes);
         this.alarmDays = s.u16(this.alarmDays);
         this.alarmEnabled = s.bool(this.alarmEnabled);

@@ -1,4 +1,4 @@
-import { Cartridge } from './base.js';
+import { Cartridge } from "./base.js";
 
 const FLASH_SIZE = 0x100000;
 const SECTOR_SIZE = 0x20000;
@@ -24,7 +24,7 @@ export class Mbc6 extends Cartridge {
         this.flashWriteEnabled = false;
         // Flash command state machine.
         this.unlock = 0; // progress through the AA/55 unlock sequence
-        this.flashMode = 'read'; // 'read' | 'id' | 'program' | 'status' | 'erase-setup'
+        this.flashMode = "read"; // 'read' | 'id' | 'program' | 'status' | 'erase-setup'
         this.status = 0x80;
     }
 
@@ -39,8 +39,8 @@ export class Mbc6 extends Cartridge {
         this.flashEnabled = s.bool(this.flashEnabled);
         this.flashWriteEnabled = s.bool(this.flashWriteEnabled);
         this.unlock = s.u8(this.unlock);
-        const modes = ['read', 'id', 'program', 'status', 'erase-setup'];
-        this.flashMode = modes[s.u8(modes.indexOf(this.flashMode))] ?? 'read';
+        const modes = ["read", "id", "program", "status", "erase-setup"];
+        this.flashMode = modes[s.u8(modes.indexOf(this.flashMode))] ?? "read";
         this.status = s.u8(this.status);
     }
 
@@ -50,8 +50,8 @@ export class Mbc6 extends Cartridge {
         const offset = this.romBank[window] * 0x2000 + (addr & 0x1fff);
         if (!this.useFlash[window]) return this.rom[offset % this.rom.length];
         if (!this.flashEnabled) return 0xff;
-        if (this.flashMode === 'id') return (addr & 1) ? 0x81 : 0xc2;
-        if (this.flashMode === 'status' || this.flashMode === 'program') return this.status;
+        if (this.flashMode === "id") return (addr & 1) ? 0x81 : 0xc2;
+        if (this.flashMode === "status" || this.flashMode === "program") return this.status;
         return this.flash[offset & (FLASH_SIZE - 1)];
     }
 
@@ -78,11 +78,11 @@ export class Mbc6 extends Cartridge {
     #flashWrite(address, value) {
         const offset = address & (FLASH_SIZE - 1);
         if (value === 0xf0) {
-            this.flashMode = 'read';
+            this.flashMode = "read";
             this.unlock = 0;
             return;
         }
-        if (this.flashMode === 'program') {
+        if (this.flashMode === "program") {
             // Bits can only be cleared; the 128-byte block is committed by writing its last address again.
             this.flash[offset] &= value;
             this.status = 0x80;
@@ -95,17 +95,17 @@ export class Mbc6 extends Cartridge {
             this.unlock = 2;
         } else if (this.unlock === 2) {
             this.unlock = 0;
-            if (this.flashMode === 'erase-setup') {
+            if (this.flashMode === "erase-setup") {
                 if (value === 0x30) this.#erase(offset - (offset % SECTOR_SIZE), SECTOR_SIZE);
                 else if (value === 0x10) this.#erase(0, FLASH_SIZE);
-                this.flashMode = 'status';
+                this.flashMode = "status";
                 this.status = 0x80;
             } else if (value === 0x80) {
-                this.flashMode = 'erase-setup';
+                this.flashMode = "erase-setup";
             } else if (value === 0x90) {
-                this.flashMode = 'id';
+                this.flashMode = "id";
             } else if (value === 0xa0) {
-                this.flashMode = 'program';
+                this.flashMode = "program";
                 this.status = 0x80;
             }
         } else {

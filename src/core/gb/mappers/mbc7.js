@@ -1,4 +1,4 @@
-import { Cartridge } from './base.js';
+import { Cartridge } from "./base.js";
 
 // Accelerometer readings: centered at 0x81D0, about 0x70 per g.
 const CENTER = 0x81d0;
@@ -39,8 +39,8 @@ export class Mbc7 extends Cartridge {
     sync(s) {
         super.sync(s);
         this.romBank = s.u8(this.romBank);
-        for (const flag of ['ramEnabled2', 'latchReady', 'cs', 'clk', 'di', 'do', 'writeEnabled']) this[flag] = s.bool(this[flag]);
-        for (const field of ['latchX', 'latchY', 'command', 'argumentBits', 'readBits']) this[field] = s.u16(this[field]);
+        for (const flag of ["ramEnabled2", "latchReady", "cs", "clk", "di", "do", "writeEnabled"]) this[flag] = s.bool(this[flag]);
+        for (const field of ["latchX", "latchY", "command", "argumentBits", "readBits"]) this[field] = s.u16(this[field]);
     }
 
     writeRom(addr, value) {

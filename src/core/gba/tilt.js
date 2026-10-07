@@ -1,6 +1,6 @@
 // Games with an accelerometer on the cartridge (in the save memory area),
 // by game code: Yoshi Topsy-Turvy, Koro Koro Puzzle.
-export const TILT_GAMES = new Set(['KYG', 'KHP']);
+export const TILT_GAMES = new Set(["KYG", "KHP"]);
 // The reading when level, and its change per g (an estimate: like mGBA, we
 // only know the center).
 const CENTER = 0x3a0;

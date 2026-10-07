@@ -1,11 +1,11 @@
-import { Cartridge } from './mappers/base.js';
-import { Camera } from './mappers/camera.js';
-import { Huc3 } from './mappers/huc3.js';
-import { Huc1, Mbc1, Mbc2, Mbc3, Mbc5 } from './mappers/mbc.js';
-import { Mbc6 } from './mappers/mbc6.js';
-import { Mbc7 } from './mappers/mbc7.js';
-import { Mmm01 } from './mappers/mmm01.js';
-import { Tama5 } from './mappers/tama5.js';
+import { Cartridge } from "./mappers/base.js";
+import { Camera } from "./mappers/camera.js";
+import { Huc3 } from "./mappers/huc3.js";
+import { Huc1, Mbc1, Mbc2, Mbc3, Mbc5 } from "./mappers/mbc.js";
+import { Mbc6 } from "./mappers/mbc6.js";
+import { Mbc7 } from "./mappers/mbc7.js";
+import { Mmm01 } from "./mappers/mmm01.js";
+import { Tama5 } from "./mappers/tama5.js";
 
 // Cartridge RAM size by header byte 0x149.
 const RAM_SIZES = [0, 0x800, 0x2000, 0x8000, 0x20000, 0x10000];
@@ -54,7 +54,7 @@ export function createCartridge(rom, { now } = {}) {
     const header = cartridgeHeader(rom);
     const typeByte = rom[header + 0x147];
     const type = TYPES[typeByte];
-    if (!type) throw new Error(`Cartridge type 0x${typeByte.toString(16).padStart(2, '0')} is not supported yet.`);
+    if (!type) throw new Error(`Cartridge type 0x${typeByte.toString(16).padStart(2, "0")} is not supported yet.`);
     let ramSize = 0;
     if (type.mapper === Mbc2) ramSize = 512;
     else if (type.ram) ramSize = RAM_SIZES[rom[header + 0x149]] || 0x2000;

@@ -3,9 +3,9 @@
  * @returns {Promise<Blob | null>}
  */
 export function frameToBlob(frame, width, height) {
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
-    canvas.getContext('2d').putImageData(new ImageData(frame.slice(), width, height), 0, 0);
-    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    canvas.getContext("2d").putImageData(new ImageData(frame.slice(), width, height), 0, 0);
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
 }

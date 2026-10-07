@@ -105,9 +105,9 @@ void main() {
 
 export const FILTERS = [
     {
-        id: 'sharp-bilinear',
-        name: 'Sharp',
-        canvas: 'nearest',
+        id: "sharp-bilinear",
+        name: "Sharp",
+        canvas: "nearest",
         // Crisp pixels with even sizes at any zoom: blends only across pixel edges.
         main: `
             vec2 pos = vUV * uSrcSize;
@@ -125,23 +125,23 @@ export const FILTERS = [
             return vec4f(bilinear(floor(pos) + f), 1.0);`,
     },
     {
-        id: 'nearest',
-        name: 'Nearest',
-        canvas: 'nearest',
+        id: "nearest",
+        name: "Nearest",
+        canvas: "nearest",
         main: `fragColor = vec4(source(ivec2(floor(vUV * uSrcSize))), 1.0);`,
         wgsl: `return vec4f(source(vec2i(floor(in.uv * params.srcSize))), 1.0);`,
     },
     {
-        id: 'bilinear',
-        name: 'Smooth',
-        canvas: 'smooth',
+        id: "bilinear",
+        name: "Smooth",
+        canvas: "smooth",
         main: `fragColor = vec4(bilinear(vUV * uSrcSize), 1.0);`,
         wgsl: `return vec4f(bilinear(in.uv * params.srcSize), 1.0);`,
     },
     {
-        id: 'scale2x',
-        name: 'Scale2x (EPX)',
-        canvas: 'nearest',
+        id: "scale2x",
+        name: "Scale2x (EPX)",
+        canvas: "nearest",
         // Edge-smoothing pixel-art upscaler: each pixel splits into 2x2 sub-pixels.
         main: `
             vec2 pos = vUV * uSrcSize;
@@ -185,9 +185,9 @@ export const FILTERS = [
             return vec4f(o, 1.0);`,
     },
     {
-        id: 'xbr',
-        name: 'Smooth edges (xBR)',
-        canvas: 'smooth',
+        id: "xbr",
+        name: "Smooth edges (xBR)",
+        canvas: "smooth",
         // xBR-style: where an edge runs diagonally across a pixel's corner (it is
         // more continuous along that diagonal than across it), the corner takes
         // the neighbor's color along an antialiased 45-degree line. The line's
@@ -263,9 +263,9 @@ export const FILTERS = [
             return vec4f(o, 1.0);`,
     },
     {
-        id: 'lcd',
-        name: 'LCD grid',
-        canvas: 'nearest',
+        id: "lcd",
+        name: "LCD grid",
+        canvas: "nearest",
         // Each pixel as an LCD cell with a thin dark gap (when it is at least 3
         // screen pixels wide), colors from the sharp scaler.
         main: `
@@ -288,9 +288,9 @@ export const FILTERS = [
             return vec4f(select(c, c * 0.78, gap), 1.0);`,
     },
     {
-        id: 'crt',
-        name: 'CRT',
-        canvas: 'smooth',
+        id: "crt",
+        name: "CRT",
+        canvas: "smooth",
         // Scanlines (each line brightest in its middle), a soft horizontal blur
         // and an aperture-grille mask; brightened to make up for the dark parts.
         main: `
@@ -315,7 +315,7 @@ export function getFilter(id) {
 }
 
 export function fragmentShader(filter) {
-    return `${PRELUDE}\n${filter.helpers ?? ''}\nvoid main() {\n${filter.main}\n}`;
+    return `${PRELUDE}\n${filter.helpers ?? ""}\nvoid main() {\n${filter.main}\n}`;
 }
 
 // --- WGSL (WebGPU) ---------------------------------------------------------------
@@ -422,5 +422,5 @@ fn luma(c: vec3f) -> f32 {
 
 /** The scaler's WGSL module (vertex `vs`, fragment `fs`). */
 export function wgslShader(filter) {
-    return `${WGSL_COMMON}\n${filter.helpersWgsl ?? ''}\n@fragment fn fs(in: VertexOut) -> @location(0) vec4f {\n${filter.wgsl}\n}`;
+    return `${WGSL_COMMON}\n${filter.helpersWgsl ?? ""}\n@fragment fn fs(in: VertexOut) -> @location(0) vec4f {\n${filter.wgsl}\n}`;
 }

@@ -1,4 +1,4 @@
-import { inflateSync } from 'node:zlib';
+import { inflateSync } from "node:zlib";
 
 /**
  * Minimal PNG decoder for comparing screenshots in tests: non-interlaced,
@@ -20,19 +20,19 @@ export function decodePng(data) {
         const length = view.getUint32(pos);
         const type = String.fromCharCode(...data.subarray(pos + 4, pos + 8));
         const body = data.subarray(pos + 8, pos + 8 + length);
-        if (type === 'IHDR') {
+        if (type === "IHDR") {
             width = view.getUint32(pos + 8);
             height = view.getUint32(pos + 12);
             depth = body[8];
             colorType = body[9];
-            if (body[12]) throw new Error('Interlaced PNGs are not supported.');
-        } else if (type === 'PLTE') {
+            if (body[12]) throw new Error("Interlaced PNGs are not supported.");
+        } else if (type === "PLTE") {
             palette = body;
-        } else if (type === 'tRNS') {
+        } else if (type === "tRNS") {
             transparency = body;
-        } else if (type === 'IDAT') {
+        } else if (type === "IDAT") {
             idat.push(body);
-        } else if (type === 'IEND') {
+        } else if (type === "IEND") {
             break;
         }
         pos += 12 + length;

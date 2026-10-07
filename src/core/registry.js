@@ -1,4 +1,4 @@
-import { createTestCore } from './test/test-core.js';
+import { createTestCore } from "./test/test-core.js";
 
 /**
  * Available cores. Add an entry here when a core is implemented.
@@ -6,8 +6,8 @@ import { createTestCore } from './test/test-core.js';
  * @type {import('./interface.js').CoreDescriptor[]}
  */
 const cores = [
-    { id: 'gb', name: 'Game Boy', systems: ['gb', 'gbc'], link: true, load: () => import('./gb/index.js') },
-    { id: 'gba', name: 'Game Boy Advance', systems: ['gba'], link: true, load: () => import('./gba/index.js') },
+    { id: "gb", name: "Game Boy", systems: ["gb", "gbc"], link: true, load: () => import("./gb/index.js") },
+    { id: "gba", name: "Game Boy Advance", systems: ["gba"], link: true, load: () => import("./gba/index.js") },
 ];
 
 export function registerCore(descriptor) {
@@ -46,7 +46,7 @@ export function canLink(core, info) {
  */
 export async function createLinkedCore(core, rom, info, options, layout) {
     const descriptor = findCore(info.system);
-    if (!descriptor?.link || core.id !== descriptor.id) throw new Error('These games can\'t be linked.');
+    if (!descriptor?.link || core.id !== descriptor.id) throw new Error("These games can't be linked.");
     const module = await descriptor.load();
     return module.createLinkedCore(core, rom, info, options, layout);
 }

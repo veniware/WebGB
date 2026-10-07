@@ -1,4 +1,4 @@
-import { Cartridge } from './base.js';
+import { Cartridge } from "./base.js";
 
 export const SENSOR_WIDTH = 128;
 export const SENSOR_HEIGHT = 120; // 112 used lines + 4 above and below

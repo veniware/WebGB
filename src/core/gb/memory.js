@@ -1,4 +1,4 @@
-import { bytesRegion } from '../memory.js';
+import { bytesRegion } from "../memory.js";
 
 /**
  * Memory regions of a Game Boy for the memory viewer: the CPU's view (writes
@@ -11,7 +11,7 @@ import { bytesRegion } from '../memory.js';
 export function memoryRegions(gb) {
     const { ppu, cart } = gb;
     const regions = [{
-        name: 'CPU address space',
+        name: "CPU address space",
         base: 0,
         size: 0x10000,
         read: (addr) => peek(gb, addr),
@@ -19,15 +19,15 @@ export function memoryRegions(gb) {
     }];
     if (gb.cgb) {
         regions.push(
-            bytesRegion('Work RAM (banks 0-7)', 0, gb.wram),
-            bytesRegion('Video RAM (banks 0-1)', 0, ppu.vram),
-            bytesRegion('Background palettes', 0, ppu.bgPaletteRam, () => ppu.refreshPalettes()),
-            bytesRegion('Sprite palettes', 0, ppu.objPaletteRam, () => ppu.refreshPalettes()),
+            bytesRegion("Work RAM (banks 0-7)", 0, gb.wram),
+            bytesRegion("Video RAM (banks 0-1)", 0, ppu.vram),
+            bytesRegion("Background palettes", 0, ppu.bgPaletteRam, () => ppu.refreshPalettes()),
+            bytesRegion("Sprite palettes", 0, ppu.objPaletteRam, () => ppu.refreshPalettes()),
         );
     }
     if (cart.ram.length) {
         const banked = cart.ram.length > 0x2000;
-        regions.push(bytesRegion(banked ? 'Cartridge RAM (all banks)' : 'Cartridge RAM', banked ? 0 : 0xa000, cart.ram,
+        regions.push(bytesRegion(banked ? "Cartridge RAM (all banks)" : "Cartridge RAM", banked ? 0 : 0xa000, cart.ram,
             () => gb.saveWrites++));
     }
     return regions;

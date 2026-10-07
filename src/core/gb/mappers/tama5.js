@@ -1,4 +1,4 @@
-import { Cartridge } from './base.js';
+import { Cartridge } from "./base.js";
 
 // TAMA5 registers (selected by writing A001, accessed through A000).
 const BANK_LO = 0x0;

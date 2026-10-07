@@ -85,7 +85,7 @@ export class Bus {
         this.biosLatch = s.u32(this.biosLatch >>> 0) | 0;
         this.waitControl = s.u16(this.waitControl);
         this.setWaitControl(this.waitControl);
-        for (const flag of ['branched', 'nonseq', 'pfActive']) this[flag] = s.bool(this[flag]);
+        for (const flag of ["branched", "nonseq", "pfActive"]) this[flag] = s.bool(this[flag]);
         this.pfHead = s.i32(this.pfHead);
         this.pfCount = s.u8(this.pfCount);
         this.pfCountdown = s.f64(this.pfCountdown);

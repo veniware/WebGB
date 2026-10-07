@@ -173,11 +173,11 @@ export class Ppu {
         s.bytes(this.palette);
         s.bytes(this.vram);
         s.bytes(this.oam);
-        for (const r of ['dispcnt', 'greenSwap', 'dispstat', 'vcount', 'winin', 'winout', 'mosaic', 'bldcnt', 'bldalpha', 'bldy']) {
+        for (const r of ["dispcnt", "greenSwap", "dispstat", "vcount", "winin", "winout", "mosaic", "bldcnt", "bldalpha", "bldy"]) {
             this[r] = s.u16(this[r]);
         }
-        for (const array of ['bgcnt', 'hofs', 'vofs', 'pa', 'pb', 'pc', 'pd', 'refX', 'refY', 'lineX', 'lineY', 'winH', 'winV',
-            'winActive', 'bgState']) {
+        for (const array of ["bgcnt", "hofs", "vofs", "pa", "pb", "pc", "pd", "refX", "refY", "lineX", "lineY", "winH", "winV",
+            "winActive", "bgState"]) {
             s.bytes(this[array]);
         }
         this.hblank = s.bool(this.hblank);

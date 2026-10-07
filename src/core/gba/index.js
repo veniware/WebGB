@@ -1,5 +1,5 @@
-import { Gba } from './gba.js';
-import { LinkedGbas } from './link.js';
+import { Gba } from "./gba.js";
+import { LinkedGbas } from "./link.js";
 
 /**
  * @param {Uint8Array} rom

@@ -2,16 +2,16 @@
 // gb-test-suites.test.js). The ROMs are not in the repository; fetch them with
 // `npm run fetch-test-roms` (into tests/roms/), otherwise the tests are skipped.
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
-import { test } from 'node:test';
-import { GameBoy } from '../src/core/gb/gameboy.js';
-import { DMG_PALETTES } from '../src/core/gb/palettes.js';
-import { KNOWN_FAILURES } from './known-failures.js';
-import { decodePng } from './png.js';
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { test } from "node:test";
+import { GameBoy } from "../src/core/gb/gameboy.js";
+import { DMG_PALETTES } from "../src/core/gb/palettes.js";
+import { KNOWN_FAILURES } from "./known-failures.js";
+import { decodePng } from "./png.js";
 
-export const ROOT = new URL('./roms/', import.meta.url).pathname;
-export const available = existsSync(join(ROOT, 'blargg'));
+export const ROOT = new URL("./roms/", import.meta.url).pathname;
+export const available = existsSync(join(ROOT, "blargg"));
 
 export function load(path) {
     return new Uint8Array(readFileSync(join(ROOT, path)));
@@ -35,7 +35,7 @@ export function listRoms(dir, extensions = /\.gbc?$/) {
 /** A test that is skipped when the ROMs are missing or the test is a known failure. */
 export function romTest(name, fn) {
     const reason = KNOWN_FAILURES[name];
-    test(name, { skip: !available ? 'test ROMs not fetched (npm run fetch-test-roms)' : reason && `known failure: ${reason}` }, fn);
+    test(name, { skip: !available ? "test ROMs not fetched (npm run fetch-test-roms)" : reason && `known failure: ${reason}` }, fn);
 }
 
 /**
@@ -44,7 +44,7 @@ export function romTest(name, fn) {
  */
 export function makeGameBoy(path, { cgb = false, now } = {}) {
     const gb = new GameBoy(load(path), { cgb, now });
-    gb.configure({ gbPalette: 'gray', colorCorrection: false });
+    gb.configure({ gbPalette: "gray", colorCorrection: false });
     if (!cgb) gb.ppu.setDmgPalette(DMG_PALETTES.gray);
     return gb;
 }
@@ -62,9 +62,9 @@ export function runToOpcode(gb, opcode = 0x40, maxSteps = 20_000_000) {
 /** Mooneye-style success: B C D E H L hold 3 5 8 13 21 34. */
 export function registers(gb) {
     const { b, c, d, e, h, l } = gb.cpu;
-    return [b, c, d, e, h, l].join(' ');
+    return [b, c, d, e, h, l].join(" ");
 }
-export const FIBONACCI = '3 5 8 13 21 34';
+export const FIBONACCI = "3 5 8 13 21 34";
 
 /** Number of pixels that differ from a reference screenshot. */
 export function screenDiff(gb, reference) {

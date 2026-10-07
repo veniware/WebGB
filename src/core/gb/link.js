@@ -1,6 +1,6 @@
-import { renamed } from '../memory.js';
-import { StateReader, StateWriter } from '../state.js';
-import { FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH } from './constants.js';
+import { renamed } from "../memory.js";
+import { StateReader, StateWriter } from "../state.js";
+import { FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH } from "./constants.js";
 
 const STATE_MAGIC = 0x4b4e494c; // "LINK"
 // Dots each machine runs before the other catches up; short enough for the
@@ -15,7 +15,7 @@ export const PLAYER_2_SHIFT = 16;
  * stacked), both sounds mixed, player 2's buttons in the upper 16 bits.
  */
 export class LinkedGameBoys {
-    id = 'gb-link';
+    id = "gb-link";
     version = 1;
     players = 2;
 
@@ -138,7 +138,7 @@ export class LinkedGameBoys {
 
     loadState(data) {
         const s = new StateReader(data);
-        if (s.u32() !== STATE_MAGIC) throw new Error('This snapshot is not of linked games.');
+        if (s.u32() !== STATE_MAGIC) throw new Error("This snapshot is not of linked games.");
         const states = this.machines.map(() => {
             const state = new Uint8Array(s.u32());
             s.bytes(state);

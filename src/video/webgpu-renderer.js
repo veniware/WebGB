@@ -1,7 +1,7 @@
-import { EFFECTS_WGSL, getFilter, GHOSTING_KEEP, GHOSTING_WGSL, wgslShader } from './filters.js';
+import { EFFECTS_WGSL, getFilter, GHOSTING_KEEP, GHOSTING_WGSL, wgslShader } from "./filters.js";
 
 // Format of the frame and of the effect passes' pictures.
-const FORMAT = 'rgba8unorm';
+const FORMAT = "rgba8unorm";
 
 /**
  * WebGPU renderer, the same pipeline as WebGLRenderer: each new frame is
@@ -11,7 +11,7 @@ const FORMAT = 'rgba8unorm';
  */
 export class WebGPURenderer {
     supportsShaders = true;
-    name = 'WebGPU';
+    name = "WebGPU";
     /** Called once if the GPU is lost (driver reset, ...); the renderer is then unusable. */
     onLost = null;
     #pipelines = new Map();
@@ -27,13 +27,13 @@ export class WebGPURenderer {
         try {
             const adapter = await gpu.requestAdapter();
             const device = await adapter?.requestDevice();
-            const context = device && canvas.getContext('webgpu');
+            const context = device && canvas.getContext("webgpu");
             if (!context) return null;
             const format = gpu.getPreferredCanvasFormat();
-            context.configure({ device, format, alphaMode: 'opaque' });
+            context.configure({ device, format, alphaMode: "opaque" });
             return new WebGPURenderer(canvas, adapter, device, context, format);
         } catch (err) {
-            console.warn('WebGPU unavailable:', err);
+            console.warn("WebGPU unavailable:", err);
             return null;
         }
     }
@@ -50,8 +50,8 @@ export class WebGPURenderer {
         this.filter = getFilter();
         this.effects = { ghosting: false, dedither: false, sharpen: false, outlines: false };
         this.uniforms = device.createBuffer({ size: this.#params.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-        this.ghostPipeline = this.#pipeline('ghosting', GHOSTING_WGSL, FORMAT);
-        this.effectsPipeline = this.#pipeline('effects', EFFECTS_WGSL, FORMAT);
+        this.ghostPipeline = this.#pipeline("ghosting", GHOSTING_WGSL, FORMAT);
+        this.effectsPipeline = this.#pipeline("effects", EFFECTS_WGSL, FORMAT);
         this.frame = null;
         // Ghosting ping-pongs between two pictures; `latest` is the newest.
         this.ghost = [null, null];
@@ -62,7 +62,7 @@ export class WebGPURenderer {
         this.output = null;
         this.dirty = true;
         device.lost.then((info) => {
-            if (info.reason !== 'destroyed') this.onLost?.(info);
+            if (info.reason !== "destroyed") this.onLost?.(info);
         });
     }
 
@@ -161,7 +161,7 @@ export class WebGPURenderer {
         if (previous) entries.push({ binding: 1, resource: previous.createView() });
         const bindGroup = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
         const pass = encoder.beginRenderPass({
-            colorAttachments: [{ view: target.createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
+            colorAttachments: [{ view: target.createView(), loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }],
         });
         pass.setPipeline(pipeline);
         pass.setBindGroup(0, bindGroup);
@@ -183,15 +183,15 @@ export class WebGPURenderer {
         // Shader errors otherwise only show as a lost device or a blank screen.
         module.getCompilationInfo?.().then((info) => {
             for (const message of info.messages) {
-                if (message.type === 'error') console.error(`Shader "${name}" line ${message.lineNum}: ${message.message}`);
+                if (message.type === "error") console.error(`Shader "${name}" line ${message.lineNum}: ${message.message}`);
             }
         }, () => {});
         return this.device.createRenderPipeline({
             label: name,
-            layout: 'auto',
-            vertex: { module, entryPoint: 'vs' },
-            fragment: { module, entryPoint: 'fs', targets: [{ format }] },
-            primitive: { topology: 'triangle-list' },
+            layout: "auto",
+            vertex: { module, entryPoint: "vs" },
+            fragment: { module, entryPoint: "fs", targets: [{ format }] },
+            primitive: { topology: "triangle-list" },
         });
     }
 }

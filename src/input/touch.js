@@ -1,4 +1,4 @@
-import { Button } from '../core/buttons.js';
+import { Button } from "../core/buttons.js";
 
 // A pointer counts as a diagonal on the D-pad when its angle is within this
 // ratio of both axes (tan 67.5°), giving eight equal 45° sectors.
@@ -22,7 +22,7 @@ export class TouchInput {
     constructor(root) {
         this.root = root;
         const track = (e) => {
-            if (e.type === 'pointerdown') {
+            if (e.type === "pointerdown") {
                 e.preventDefault();
                 root.setPointerCapture(e.pointerId);
             } else if (!this.#pointers.has(e.pointerId)) {
@@ -34,11 +34,11 @@ export class TouchInput {
         const release = (e) => {
             if (this.#pointers.delete(e.pointerId)) this.#refresh();
         };
-        root.addEventListener('pointerdown', track);
-        root.addEventListener('pointermove', track);
-        root.addEventListener('pointerup', release);
-        root.addEventListener('pointercancel', release);
-        root.addEventListener('contextmenu', (e) => e.preventDefault());
+        root.addEventListener("pointerdown", track);
+        root.addEventListener("pointermove", track);
+        root.addEventListener("pointerup", release);
+        root.addEventListener("pointercancel", release);
+        root.addEventListener("contextmenu", (e) => e.preventDefault());
     }
 
     poll() {
@@ -50,7 +50,7 @@ export class TouchInput {
 
     /** What a finger at (x, y) presses: { buttons, action }. */
     #hit(x, y) {
-        const el = document.elementFromPoint(x, y)?.closest('[data-button], [data-dpad], [data-action]');
+        const el = document.elementFromPoint(x, y)?.closest("[data-button], [data-dpad], [data-action]");
         if (!el || !this.root.contains(el)) return { buttons: 0, action: null };
         if (el.dataset.action) return { buttons: 0, action: el.dataset.action };
         if (el.dataset.button) return { buttons: Button[el.dataset.button] ?? 0, action: null };
@@ -76,16 +76,16 @@ export class TouchInput {
         const pressed = buttons & ~this.#state.buttons;
         if (pressed) navigator.vibrate?.(8);
         this.#tapped |= pressed;
-        this.#state = { buttons, fastForward: actions.has('fastForward'), rewind: actions.has('rewind') };
+        this.#state = { buttons, fastForward: actions.has("fastForward"), rewind: actions.has("rewind") };
 
-        for (const el of this.root.querySelectorAll('[data-button]')) {
-            el.classList.toggle('pressed', !!(buttons & Button[el.dataset.button]));
+        for (const el of this.root.querySelectorAll("[data-button]")) {
+            el.classList.toggle("pressed", !!(buttons & Button[el.dataset.button]));
         }
-        for (const el of this.root.querySelectorAll('[data-action]')) {
-            el.classList.toggle('pressed', actions.has(el.dataset.action));
+        for (const el of this.root.querySelectorAll("[data-action]")) {
+            el.classList.toggle("pressed", actions.has(el.dataset.action));
         }
-        for (const el of this.root.querySelectorAll('[data-dpad]')) {
-            for (const dir of ['UP', 'DOWN', 'LEFT', 'RIGHT']) {
+        for (const el of this.root.querySelectorAll("[data-dpad]")) {
+            for (const dir of ["UP", "DOWN", "LEFT", "RIGHT"]) {
                 el.classList.toggle(dir.toLowerCase(), !!(buttons & Button[dir]));
             }
         }

@@ -1,4 +1,4 @@
-import { Interrupt } from './constants.js';
+import { Interrupt } from "./constants.js";
 
 /**
  * Serial port (SB/SC). The internal clock comes from the system counter

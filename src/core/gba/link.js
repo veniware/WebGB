@@ -1,7 +1,7 @@
-import { renamed } from '../memory.js';
-import { StateReader, StateWriter } from '../state.js';
-import { FRAME_CYCLES } from './gba.js';
-import { SCREEN_HEIGHT, SCREEN_WIDTH } from './ppu.js';
+import { renamed } from "../memory.js";
+import { StateReader, StateWriter } from "../state.js";
+import { FRAME_CYCLES } from "./gba.js";
+import { SCREEN_HEIGHT, SCREEN_WIDTH } from "./ppu.js";
 
 const STATE_MAGIC = 0x4b4e4c47; // "GLNK"
 // Cycles each machine runs before the other catches up. Shorter than the
@@ -21,7 +21,7 @@ export const PLAYER_2_SHIFT = 16;
  * the difference.
  */
 export class LinkedGbas {
-    id = 'gba-link';
+    id = "gba-link";
     version = 1;
     players = 2;
 
@@ -162,7 +162,7 @@ export class LinkedGbas {
 
     loadState(data) {
         const s = new StateReader(data);
-        if (s.u32() !== STATE_MAGIC) throw new Error('This snapshot is not of linked games.');
+        if (s.u32() !== STATE_MAGIC) throw new Error("This snapshot is not of linked games.");
         const time = s.f64();
         const states = this.machines.map(() => {
             const state = new Uint8Array(s.u32());

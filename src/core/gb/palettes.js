@@ -53,7 +53,7 @@ const CHECKSUMS = [
     0x27, 0x61, 0x18, 0x66, 0x6a, 0xbf, 0x0d, 0xf4, 0xb3,
 ];
 const FIRST_DUPLICATE = 65;
-const FOURTH_LETTERS = 'BEFAARBEKEK R-URAR INAILICE R';
+const FOURTH_LETTERS = "BEFAARBEKEK R-URAR INAILICE R";
 // Combination per checksum entry.
 const CHECKSUM_COMBINATIONS = [
     0, 4, 5, 35, 34, 3, 31, 15, 10, 5, 19, 36, 7, 37, 30, 44, 21, 32, 31, 20, 5, 33, 13, 14, 5, 29, 5, 18,
@@ -64,18 +64,18 @@ const CHECKSUM_COMBINATIONS = [
 
 /** The palettes picked with button combinations at power-on, by their usual names. */
 export const GBC_PRESETS = {
-    'gbc-brown': 5, // Up
-    'gbc-red': 43, // Up + A
-    'gbc-dark-brown': 28, // Up + B
-    'gbc-blue': 48, // Left
-    'gbc-dark-blue': 40, // Left + A
-    'gbc-grayscale': 7, // Left + B
-    'gbc-pastel': 8, // Down
-    'gbc-orange': 3, // Down + A
-    'gbc-yellow': 49, // Down + B
-    'gbc-green': 1, // Right
-    'gbc-dark-green': 0, // Right + A
-    'gbc-inverted': 6, // Right + B
+    "gbc-brown": 5, // Up
+    "gbc-red": 43, // Up + A
+    "gbc-dark-brown": 28, // Up + B
+    "gbc-blue": 48, // Left
+    "gbc-dark-blue": 40, // Left + A
+    "gbc-grayscale": 7, // Left + B
+    "gbc-pastel": 8, // Down
+    "gbc-orange": 3, // Down + A
+    "gbc-yellow": 49, // Down + B
+    "gbc-green": 1, // Right
+    "gbc-dark-green": 0, // Right + A
+    "gbc-inverted": 6, // Right + B
 };
 
 /**
@@ -131,7 +131,7 @@ const SGB_COLORS = [
 
 /** Built-in SGB palettes by name ('1-A' ... '4-H'): 4 colors, lightest first. */
 export const SGB_PALETTES = Object.fromEntries(Array.from({ length: 32 }, (_, i) => [
-    `${(i >> 3) + 1}-${'ABCDEFGH'[i & 7]}`,
+    `${(i >> 3) + 1}-${"ABCDEFGH"[i & 7]}`,
     SGB_COLORS.slice(i * 4, i * 4 + 4),
 ]));
 

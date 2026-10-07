@@ -1,4 +1,4 @@
-import { SCREEN_WIDTH } from './constants.js';
+import { SCREEN_WIDTH } from "./constants.js";
 
 // Fetcher steps; each VRAM read takes 2 dots (address, then data).
 const GET_TILE_1 = 0;

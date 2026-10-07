@@ -1,4 +1,4 @@
-import { Rtc, RTC_SAVE_SIZE } from '../rtc.js';
+import { Rtc, RTC_SAVE_SIZE } from "../rtc.js";
 
 /** ROM only (optionally with RAM); also the base class of the mappers. */
 export class Cartridge {

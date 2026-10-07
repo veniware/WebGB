@@ -20,7 +20,7 @@ export function createModals({ emulator, inputs }) {
                 inputs.forEach((input) => (input.enabled = false));
             }
             dialog.addEventListener(
-                'close',
+                "close",
                 () => {
                     if (--openCount > 0) return;
                     inputs.forEach((input) => (input.enabled = true));

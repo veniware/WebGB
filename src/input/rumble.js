@@ -9,8 +9,8 @@ export class Rumble {
     /** @param {{ gamepad?: { rumble: (strength: number, duration: number) => void } }} [deps] */
     constructor({ gamepad } = {}) {
         this.gamepad = gamepad;
-        this.phone = typeof navigator !== 'undefined' && 'vibrate' in navigator &&
-            typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+        this.phone = typeof navigator !== "undefined" && "vibrate" in navigator &&
+            typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
     }
 
     /** Called once per animation frame with the motor's strength (0-1). */

@@ -1,4 +1,4 @@
-import { Button } from '../core/buttons.js';
+import { Button } from "../core/buttons.js";
 
 /**
  * Gamepad API button index -> Button, for the "standard" layout. Face
@@ -46,7 +46,7 @@ export class GamepadInput {
             const actuator = pad?.vibrationActuator;
             if (!actuator) continue;
             if (strength > 0) {
-                actuator.playEffect?.('dual-rumble', { duration, strongMagnitude: strength, weakMagnitude: strength }).catch(() => {});
+                actuator.playEffect?.("dual-rumble", { duration, strongMagnitude: strength, weakMagnitude: strength }).catch(() => {});
             } else {
                 actuator.reset?.().catch(() => {});
             }

@@ -18,13 +18,13 @@ const GBA_LOGO = [0x24, 0xff, 0xae, 0x51];
  * @param {string} [fileName]
  * @returns {RomInfo}
  */
-export function detectRom(data, fileName = '') {
-    const ext = fileName.toLowerCase().split('.').pop();
+export function detectRom(data, fileName = "") {
+    const ext = fileName.toLowerCase().split(".").pop();
     if (isGba(data)) return gbaInfo(data);
     if (isGb(data)) return gbInfo(data);
-    if (ext === 'gba' && data.length >= 0xc0) return gbaInfo(data);
-    if ((ext === 'gb' || ext === 'gbc') && data.length >= 0x150) return { ...gbInfo(data), system: ext };
-    throw new Error('Not a Game Boy or Game Boy Advance ROM.');
+    if (ext === "gba" && data.length >= 0xc0) return gbaInfo(data);
+    if ((ext === "gb" || ext === "gbc") && data.length >= 0x150) return { ...gbInfo(data), system: ext };
+    throw new Error("Not a Game Boy or Game Boy Advance ROM.");
 }
 
 function isGba(data) {
@@ -36,7 +36,7 @@ function isGb(data) {
 }
 
 function gbaInfo(data) {
-    return { system: 'gba', title: ascii(data, 0xa0, 12), code: ascii(data, 0xac, 4) };
+    return { system: "gba", title: ascii(data, 0xa0, 12), code: ascii(data, 0xac, 4) };
 }
 
 function gbInfo(rom) {
@@ -48,7 +48,7 @@ function gbInfo(rom) {
     const cgbFlag = data[0x143];
     const color = cgbFlag === 0x80 || cgbFlag === 0xc0;
     // Color-era headers shrink the title to make room for a manufacturer code.
-    return { system: color ? 'gbc' : 'gb', title: ascii(data, 0x134, color ? 11 : 16), cartType: data[0x147] };
+    return { system: color ? "gbc" : "gb", title: ascii(data, 0x134, color ? 11 : 16), cartType: data[0x147] };
 }
 
 function startsWith(data, offset, bytes) {
@@ -56,11 +56,11 @@ function startsWith(data, offset, bytes) {
 }
 
 function ascii(data, start, length) {
-    let text = '';
+    let text = "";
     for (let i = start; i < start + length; i++) {
         const c = data[i];
         if (c === 0) break;
-        text += c >= 0x20 && c < 0x7f ? String.fromCharCode(c) : ' ';
+        text += c >= 0x20 && c < 0x7f ? String.fromCharCode(c) : " ";
     }
     return text.trim();
 }

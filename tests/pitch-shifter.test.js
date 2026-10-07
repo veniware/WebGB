@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import assert from "node:assert/strict";
+import { test } from "node:test";
 
-import { PitchShifter } from '../src/audio/pitch-shifter.js';
+import { PitchShifter } from "../src/audio/pitch-shifter.js";
 
 const RATE = 48000;
 
@@ -31,13 +31,13 @@ function shift(frequency, semitones) {
     return { frequency: crossings / seconds, rms: Math.sqrt(sum / (length - from)) };
 }
 
-test('pitch shifter: no shift passes the sound through', () => {
+test("pitch shifter: no shift passes the sound through", () => {
     const { frequency, rms } = shift(500, 0);
     assert.ok(Math.abs(frequency - 500) < 3, `${frequency} Hz`);
     assert.ok(Math.abs(rms - Math.SQRT1_2) < 0.05, `rms ${rms}`);
 });
 
-test('pitch shifter: an octave up and down, a fifth up', () => {
+test("pitch shifter: an octave up and down, a fifth up", () => {
     for (const [input, semitones] of [[440, 12], [440, -12], [300, 7]]) {
         const expected = input * 2 ** (semitones / 12);
         const { frequency, rms } = shift(input, semitones);

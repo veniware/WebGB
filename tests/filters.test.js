@@ -1,12 +1,12 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import assert from "node:assert/strict";
+import { test } from "node:test";
 
-import { EFFECTS_WGSL, FILTERS, fragmentShader, GHOSTING_WGSL, wgslShader } from '../src/video/filters.js';
+import { EFFECTS_WGSL, FILTERS, fragmentShader, GHOSTING_WGSL, wgslShader } from "../src/video/filters.js";
 
-test('every filter has both a WebGL and a WebGPU shader', () => {
+test("every filter has both a WebGL and a WebGPU shader", () => {
     for (const filter of FILTERS) {
-        assert.ok(filter.main && fragmentShader(filter).includes('void main()'), `${filter.id}: GLSL`);
-        assert.ok(filter.wgsl?.includes('return'), `${filter.id}: WGSL`);
+        assert.ok(filter.main && fragmentShader(filter).includes("void main()"), `${filter.id}: GLSL`);
+        assert.ok(filter.wgsl?.includes("return"), `${filter.id}: WGSL`);
         const wgsl = wgslShader(filter);
         assert.match(wgsl, /@vertex fn vs/);
         assert.match(wgsl, /@fragment fn fs/);

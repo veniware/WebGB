@@ -1,17 +1,17 @@
 // Games with a real-time clock on the cartridge's GPIO port, by game code
 // (the first three letters; the fourth is the region).
 const RTC_GAMES = new Set([
-    'AXV', 'AXP', // Pokémon Ruby, Sapphire
-    'BPE', // Pokémon Emerald
-    'U3I', 'U32', 'U33', // Boktai 1-3
-    'BKA', // Sennen Kazoku
-    'BR4', // Rockman EXE 4.5
+    "AXV", "AXP", // Pokémon Ruby, Sapphire
+    "BPE", // Pokémon Emerald
+    "U3I", "U32", "U33", // Boktai 1-3
+    "BKA", // Sennen Kazoku
+    "BR4", // Rockman EXE 4.5
 ]);
 
 // Other devices on the GPIO port.
-const SOLAR_GAMES = new Set(['U3I', 'U32', 'U33']); // Boktai 1-3
-const GYRO_GAMES = new Set(['RZW']); // WarioWare: Twisted!
-const RUMBLE_GAMES = new Set(['RZW', 'V49']); // and Drill Dozer
+const SOLAR_GAMES = new Set(["U3I", "U32", "U33"]); // Boktai 1-3
+const GYRO_GAMES = new Set(["RZW"]); // WarioWare: Twisted!
+const RUMBLE_GAMES = new Set(["RZW", "V49"]); // and Drill Dozer
 // Solar sensor: added to the darkness threshold per sunlight level 1-10 (after mGBA).
 const LUX_LEVELS = [5, 11, 18, 27, 42, 62, 84, 109, 139, 183];
 // Gyro: the reading at rest, and its change at full rotation input.
@@ -98,8 +98,8 @@ export class Gpio {
     }
 
     sync(s) {
-        for (const field of ['data', 'direction', 'output', 'step', 'sck', 'sioIn', 'bits', 'bitCount', 'remaining', 'byteIndex',
-            'control']) {
+        for (const field of ["data", "direction", "output", "step", "sck", "sioIn", "bits", "bitCount", "remaining", "byteIndex",
+            "control"]) {
             this[field] = s.u8(this[field]);
         }
         this.command = s.i32(this.command);

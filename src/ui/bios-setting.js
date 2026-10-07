@@ -1,13 +1,13 @@
-import { deleteFile, getFile, putFile } from '../storage/files.js';
-import { crc32 } from '../util/crc32.js';
-import { pickFiles } from './dom.js';
-import { BIOS_ACCEPT, GBA_BIOS_SIZE } from './files.js';
+import { deleteFile, getFile, putFile } from "../storage/files.js";
+import { crc32 } from "../util/crc32.js";
+import { pickFiles } from "./dom.js";
+import { BIOS_ACCEPT, GBA_BIOS_SIZE } from "./files.js";
 
-const FILE_NAME = 'gba-bios';
+const FILE_NAME = "gba-bios";
 // CRC32s of known dumps.
 const KNOWN = {
-    0x81977335: 'Game Boy Advance BIOS',
-    0xa6473709: 'Nintendo DS BIOS (GBA mode)',
+    0x81977335: "Game Boy Advance BIOS",
+    0xa6473709: "Nintendo DS BIOS (GBA mode)",
 };
 
 /**
@@ -20,16 +20,16 @@ const KNOWN = {
  * }} deps
  */
 export function setupBiosSetting({ onChange, onStatus, onError }) {
-    const status = document.getElementById('gba-bios-status');
-    const remove = document.getElementById('gba-bios-remove');
+    const status = document.getElementById("gba-bios-status");
+    const remove = document.getElementById("gba-bios-remove");
 
     function show(bios) {
-        status.textContent = bios ? KNOWN[crc32(bios) >>> 0] ?? 'BIOS file' : 'Built in';
+        status.textContent = bios ? KNOWN[crc32(bios) >>> 0] ?? "BIOS file" : "Built in";
         remove.hidden = !bios;
         onChange(bios);
     }
 
-    document.getElementById('gba-bios-load').addEventListener('click', async () => {
+    document.getElementById("gba-bios-load").addEventListener("click", async () => {
         const [file] = await pickFiles({ accept: BIOS_ACCEPT });
         if (!file) return;
         try {
@@ -37,13 +37,13 @@ export function setupBiosSetting({ onChange, onStatus, onError }) {
             const bios = new Uint8Array(await file.arrayBuffer());
             await putFile(FILE_NAME, bios);
             show(bios);
-            onStatus('BIOS file loaded. It is used from the next start of a GBA game.');
+            onStatus("BIOS file loaded. It is used from the next start of a GBA game.");
         } catch (err) {
             onError(err);
         }
     });
 
-    remove.addEventListener('click', async () => {
+    remove.addEventListener("click", async () => {
         try {
             await deleteFile(FILE_NAME);
             show(null);

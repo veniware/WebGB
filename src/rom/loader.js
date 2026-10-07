@@ -1,6 +1,6 @@
-import { detectRom } from './detect.js';
-import { extractZipEntry, isZip, listZip } from './zip.js';
-import { crc32 } from '../util/crc32.js';
+import { detectRom } from "./detect.js";
+import { extractZipEntry, isZip, listZip } from "./zip.js";
+import { crc32 } from "../util/crc32.js";
 
 const ROM_EXTENSION = /\.(gba|gbc|gb)$/i;
 const MAX_SIZE = 64 * 1024 * 1024;
@@ -28,9 +28,9 @@ export async function loadRomFile(file) {
         if (!entry) throw new Error(`No .gb, .gbc or .gba file inside ${file.name}.`);
         if (entry.size > MAX_SIZE) throw new Error(`${entry.name} is too large to be a ROM.`);
         data = await extractZipEntry(data, entry);
-        name = entry.name.split('/').pop();
+        name = entry.name.split("/").pop();
     }
     const info = detectRom(data, name);
-    const key = `${info.system}-${crc32(data).toString(16).padStart(8, '0')}-${data.length}`;
+    const key = `${info.system}-${crc32(data).toString(16).padStart(8, "0")}-${data.length}`;
     return { key, name, info, size: data.length, data };
 }

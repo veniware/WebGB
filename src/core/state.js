@@ -132,7 +132,7 @@ export class StateReader {
     /** Fills a typed array in place; throws if the stored length differs. */
     bytes(array) {
         const length = this.u32();
-        if (length !== array.byteLength) throw new Error('Invalid save state.');
+        if (length !== array.byteLength) throw new Error("Invalid save state.");
         this.#check(length);
         new Uint8Array(array.buffer, array.byteOffset, array.byteLength).set(this.#bytes.subarray(this.#pos, this.#pos + length));
         this.#pos += length;
@@ -145,6 +145,6 @@ export class StateReader {
     }
 
     #check(count) {
-        if (this.#pos + count > this.#bytes.length) throw new Error('Invalid save state.');
+        if (this.#pos + count > this.#bytes.length) throw new Error("Invalid save state.");
     }
 }

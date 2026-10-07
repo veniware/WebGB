@@ -1,5 +1,5 @@
-import { SCREEN_HEIGHT, SCREEN_WIDTH } from './constants.js';
-import { cgbToPixel, SGB_PALETTES } from './palettes.js';
+import { SCREEN_HEIGHT, SCREEN_WIDTH } from "./constants.js";
+import { cgbToPixel, SGB_PALETTES } from "./palettes.js";
 
 // Command handling follows SameBoy's (MIT, Lior Halphon) sgb.c.
 
@@ -69,7 +69,7 @@ export class Sgb {
         this.readyForWrite = false;
         this.readyForStop = false;
         this.palettes.fill(0);
-        this.palettes.set(SGB_PALETTES['1-A']);
+        this.palettes.set(SGB_PALETTES["1-A"]);
         this.systemPalettes.fill(0);
         this.attributeFiles.fill(0);
         this.attributes.fill(0);
@@ -89,12 +89,12 @@ export class Sgb {
     sync(s) {
         s.bytes(this.packet);
         this.bitIndex = s.u16(this.bitIndex);
-        for (const flag of ['readyForPulse', 'readyForWrite', 'readyForStop']) this[flag] = s.bool(this[flag]);
-        for (const array of ['palettes', 'systemPalettes', 'attributeFiles', 'attributes', 'borderTiles', 'borderMap',
-            'borderPalettes', 'shades']) {
+        for (const flag of ["readyForPulse", "readyForWrite", "readyForStop"]) this[flag] = s.bool(this[flag]);
+        for (const array of ["palettes", "systemPalettes", "attributeFiles", "attributes", "borderTiles", "borderMap",
+            "borderPalettes", "shades"]) {
             s.bytes(this[array]);
         }
-        for (const field of ['mask', 'players', 'player', 'transfer', 'transferFrames']) this[field] = s.u8(this[field]);
+        for (const field of ["mask", "players", "player", "transfer", "transferFrames"]) this[field] = s.u8(this[field]);
         this.colorsDirty = true;
         this.borderDirty = true;
     }

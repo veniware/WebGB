@@ -1,4 +1,4 @@
-import { Interrupt } from './constants.js';
+import { Interrupt } from "./constants.js";
 
 // System-counter bit whose falling edge clocks TIMA, per TAC clock select.
 const TAC_BITS = [1 << 9, 1 << 3, 1 << 5, 1 << 7];

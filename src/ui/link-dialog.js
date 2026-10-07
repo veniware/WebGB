@@ -1,6 +1,6 @@
-import { listRoms } from '../storage/roms.js';
-import { listSaves } from '../storage/saves.js';
-import { baseName, h, SYSTEM_SHORT } from './dom.js';
+import { listRoms } from "../storage/roms.js";
+import { listSaves } from "../storage/saves.js";
+import { baseName, h, SYSTEM_SHORT } from "./dom.js";
 
 /**
  * Picks player 2's game (and saved game) for the link cable.
@@ -13,8 +13,8 @@ import { baseName, h, SYSTEM_SHORT } from './dom.js';
  * }} deps
  */
 export function createLinkDialog({ dialog, modals, emulator, onError }) {
-    const list = dialog.querySelector('[data-list]');
-    const empty = dialog.querySelector('[data-empty]');
+    const list = dialog.querySelector("[data-list]");
+    const empty = dialog.querySelector("[data-empty]");
 
     async function render() {
         const roms = (await listRoms()).filter((rom) => emulator.canLink(rom.info));
@@ -24,13 +24,13 @@ export function createLinkDialog({ dialog, modals, emulator, onError }) {
     }
 
     function romRow(rom, saves) {
-        const choice = (label, saveId) => h('button', { type: 'button', textContent: label, onclick: () => link(rom, saveId) });
+        const choice = (label, saveId) => h("button", { type: "button", textContent: label, onclick: () => link(rom, saveId) });
         return h(
-            'li',
+            "li",
             {},
-            h('span', { className: 'badge', textContent: SYSTEM_SHORT[rom.info.system] }),
-            h('div', { className: 'grow' }, h('strong', { textContent: rom.info.title || baseName(rom.name) })),
-            h('div', { className: 'actions' }, choice('New game', null), saves.map((save) => choice(save.name, save.id))),
+            h("span", { className: "badge", textContent: SYSTEM_SHORT[rom.info.system] }),
+            h("div", { className: "grow" }, h("strong", { textContent: rom.info.title || baseName(rom.name) })),
+            h("div", { className: "actions" }, choice("New game", null), saves.map((save) => choice(save.name, save.id))),
         );
     }
 
@@ -45,7 +45,7 @@ export function createLinkDialog({ dialog, modals, emulator, onError }) {
         }
     }
 
-    dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
+    dialog.querySelector("[data-close]").addEventListener("click", () => dialog.close());
 
     return {
         async open() {

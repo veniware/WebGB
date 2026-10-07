@@ -1,4 +1,4 @@
-import { Mode } from './cpu.js';
+import { Mode } from "./cpu.js";
 
 // No BIOS is shipped (Nintendo's is copyrighted): this one only holds the
 // interrupt dispatcher every game relies on (the same six instructions as the

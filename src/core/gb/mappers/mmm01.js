@@ -1,4 +1,4 @@
-import { Cartridge } from './base.js';
+import { Cartridge } from "./base.js";
 
 /**
  * MMM01: multi-game compilations (Momotarou Collection 2, Taito Variety
@@ -26,10 +26,10 @@ export class Mmm01 extends Cartridge {
 
     sync(s) {
         super.sync(s);
-        for (const field of ['romLow', 'romMid', 'romHigh', 'lowBankMask', 'ramLow', 'ramHigh', 'ramMaskBits', 'mode']) {
+        for (const field of ["romLow", "romMid", "romHigh", "lowBankMask", "ramLow", "ramHigh", "ramMaskBits", "mode"]) {
             this[field] = s.u8(this[field]);
         }
-        for (const flag of ['mapped', 'modeLocked', 'multiplex']) this[flag] = s.bool(this[flag]);
+        for (const flag of ["mapped", "modeLocked", "multiplex"]) this[flag] = s.bool(this[flag]);
         if (s.reading) this.remap();
     }
 

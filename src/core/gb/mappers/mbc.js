@@ -1,4 +1,4 @@
-import { Cartridge } from './base.js';
+import { Cartridge } from "./base.js";
 
 // The common mappers: MBC1 (and its multicart wiring), MBC2, MBC3, MBC5, HuC1.
 

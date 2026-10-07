@@ -22,15 +22,15 @@ export class CameraInput {
         if (this.#stream) return true;
         if (!navigator.mediaDevices?.getUserMedia) return false;
         try {
-            this.#stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+            this.#stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
         } catch {
             return false;
         }
-        this.#video = Object.assign(document.createElement('video'), { muted: true, playsInline: true });
+        this.#video = Object.assign(document.createElement("video"), { muted: true, playsInline: true });
         this.#video.srcObject = this.#stream;
         await this.#video.play().catch(() => {});
-        this.#canvas = Object.assign(document.createElement('canvas'), { width, height });
-        this.#context = this.#canvas.getContext('2d', { willReadFrequently: true });
+        this.#canvas = Object.assign(document.createElement("canvas"), { width, height });
+        this.#context = this.#canvas.getContext("2d", { willReadFrequently: true });
         this.#pixels = new Uint8Array(width * height);
         return true;
     }

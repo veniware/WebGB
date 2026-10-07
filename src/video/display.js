@@ -1,6 +1,6 @@
-import { CanvasRenderer } from './canvas-renderer.js';
-import { WebGLRenderer } from './webgl-renderer.js';
-import { WebGPURenderer } from './webgpu-renderer.js';
+import { CanvasRenderer } from "./canvas-renderer.js";
+import { WebGLRenderer } from "./webgl-renderer.js";
+import { WebGPURenderer } from "./webgpu-renderer.js";
 
 /**
  * Owns the screen canvas: picks a renderer, sizes the canvas for the zoom
@@ -13,25 +13,25 @@ export class Display {
      * @param {HTMLElement} [fullscreenTarget]    Element made fullscreen (defaults to the stage).
      * @param {'auto' | 'webgpu' | 'webgl' | 'canvas'} [renderer]    'auto': WebGL, or the 2D canvas without it.
      */
-    constructor(canvas, stage, fullscreenTarget = stage, renderer = 'auto') {
+    constructor(canvas, stage, fullscreenTarget = stage, renderer = "auto") {
         this.canvas = canvas;
         this.stage = stage;
         this.fullscreenTarget = fullscreenTarget;
         // WebGPU starts asynchronously: WebGL draws until it is ready.
-        this.rendererKind = renderer === 'webgpu' ? 'auto' : renderer;
+        this.rendererKind = renderer === "webgpu" ? "auto" : renderer;
         this.renderer = createRenderer(canvas, this.rendererKind);
         this.filter = undefined;
         this.dedither = false;
         this.effects = {};
         // The last frame drawn, for redrawing with another renderer.
         this.frame = null;
-        this.zoom = 'fit';
+        this.zoom = "fit";
         this.width = 0;
         this.height = 0;
         new ResizeObserver(() => this.layout()).observe(stage);
-        window.addEventListener('resize', () => this.layout());
+        window.addEventListener("resize", () => this.layout());
         /** Settles once the renderer asked for is in place: false if WebGPU isn't available. */
-        this.ready = renderer === 'webgpu' ? this.setRenderer('webgpu') : Promise.resolve(true);
+        this.ready = renderer === "webgpu" ? this.setRenderer("webgpu") : Promise.resolve(true);
     }
 
     get supportsShaders() {
@@ -53,28 +53,28 @@ export class Display {
         if (kind === this.rendererKind) return true;
         this.rendererKind = kind;
         const canvas = this.canvas.cloneNode(false);
-        if (kind !== 'webgpu') {
+        if (kind !== "webgpu") {
             this.#use(canvas, createRenderer(canvas, kind));
             return true;
         }
         const renderer = await WebGPURenderer.create(canvas);
-        if (this.rendererKind !== 'webgpu') {
+        if (this.rendererKind !== "webgpu") {
             // Another renderer was picked meanwhile.
             renderer?.destroy();
             return true;
         }
         if (!renderer) {
             // Picking WebGPU again tries anew.
-            this.rendererKind = 'unavailable';
+            this.rendererKind = "unavailable";
             return false;
         }
         renderer.onLost = (info) => {
             if (this.renderer !== renderer) return;
-            console.warn('WebGPU device lost, switching to WebGL:', info.message);
+            console.warn("WebGPU device lost, switching to WebGL:", info.message);
             // Picking WebGPU again tries anew.
-            this.rendererKind = 'lost';
+            this.rendererKind = "lost";
             const fallback = this.canvas.cloneNode(false);
-            this.#use(fallback, createRenderer(fallback, 'auto'));
+            this.#use(fallback, createRenderer(fallback, "auto"));
         };
         this.#use(canvas, renderer);
         return true;
@@ -135,7 +135,7 @@ export class Display {
         const { width, height, stage, canvas } = this;
         if (!width) return;
         const fit = Math.min(stage.clientWidth / width, stage.clientHeight / height);
-        const scale = this.zoom === 'fit' || document.fullscreenElement ? fit : this.zoom;
+        const scale = this.zoom === "fit" || document.fullscreenElement ? fit : this.zoom;
         const cssWidth = Math.max(1, Math.floor(width * scale));
         const cssHeight = Math.max(1, Math.floor(height * scale));
         canvas.style.width = `${cssWidth}px`;
@@ -152,5 +152,5 @@ export class Display {
 }
 
 function createRenderer(canvas, kind) {
-    return (kind !== 'canvas' && WebGLRenderer.create(canvas)) || new CanvasRenderer(canvas);
+    return (kind !== "canvas" && WebGLRenderer.create(canvas)) || new CanvasRenderer(canvas);
 }

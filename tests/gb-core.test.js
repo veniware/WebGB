@@ -1,14 +1,14 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { Button } from '../src/core/buttons.js';
-import { createCartridge } from '../src/core/gb/cartridge.js';
-import { GameBoy } from '../src/core/gb/gameboy.js';
-import { gbcCombinationFor } from '../src/core/gb/palettes.js';
-import { makeGbRom } from './helpers.js';
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { Button } from "../src/core/buttons.js";
+import { createCartridge } from "../src/core/gb/cartridge.js";
+import { GameBoy } from "../src/core/gb/gameboy.js";
+import { gbcCombinationFor } from "../src/core/gb/palettes.js";
+import { makeGbRom } from "./helpers.js";
 
 // Small hand-assembled programs (placed at 0x150 by makeGbRom).
 
-test('runs instructions and writes work RAM', () => {
+test("runs instructions and writes work RAM", () => {
     const gb = new GameBoy(makeGbRom({
         code: [
             0x3e, 0x12, // LD A,$12
@@ -29,7 +29,7 @@ test('runs instructions and writes work RAM', () => {
     assert.equal(gb.cpu.halted, true);
 });
 
-test('timer interrupts wake the CPU from HALT', () => {
+test("timer interrupts wake the CPU from HALT", () => {
     const rom = makeGbRom({
         code: [
             0x3e, 0x04, 0xe0, 0xff, // IE = timer
@@ -48,7 +48,7 @@ test('timer interrupts wake the CPU from HALT', () => {
     assert.ok(gb.cpu.d >= 30 && gb.cpu.d <= 36, `D = ${gb.cpu.d}`);
 });
 
-test('joypad reads the selected button group and raises its interrupt', () => {
+test("joypad reads the selected button group and raises its interrupt", () => {
     const gb = new GameBoy(makeGbRom());
     gb.if = 0;
     gb.write(0xff00, 0x20); // D-pad
@@ -59,7 +59,7 @@ test('joypad reads the selected button group and raises its interrupt', () => {
     assert.equal(gb.read(0xff00), 0xde);
 });
 
-test('save states restore video and audio exactly', () => {
+test("save states restore video and audio exactly", () => {
     const gb = new GameBoy(makeGbRom({
         code: [
             0x3e, 0xf0, 0xe0, 0x17, // NR22: volume 15
@@ -89,14 +89,14 @@ test('save states restore video and audio exactly', () => {
         return frames;
     };
     const expected = run();
-    assert.ok(new Set(expected[4].video).size > 2, 'something is drawn');
-    assert.ok(expected[4].audio.some((s) => Math.abs(s) > 0.01), 'something is audible');
+    assert.ok(new Set(expected[4].video).size > 2, "something is drawn");
+    assert.ok(expected[4].audio.some((s) => Math.abs(s) > 0.01), "something is audible");
 
     gb.loadState(state);
     assert.deepEqual(run(), expected);
 });
 
-test('rejects snapshots of other games and survives corrupt ones', () => {
+test("rejects snapshots of other games and survives corrupt ones", () => {
     const gb = new GameBoy(makeGbRom());
     const other = new GameBoy(makeGbRom({ size: 0x10000 }));
     assert.throws(() => gb.loadState(other.saveState()), /different game/);
@@ -108,7 +108,7 @@ test('rejects snapshots of other games and survives corrupt ones', () => {
     assert.equal(gb.cpu.pc, pc);
 });
 
-test('rejects unsupported cartridge types', () => {
+test("rejects unsupported cartridge types", () => {
     assert.throws(() => new GameBoy(makeGbRom({ cartType: 0x21 })), /0x21 is not supported/);
 });
 
@@ -120,17 +120,17 @@ function bankedRom(cartType, banks, ramSize = 0) {
     return rom;
 }
 
-test('MBC1 switches ROM and RAM banks', () => {
+test("MBC1 switches ROM and RAM banks", () => {
     const cart = createCartridge(bankedRom(0x03, 16, 3));
     assert.equal(cart.readRom(0x6000), 1);
     cart.writeRom(0x2000, 5);
     assert.equal(cart.readRom(0x6000), 5);
     cart.writeRom(0x2000, 0);
-    assert.equal(cart.readRom(0x6000), 1, 'bank 0 maps to 1');
+    assert.equal(cart.readRom(0x6000), 1, "bank 0 maps to 1");
     cart.writeRom(0x2000, 0x13);
-    assert.equal(cart.readRom(0x6000), 3, 'masked to the ROM size');
+    assert.equal(cart.readRom(0x6000), 3, "masked to the ROM size");
 
-    assert.equal(cart.readRam(0xa000), 0xff, 'RAM disabled');
+    assert.equal(cart.readRam(0xa000), 0xff, "RAM disabled");
     cart.writeRom(0x0000, 0x0a);
     cart.writeRam(0xa000, 0x42);
     cart.writeRom(0x6000, 1); // RAM banking mode
@@ -146,7 +146,7 @@ test('MBC1 switches ROM and RAM banks', () => {
     assert.equal(restored.readRam(0xa000), 0x42);
 });
 
-test('MBC5 reaches bank 0 and the ninth bank bit', () => {
+test("MBC5 reaches bank 0 and the ninth bank bit", () => {
     const cart = createCartridge(bankedRom(0x19, 512));
     cart.writeRom(0x2000, 0x1f);
     cart.writeRom(0x3000, 1);
@@ -154,20 +154,20 @@ test('MBC5 reaches bank 0 and the ninth bank bit', () => {
     cart.writeRom(0x2000, 0);
     cart.writeRom(0x3000, 0);
     assert.equal(cart.readRom(0x6000), 0);
-    assert.equal(cart.getSaveData(), null, 'no battery');
+    assert.equal(cart.getSaveData(), null, "no battery");
 });
 
-test('MBC2 has 512 half-bytes of RAM', () => {
+test("MBC2 has 512 half-bytes of RAM", () => {
     const cart = createCartridge(bankedRom(0x06, 8));
     cart.writeRom(0x0000, 0x0a);
     cart.writeRam(0xa000, 0xab);
-    assert.equal(cart.readRam(0xa200), 0xfb, 'mirrored, upper nibble reads 1');
+    assert.equal(cart.readRam(0xa200), 0xfb, "mirrored, upper nibble reads 1");
     cart.writeRom(0x0100, 3); // address bit 8 selects the ROM bank
     assert.equal(cart.readRom(0x6000), 3);
     assert.equal(cart.getSaveData().length, 512);
 });
 
-test('MBC3 clock follows the wall clock and survives saving', () => {
+test("MBC3 clock follows the wall clock and survives saving", () => {
     let now = Date.UTC(2026, 0, 1);
     const cart = createCartridge(bankedRom(0x10, 8, 3), { now: () => now });
     cart.writeRom(0x0000, 0x0a);
@@ -189,7 +189,7 @@ test('MBC3 clock follows the wall clock and survives saving', () => {
     cart.writeRam(0xa000, 20);
     const save = cart.getSaveData();
     assert.equal(save.length, 0x8000 + 48);
-    assert.deepEqual(cart.getSaveData(), save, 'save data is stable while the clock runs');
+    assert.deepEqual(cart.getSaveData(), save, "save data is stable while the clock runs");
 
     now += 3600 * 1000;
     const later = createCartridge(bankedRom(0x10, 8, 3), { now: () => now });
@@ -201,25 +201,25 @@ test('MBC3 clock follows the wall clock and survives saving', () => {
     assert.equal(later.readRam(0xa000), 21);
 });
 
-test('picks the Game Boy Color palette of known Nintendo titles', () => {
-    const tetris = makeGbRom({ title: 'TETRIS' });
-    assert.equal(gbcCombinationFor(tetris), -1, 'not published by Nintendo');
+test("picks the Game Boy Color palette of known Nintendo titles", () => {
+    const tetris = makeGbRom({ title: "TETRIS" });
+    assert.equal(gbcCombinationFor(tetris), -1, "not published by Nintendo");
     tetris[0x14b] = 0x01;
     assert.equal(gbcCombinationFor(tetris), 3);
 
     const gb = new GameBoy(tetris);
-    gb.configure({ gbPalette: 'auto' });
-    assert.equal(gb.ppu.dmgBg[1], 0xff00ffff, 'yellow');
-    gb.configure({ gbPalette: 'gray' });
+    gb.configure({ gbPalette: "auto" });
+    assert.equal(gb.ppu.dmgBg[1], 0xff00ffff, "yellow");
+    gb.configure({ gbPalette: "gray" });
     assert.equal(gb.ppu.dmgBg[0], 0xffffffff);
 
     // Unknown games get the Game Boy Color's default: different BG and sprite colors.
     const other = new GameBoy(makeGbRom());
-    other.configure({ gbPalette: 'gbc' });
+    other.configure({ gbPalette: "gbc" });
     assert.notDeepEqual([...other.ppu.dmgBg], [...other.ppu.dmgObj0]);
 });
 
-test('MBC7 reads the tilt sensor and stores the saved game in its EEPROM', () => {
+test("MBC7 reads the tilt sensor and stores the saved game in its EEPROM", () => {
     const cart = createCartridge(bankedRom(0x22, 8));
     cart.writeRom(0x0000, 0x0a);
     cart.writeRom(0x4000, 0x40);
@@ -257,7 +257,7 @@ test('MBC7 reads the tilt sensor and stores the saved game in its EEPROM', () =>
     assert.equal(value, 0xbeef);
 });
 
-test('HuC3 clock answers through its command mailbox', () => {
+test("HuC3 clock answers through its command mailbox", () => {
     let now = 0;
     const cart = createCartridge(bankedRom(0xfe, 8, 3), { now: () => now });
     const run = (value) => {
@@ -272,26 +272,26 @@ test('HuC3 clock answers through its command mailbox', () => {
     const nibbles = [...Array(7)].map(() => run(0x10));
     assert.deepEqual(nibbles, [125 & 15, (125 >> 4) & 15, 0, 3, 0, 0, 0]);
     run(0x62);
-    assert.equal(run(0x00) & 1, 1, 'status request answers 1');
+    assert.equal(run(0x00) & 1, 1, "status request answers 1");
 });
 
-test('MMM01 starts in its menu and maps the selected game', () => {
+test("MMM01 starts in its menu and maps the selected game", () => {
     const rom = bankedRom(0x00, 16);
     rom.set(rom.subarray(0x104, 0x134), 14 * 0x4000 + 0x104);
     rom[14 * 0x4000 + 0x147] = 0x0d;
     const cart = createCartridge(rom);
-    assert.equal(cart.constructor.name, 'Mmm01');
-    assert.equal(cart.readRom(0x6000), 15, 'menu: last bank');
+    assert.equal(cart.constructor.name, "Mmm01");
+    assert.equal(cart.readRom(0x6000), 15, "menu: last bank");
     cart.writeRom(0x2000, 0x04); // game at bank 4
     cart.writeRom(0x6000, 0x1c); // 32 KiB games: mask the upper bank bits
     cart.writeRom(0x0000, 0x40); // map
-    assert.equal(cart.readRom(0x2000), 4, 'game bank 0');
-    assert.equal(cart.readRom(0x6000), 5, 'game bank 1');
+    assert.equal(cart.readRom(0x2000), 4, "game bank 0");
+    assert.equal(cart.readRom(0x6000), 5, "game bank 1");
     cart.writeRom(0x2000, 0x00);
-    assert.equal(cart.readRom(0x6000), 5, 'selection bits are locked');
+    assert.equal(cart.readRom(0x6000), 5, "selection bits are locked");
 });
 
-test('MBC6 maps two ROM windows and programs flash', () => {
+test("MBC6 maps two ROM windows and programs flash", () => {
     const cart = createCartridge(makeGbRom({ cartType: 0x20, size: 0x20000 }));
     cart.rom[3 * 0x2000] = 0x33;
     cart.writeRom(0x2000, 3);
@@ -315,7 +315,7 @@ test('MBC6 maps two ROM windows and programs flash', () => {
     assert.equal(cart.getSaveData()[0x8000 + 9 * 0x2000 + 0x10], 0x42);
 });
 
-test('Game Boy Camera captures the host image into tiles', () => {
+test("Game Boy Camera captures the host image into tiles", () => {
     const gb = new GameBoy(makeGbRom({ cartType: 0xfc, size: 0x20000 }));
     assert.equal(gb.wantsCamera, true);
     const { width, height } = gb.cameraSize;
@@ -329,14 +329,14 @@ test('Game Boy Camera captures the host image into tiles', () => {
         cart.writeRam(0xa008 + i * 3, 0xc0);
     }
     cart.writeRam(0xa000, 1);
-    assert.equal(cart.readRam(0xa000) & 1, 1, 'busy');
+    assert.equal(cart.readRam(0xa000) & 1, 1, "busy");
     for (let i = 0; i < 4; i++) gb.runFrame(); // about 2.6 frames at this exposure
-    assert.equal(cart.readRam(0xa000) & 1, 0, 'done');
+    assert.equal(cart.readRam(0xa000) & 1, 0, "done");
     cart.writeRom(0x4000, 0);
-    assert.ok(cart.ram.slice(0x100, 0x100 + 14 * 16 * 16).some((v) => v !== 0), 'tiles written');
+    assert.ok(cart.ram.slice(0x100, 0x100 + 14 * 16 * 16).some((v) => v !== 0), "tiles written");
 });
 
-test('TAMA5 reaches its RAM through register writes', () => {
+test("TAMA5 reaches its RAM through register writes", () => {
     const cart = createCartridge(bankedRom(0xfd, 8));
     const reg = (index, value) => {
         cart.writeRam(0xa001, index);
@@ -355,7 +355,7 @@ test('TAMA5 reaches its RAM through register writes', () => {
     assert.equal(cart.readRam(0xa000) & 0x0f, 0xa);
 });
 
-test('reports rumble strength per frame', () => {
+test("reports rumble strength per frame", () => {
     const gb = new GameBoy(makeGbRom({
         cartType: 0x1c,
         code: [0x3e, 0x08, 0xea, 0x00, 0x40, 0x76, 0x18, 0xfd], // motor on, then HALT
@@ -365,8 +365,8 @@ test('reports rumble strength per frame', () => {
     assert.equal(gb.getRumble(), 1);
 });
 
-test('a link cable swaps bytes between two Game Boys', async () => {
-    const { LinkedGameBoys } = await import('../src/core/gb/link.js');
+test("a link cable swaps bytes between two Game Boys", async () => {
+    const { LinkedGameBoys } = await import("../src/core/gb/link.js");
     const program = (byte, control) => makeGbRom({
         code: [
             0x3e, byte, 0xe0, 0x01, // SB = byte
@@ -394,7 +394,7 @@ test('a link cable swaps bytes between two Game Boys', async () => {
 // --- Super Game Boy --------------------------------------------------------------
 
 function sgbRom() {
-    const rom = makeGbRom({ title: 'SGBTEST', code: [0x18, 0xfe] }); // JR -2
+    const rom = makeGbRom({ title: "SGBTEST", code: [0x18, 0xfe] }); // JR -2
     rom[0x146] = 0x03;
     rom[0x14b] = 0x33;
     return rom;
@@ -419,9 +419,9 @@ function sendSgb(gb, bytes) {
     }
 }
 
-test('Super Game Boy games get a border, SGB timing and their palettes', async () => {
-    const { createCore } = await import('../src/core/gb/index.js');
-    const info = { system: 'gb' };
+test("Super Game Boy games get a border, SGB timing and their palettes", async () => {
+    const { createCore } = await import("../src/core/gb/index.js");
+    const info = { system: "gb" };
     const gb = createCore(sgbRom(), info, {});
     assert.ok(gb.sgb);
     assert.deepEqual([gb.width, gb.height], [256, 224]);
@@ -446,7 +446,7 @@ test('Super Game Boy games get a border, SGB timing and their palettes', async (
     assert.equal(gb.sgb.attributes[10], 1);
 });
 
-test('Super Game Boy multiplayer: MLT_REQ and the joypad ID', () => {
+test("Super Game Boy multiplayer: MLT_REQ and the joypad ID", () => {
     const gb = new GameBoy(sgbRom(), { sgb: true });
     assert.equal(gb.players, 1);
     sendSgb(gb, [(0x11 << 3) | 1, 0x01]);
@@ -459,10 +459,10 @@ test('Super Game Boy multiplayer: MLT_REQ and the joypad ID', () => {
     assert.equal(gb.read(0xff00) & 0x0f, 0x0e);
     gb.setInput(Button.A << 16);
     gb.write(0xff00, 0x10);
-    assert.equal(gb.read(0xff00) & 0x0f, 0x0e, 'player 2 presses A');
+    assert.equal(gb.read(0xff00) & 0x0f, 0x0e, "player 2 presses A");
 });
 
-test('Super Game Boy reads border tiles off the screen (CHR_TRN)', () => {
+test("Super Game Boy reads border tiles off the screen (CHR_TRN)", () => {
     const gb = new GameBoy(sgbRom(), { sgb: true });
     sendSgb(gb, [(0x13 << 3) | 1, 0x00]);
     // Shade 3 everywhere: every bitplane byte reads FF.
@@ -472,7 +472,7 @@ test('Super Game Boy reads border tiles off the screen (CHR_TRN)', () => {
     assert.ok(gb.sgb.borderTiles.subarray(4096).every((b) => b === 0));
 });
 
-test('Super Game Boy state survives snapshots', () => {
+test("Super Game Boy state survives snapshots", () => {
     const gb = new GameBoy(sgbRom(), { sgb: true });
     sendSgb(gb, [(0x17 << 3) | 1, 0x02]); // MASK_EN black
     const state = gb.saveState();
@@ -482,18 +482,18 @@ test('Super Game Boy state survives snapshots', () => {
     assert.throws(() => new GameBoy(sgbRom()).loadState(state));
 });
 
-test('a running Game Boy can take a link cable; a linked pair cannot', async () => {
-    const { canLink } = await import('../src/core/registry.js');
-    const { createLinkedCore } = await import('../src/core/gb/index.js');
-    const info = { system: 'gb' };
+test("a running Game Boy can take a link cable; a linked pair cannot", async () => {
+    const { canLink } = await import("../src/core/registry.js");
+    const { createLinkedCore } = await import("../src/core/gb/index.js");
+    const info = { system: "gb" };
     const gb = new GameBoy(makeGbRom());
     assert.equal(canLink(gb, info), true);
-    assert.equal(canLink(gb, { system: 'gba' }), false);
+    assert.equal(canLink(gb, { system: "gba" }), false);
     const linked = createLinkedCore(gb, makeGbRom(), info, {});
     assert.equal(canLink(linked, info), false);
 });
 
-test('APU zombie mode: writing $08 to NRx2 while playing adds 1 to the volume', () => {
+test("APU zombie mode: writing $08 to NRx2 while playing adds 1 to the volume", () => {
     const gb = new GameBoy(makeGbRom());
     gb.write(0xff17, 0x58); // channel 2: volume 5, increase, no envelope steps
     gb.write(0xff19, 0x80); // trigger
@@ -505,16 +505,16 @@ test('APU zombie mode: writing $08 to NRx2 while playing adds 1 to the volume', 
 
 // --- Memory viewer ----------------------------------------------------------------
 
-test('memory regions: CPU view, banked memory, cartridge RAM', () => {
+test("memory regions: CPU view, banked memory, cartridge RAM", () => {
     const gb = new GameBoy(bankedRom(0x1b, 8, 3), { cgb: true });
     const regions = gb.getMemoryRegions();
     const byName = (name) => regions.find((r) => r.name.startsWith(name));
-    const bus = byName('CPU address space');
+    const bus = byName("CPU address space");
     assert.equal(bus.size, 0x10000);
     bus.write(0xc123, 0x5a);
     assert.equal(gb.wram[0x123], 0x5a);
     assert.equal(bus.read(0xc123), 0x5a);
-    assert.equal(bus.read(0xfeb0), -1, 'unusable area');
+    assert.equal(bus.read(0xfeb0), -1, "unusable area");
     // Writes go through the bus: the mapper switches the ROM bank.
     bus.write(0x2000, 3);
     assert.equal(bus.read(0x6000), 3);
@@ -523,25 +523,25 @@ test('memory regions: CPU view, banked memory, cartridge RAM', () => {
     gb.ppu.vramReadBlocked = true;
     assert.equal(bus.read(0x8010), 0x77);
 
-    const wram = byName('Work RAM');
+    const wram = byName("Work RAM");
     assert.equal(wram.size, 0x8000);
     wram.write(0x7fff, 0x42);
     assert.equal(gb.wram[0x7fff], 0x42);
 
-    const palettes = byName('Background palettes');
+    const palettes = byName("Background palettes");
     palettes.write(0, 0x1f);
     palettes.write(1, 0);
     assert.equal(gb.ppu.bgPaletteRam[0], 0x1f);
 
-    const ram = byName('Cartridge RAM');
+    const ram = byName("Cartridge RAM");
     assert.equal(ram.size, 0x8000);
     const writes = gb.getSaveWrites();
     ram.write(0x2001, 0x99);
     assert.equal(gb.cart.ram[0x2001], 0x99);
-    assert.notEqual(gb.getSaveWrites(), writes, 'edits get saved');
+    assert.notEqual(gb.getSaveWrites(), writes, "edits get saved");
 });
 
-test('memory regions: a DMG without cartridge RAM has only the CPU view', () => {
+test("memory regions: a DMG without cartridge RAM has only the CPU view", () => {
     const regions = new GameBoy(makeGbRom()).getMemoryRegions();
-    assert.deepEqual(regions.map((r) => r.name), ['CPU address space']);
+    assert.deepEqual(regions.map((r) => r.name), ["CPU address space"]);
 });

@@ -1,13 +1,13 @@
 // Cartridge save memory: SRAM, Flash (64/128 KB) or EEPROM (512 B / 8 KB),
 // detected from the ID strings Nintendo's SDK puts in ROMs.
 
-export const BackupType = { NONE: 'none', SRAM: 'sram', FLASH64: 'flash64', FLASH128: 'flash128', EEPROM: 'eeprom' };
+export const BackupType = { NONE: "none", SRAM: "sram", FLASH64: "flash64", FLASH128: "flash128", EEPROM: "eeprom" };
 
 export function detectBackup(rom) {
-    if (contains(rom, 'FLASH1M_V')) return BackupType.FLASH128;
-    if (contains(rom, 'FLASH512_V') || contains(rom, 'FLASH_V')) return BackupType.FLASH64;
-    if (contains(rom, 'EEPROM_V')) return BackupType.EEPROM;
-    if (contains(rom, 'SRAM_V') || contains(rom, 'SRAM_F_V')) return BackupType.SRAM;
+    if (contains(rom, "FLASH1M_V")) return BackupType.FLASH128;
+    if (contains(rom, "FLASH512_V") || contains(rom, "FLASH_V")) return BackupType.FLASH64;
+    if (contains(rom, "EEPROM_V")) return BackupType.EEPROM;
+    if (contains(rom, "SRAM_V") || contains(rom, "SRAM_F_V")) return BackupType.SRAM;
     return BackupType.NONE;
 }
 

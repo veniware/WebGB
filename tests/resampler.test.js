@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { Resampler } from '../src/audio/resampler.js';
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { Resampler } from "../src/audio/resampler.js";
 
 /**
  * Simulates a producer pushing one video frame of audio at a time while the
@@ -46,14 +46,14 @@ for (const drift of [0.998, 1, 1.002]) {
     });
 }
 
-test('fast-forward skips audio instead of building latency', () => {
+test("fast-forward skips audio instead of building latency", () => {
     let maxFill = 0;
     simulate({ seconds: 10, speed: 4, onBlock: (r) => (maxFill = Math.max(maxFill, r.fill)) });
     const target = Math.round(48000 * 0.06);
     assert.ok(maxFill <= target * 2 + 1, `fill reached ${maxFill}`);
 });
 
-test('fades out instead of clicking on underrun', () => {
+test("fades out instead of clicking on underrun", () => {
     const resampler = new Resampler(48000);
     resampler.write(new Float32Array(resampler.target * 2).fill(1));
     const left = new Float32Array(resampler.target + 500);

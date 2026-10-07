@@ -1,4 +1,4 @@
-import { Button } from '../core/buttons.js';
+import { Button } from "../core/buttons.js";
 
 const HORIZONTAL = Button.LEFT | Button.RIGHT;
 const VERTICAL = Button.UP | Button.DOWN;

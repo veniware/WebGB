@@ -1,4 +1,4 @@
-import { Interrupt } from './constants.js';
+import { Interrupt } from "./constants.js";
 
 /**
  * P1/JOYP. The game selects the action buttons (bit 5 = 0) and/or the

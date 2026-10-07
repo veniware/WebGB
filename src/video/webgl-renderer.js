@@ -1,4 +1,4 @@
-import { EFFECTS_SHADER, fragmentShader, getFilter, GHOSTING_KEEP, GHOSTING_SHADER, VERTEX_SHADER } from './filters.js';
+import { EFFECTS_SHADER, fragmentShader, getFilter, GHOSTING_KEEP, GHOSTING_SHADER, VERTEX_SHADER } from "./filters.js";
 
 /**
  * GPU renderer. Each new frame is uploaded to a texture, goes through the
@@ -7,12 +7,12 @@ import { EFFECTS_SHADER, fragmentShader, getFilter, GHOSTING_KEEP, GHOSTING_SHAD
  */
 export class WebGLRenderer {
     supportsShaders = true;
-    name = 'WebGL';
+    name = "WebGL";
     #programs = new Map();
 
     /** @returns {WebGLRenderer | null} */
     static create(canvas) {
-        const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, stencil: false });
+        const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: false });
         return gl ? new WebGLRenderer(canvas, gl) : null;
     }
 
@@ -34,8 +34,8 @@ export class WebGLRenderer {
         // What the scaler draws, and whether it needs working out again.
         this.output = this.frame;
         this.dirty = true;
-        this.ghostProgram = this.#build(GHOSTING_SHADER, ['uTexture', 'uSrcSize', 'uPrevious', 'uKeep']);
-        this.effectsProgram = this.#build(EFFECTS_SHADER, ['uTexture', 'uSrcSize', 'uDedither', 'uSharpen', 'uOutlines']);
+        this.ghostProgram = this.#build(GHOSTING_SHADER, ["uTexture", "uSrcSize", "uPrevious", "uKeep"]);
+        this.effectsProgram = this.#build(EFFECTS_SHADER, ["uTexture", "uSrcSize", "uDedither", "uSharpen", "uOutlines"]);
     }
 
     setSourceSize(width, height) {
@@ -68,7 +68,7 @@ export class WebGLRenderer {
 
     /** Frees the GPU context (browsers allow only a few at once). */
     destroy() {
-        this.gl.getExtension('WEBGL_lose_context')?.loseContext();
+        this.gl.getExtension("WEBGL_lose_context")?.loseContext();
     }
 
     resize(width, height) {
@@ -171,13 +171,13 @@ export class WebGLRenderer {
     #program(filter) {
         let entry = this.#programs.get(filter.id);
         if (!entry) {
-            entry = this.#build(fragmentShader(filter), ['uTexture', 'uSrcSize', 'uDstSize'], filter.id);
+            entry = this.#build(fragmentShader(filter), ["uTexture", "uSrcSize", "uDstSize"], filter.id);
             this.#programs.set(filter.id, entry);
         }
         return entry;
     }
 
-    #build(fragmentSource, uniforms, name = 'effect') {
+    #build(fragmentSource, uniforms, name = "effect") {
         const { gl } = this;
         const program = gl.createProgram();
         gl.attachShader(program, this.#shader(gl.VERTEX_SHADER, VERTEX_SHADER));

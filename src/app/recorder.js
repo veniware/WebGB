@@ -1,5 +1,5 @@
 // Containers and codecs to try, best first (Safari only records mp4).
-const TYPES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a', 'video/mp4'];
+const TYPES = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4;codecs=avc1,mp4a", "video/mp4"];
 
 /** Records the screen (as drawn, with filters) and the sound to a video file. */
 export class Recorder {
@@ -10,7 +10,7 @@ export class Recorder {
     started = 0;
 
     static get supported() {
-        return typeof MediaRecorder !== 'undefined' && typeof HTMLCanvasElement.prototype.captureStream === 'function';
+        return typeof MediaRecorder !== "undefined" && typeof HTMLCanvasElement.prototype.captureStream === "function";
     }
 
     get recording() {
@@ -41,11 +41,11 @@ export class Recorder {
         this.#recorder = null;
         return new Promise((resolve, reject) => {
             recorder.onstop = () => {
-                const type = recorder.mimeType || 'video/webm';
-                resolve({ blob: new Blob(this.#chunks, { type }), extension: type.includes('mp4') ? 'mp4' : 'webm' });
+                const type = recorder.mimeType || "video/webm";
+                resolve({ blob: new Blob(this.#chunks, { type }), extension: type.includes("mp4") ? "mp4" : "webm" });
                 this.#chunks = [];
             };
-            recorder.onerror = (e) => reject(e.error ?? new Error('Recording failed.'));
+            recorder.onerror = (e) => reject(e.error ?? new Error("Recording failed."));
             recorder.stop();
             for (const track of recorder.stream.getTracks()) track.stop();
             this.#stopAudio?.();

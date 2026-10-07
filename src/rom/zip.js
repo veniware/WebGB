@@ -20,7 +20,7 @@ export function listZip(data) {
     const decoder = new TextDecoder();
     const entries = [];
     for (let i = 0; i < count; i++) {
-        if (view.getUint32(pos, true) !== CENTRAL_SIGNATURE) throw new Error('Corrupt zip file.');
+        if (view.getUint32(pos, true) !== CENTRAL_SIGNATURE) throw new Error("Corrupt zip file.");
         const nameLength = view.getUint16(pos + 28, true);
         entries.push({
             name: decoder.decode(data.subarray(pos + 46, pos + 46 + nameLength)),
@@ -39,12 +39,12 @@ export function listZip(data) {
 export async function extractZipEntry(data, entry) {
     if (entry.flags & 1) throw new Error(`${entry.name} is encrypted.`);
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-    if (view.getUint32(entry.offset, true) !== LOCAL_SIGNATURE) throw new Error('Corrupt zip file.');
+    if (view.getUint32(entry.offset, true) !== LOCAL_SIGNATURE) throw new Error("Corrupt zip file.");
     const start = entry.offset + 30 + view.getUint16(entry.offset + 26, true) + view.getUint16(entry.offset + 28, true);
     const body = data.subarray(start, start + entry.compressedSize);
     if (entry.method === 0) return body.slice();
     if (entry.method === 8) {
-        const stream = new Blob([body]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        const stream = new Blob([body]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
         return new Uint8Array(await new Response(stream).arrayBuffer());
     }
     throw new Error(`Unsupported zip compression method ${entry.method}.`);
@@ -55,5 +55,5 @@ function findEndOfCentralDirectory(view) {
     for (let pos = view.byteLength - 22; pos >= min; pos--) {
         if (view.getUint32(pos, true) === EOCD_SIGNATURE) return pos;
     }
-    throw new Error('Corrupt zip file.');
+    throw new Error("Corrupt zip file.");
 }

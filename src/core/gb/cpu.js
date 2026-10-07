@@ -49,10 +49,10 @@ export class Cpu {
     }
 
     sync(s) {
-        for (const r of ['a', 'f', 'b', 'c', 'd', 'e', 'h', 'l']) this[r] = s.u8(this[r]);
+        for (const r of ["a", "f", "b", "c", "d", "e", "h", "l"]) this[r] = s.u8(this[r]);
         this.sp = s.u16(this.sp);
         this.pc = s.u16(this.pc);
-        for (const flag of ['ime', 'imePending', 'halted', 'haltBug', 'stopped', 'locked']) this[flag] = s.bool(this[flag]);
+        for (const flag of ["ime", "imePending", "halted", "haltBug", "stopped", "locked"]) this[flag] = s.bool(this[flag]);
         this.stall = s.u32(this.stall);
     }
 
