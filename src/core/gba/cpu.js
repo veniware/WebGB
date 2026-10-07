@@ -207,43 +207,43 @@ export class Arm7 {
     }
 
     swi(comment) {
-    if (this.hooks.swi?.(this, comment)) return;
-    this.exception(0x08, Mode.SVC, this.pc);
-  }
-
-  undefined() {
-    this.exception(0x04, Mode.UND, this.pc);
-  }
-
-  /** Executes one instruction. */
-  step() {
-    const bus = this.bus;
-    const address = this.pc;
-    if (this.thumb) {
-      if (this.refill) {
-        this.refill = false;
-        this.pipeA = bus.peekCode16(address);
-        this.pipeB = bus.peekCode16((address + 2) | 0);
-      }
-      const op = this.pipeA;
-      this.pipeA = this.pipeB;
-      this.pipeB = bus.fetch16((address + 4) | 0);
-      this.pc = (address + 2) | 0;
-      this.r[15] = address + 4;
-      this.thumbTable[op >>> 6](op);
-    } else {
-      if (this.refill) {
-        this.refill = false;
-        this.pipeA = bus.peekCode32(address);
-        this.pipeB = bus.peekCode32((address + 4) | 0);
-      }
-      const op = this.pipeA;
-      this.pipeA = this.pipeB;
-      this.pipeB = bus.fetch32((address + 8) | 0);
-      this.pc = (address + 4) | 0;
-      this.r[15] = address + 8;
-      const cond = op >>> 28;
-      if (cond === 14 || this.condition(cond)) this.armTable[((op >>> 16) & 0xff0) | ((op >>> 4) & 0xf)](op);
+        if (this.hooks.swi?.(this, comment)) return;
+        this.exception(0x08, Mode.SVC, this.pc);
     }
-  }
+
+    undefined() {
+        this.exception(0x04, Mode.UND, this.pc);
+    }
+
+    /** Executes one instruction. */
+    step() {
+        const bus = this.bus;
+        const address = this.pc;
+        if (this.thumb) {
+            if (this.refill) {
+                this.refill = false;
+                this.pipeA = bus.peekCode16(address);
+                this.pipeB = bus.peekCode16((address + 2) | 0);
+            }
+            const op = this.pipeA;
+            this.pipeA = this.pipeB;
+            this.pipeB = bus.fetch16((address + 4) | 0);
+            this.pc = (address + 2) | 0;
+            this.r[15] = address + 4;
+            this.thumbTable[op >>> 6](op);
+        } else {
+            if (this.refill) {
+                this.refill = false;
+                this.pipeA = bus.peekCode32(address);
+                this.pipeB = bus.peekCode32((address + 4) | 0);
+            }
+            const op = this.pipeA;
+            this.pipeA = this.pipeB;
+            this.pipeB = bus.fetch32((address + 8) | 0);
+            this.pc = (address + 4) | 0;
+            this.r[15] = address + 8;
+            const cond = op >>> 28;
+            if (cond === 14 || this.condition(cond)) this.armTable[((op >>> 16) & 0xff0) | ((op >>> 4) & 0xf)](op);
+        }
+    }
 }
