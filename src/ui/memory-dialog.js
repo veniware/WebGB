@@ -1,4 +1,5 @@
 import { formatSize, h } from './dom.js';
+import { CONDITIONS, MemorySearch, parseByte } from './memory-search.js';
 
 // Bytes per page.
 const PAGE = 256;
@@ -8,7 +9,8 @@ const WIDE = 600;
 /**
  * Memory viewer/editor: the running game's memory regions (see
  * Core.getMemoryRegions) as hex, a page at a time. The game is paused while
- * it's open; bytes are edited by typing two hex digits.
+ * it's open unless "Run the game" is on; bytes are edited by typing two hex
+ * digits. The search finds bytes by value and how they change.
  *
  * @param {{
  *   dialog: HTMLDialogElement,
@@ -31,6 +33,14 @@ export function createMemoryDialog({ dialog, modals, emulator }) {
   // The page's byte inputs, by offset - start.
   let inputs = [];
   let texts = [];
+  let search = null;
+  const live = dialog.querySelector('[data-live]');
+  const condition = dialog.querySelector('[data-condition]');
+  const searchValue = dialog.querySelector('[data-value]');
+  const narrowButton = dialog.querySelector('[data-narrow]');
+  const found = dialog.querySelector('[data-found]');
+  const results = dialog.querySelector('[data-results]');
+  const searchHint = found.textContent;
 
   const hex = (value, width) => value.toString(16).toUpperCase().padStart(width, '0');
 
@@ -38,6 +48,8 @@ export function createMemoryDialog({ dialog, modals, emulator }) {
     region = regions[index];
     start = 0;
     digits = Math.max(4, hex(region.base + region.size - 1, 1).length);
+    search = null;
+    showResults();
     render();
   }
 
@@ -105,6 +117,8 @@ export function createMemoryDialog({ dialog, modals, emulator }) {
     let chars = '';
     inputs.forEach((input, i) => {
       const value = region.read(start + i);
+      // Don't overwrite a byte being typed while the game runs.
+      if (input === document.activeElement && input.value !== input.defaultValue) return;
       input.value = input.defaultValue = value < 0 ? '--' : hex(value, 2);
       // Write-only registers read as --, but can still be written.
       input.disabled = value < 0 && !region.write;
@@ -131,6 +145,66 @@ export function createMemoryDialog({ dialog, modals, emulator }) {
     inputs[offset - start]?.focus();
   }
 
+  /** Runs a new search or narrows the last one. */
+  function find(narrow) {
+    const { needsValue } = CONDITIONS[condition.value];
+    const value = parseByte(searchValue.value);
+    if (needsValue && Number.isNaN(value)) {
+      searchValue.setCustomValidity('A number from 0 to 255');
+      searchValue.reportValidity();
+      return;
+    }
+    if (!narrow || !search) {
+      search = new MemorySearch(region);
+      search.start(condition.value, value);
+    } else {
+      search.narrow(condition.value, value);
+    }
+    showResults();
+  }
+
+  function showResults() {
+    narrowButton.disabled = !search;
+    if (!search) {
+      found.textContent = searchHint;
+      results.replaceChildren();
+      return;
+    }
+    found.textContent = search.count === 1 ? 'Found 1 byte.' : `Found ${search.count.toLocaleString()} bytes.`;
+    results.replaceChildren(...search.results(search.count > 40 ? 0 : 40).map(({ offset, value }) => h('button', {
+      type: 'button',
+      textContent: `${hex(region.base + offset, digits)}: ${value < 0 ? '--' : value}`,
+      onclick: () => go(hex(region.base + offset, digits)),
+    })));
+  }
+
+  condition.append(...Object.entries(CONDITIONS).map(([id, { name }]) => new Option(name, id)));
+  const updateValueField = () => (searchValue.disabled = !CONDITIONS[condition.value].needsValue);
+  condition.addEventListener('change', updateValueField);
+  updateValueField();
+  searchValue.addEventListener('input', () => searchValue.setCustomValidity(''));
+  searchValue.addEventListener('keydown', (e) => e.key === 'Enter' && find(Boolean(search)));
+  dialog.querySelector('[data-search]').addEventListener('click', () => find(false));
+  narrowButton.addEventListener('click', () => find(true));
+
+  // "Run the game": unpaused while open, the page follows along.
+  const follow = () => {
+    if (!dialog.open || !live.checked) return;
+    refresh();
+    requestAnimationFrame(follow);
+  };
+  live.addEventListener('change', () => {
+    emulator.setPaused(!live.checked);
+    if (live.checked) requestAnimationFrame(follow);
+    else showResults();
+  });
+  // Before the dialog manager resumes (or not) the game.
+  dialog.addEventListener('close', () => {
+    if (!live.checked) return;
+    live.checked = false;
+    emulator.setPaused(true);
+  });
+
   select.addEventListener('change', () => choose(Number(select.value)));
   address.addEventListener('input', () => address.setCustomValidity(''));
   address.addEventListener('keydown', (e) => e.key === 'Enter' && go(address.value));
@@ -146,6 +220,7 @@ export function createMemoryDialog({ dialog, modals, emulator }) {
   dialog.querySelector('[data-frame]').addEventListener('click', () => {
     emulator.stepFrame();
     refresh();
+    if (search) showResults();
   });
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
   window.addEventListener('resize', () => {

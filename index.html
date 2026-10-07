@@ -253,9 +253,21 @@
       <button type="button" data-prev aria-label="Previous page">◀</button>
       <button type="button" data-next aria-label="Next page">▶</button>
       <button type="button" data-frame>Next frame</button>
+      <label class="check"><input type="checkbox" data-live> Run the game</label>
     </div>
+    <details class="memory-search">
+      <summary>Search (cheat finder)</summary>
+      <div class="memory-bar">
+        <select data-condition aria-label="Condition"></select>
+        <input data-value placeholder="Value (12, 0x0C)" aria-label="Value" spellcheck="false" autocomplete="off">
+        <button type="button" data-search>New search</button>
+        <button type="button" data-narrow disabled>Narrow</button>
+      </div>
+      <p class="empty" data-found>Search for a value you see in the game (lives, coins…), let it change, then narrow down.</p>
+      <div class="memory-results" data-results></div>
+    </details>
     <div class="memory" data-grid></div>
-    <footer><span data-range></span> · The game is paused; type two hex digits to change a byte.</footer>
+    <footer><span data-range></span> · Type two hex digits to change a byte.</footer>
   </dialog>
 </body>
 </html>

@@ -166,7 +166,9 @@ src/ui/
   link-dialog.js        Picks player 2's game and saved game
   settings-dialog.js    Settings (renderer, performance stats, Game Boy palette, ...)
   controls-dialog.js    Rebinding keyboard keys and gamepad buttons
-  memory-dialog.js      Memory viewer/editor (hex pages of the core's regions)
+  memory-dialog.js      Memory viewer/editor (hex pages of the core's regions,
+                        live mode)
+  memory-search.js      Cheat finder: search bytes by value, narrow by change
   bios-setting.js       GBA BIOS file in the settings (load, remove)
   modals.js             Shows dialogs; pauses the game and input while open
   dom.js                h() element helper, formatting, downloads, file picker
@@ -423,13 +425,12 @@ Done: Game Boy and Game Boy Color (with palettes, color correction, Super
 Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core,
 input mapping, performance stats, the renderer setting, the PWA, video
 effects (ghosting, sharpen, outlines, xBR), sound effects (pitch, low/high
-pass, echo), the memory viewer/editor (Settings → Tools), the GBA BIOS file
+pass, echo), the memory viewer/editor with cheat search (Settings → Tools), the GBA BIOS file
 option, rewind and library backup/restore.
 
 1. GBA follow-ups: idle-loop detection (speed on slow phones), link cable.
-2. Memory viewer: search (cheat finder), watch values while the game runs.
-3. A WebGPU renderer (renderers are separate modules in `src/video/`; the
+2. A WebGPU renderer (renderers are separate modules in `src/video/`; the
    Renderer setting picks Auto / WebGL / Canvas 2D today).
-4. More video filters (HQx, CRT, LCD grid, ...; `src/video/filters.js`) and
+3. More video filters (HQx, CRT, LCD grid, ...; `src/video/filters.js`) and
    sound effects (`AudioOutput.setEffects`).
-5. Possibly later: audio/video recording.
+4. Possibly later: audio/video recording.

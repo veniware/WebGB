@@ -94,6 +94,7 @@ const FILES = [
   'src/ui/library-dialog.js',
   'src/ui/link-dialog.js',
   'src/ui/memory-dialog.js',
+  'src/ui/memory-search.js',
   'src/ui/modals.js',
   'src/ui/settings-dialog.js',
   'src/ui/ui.js',

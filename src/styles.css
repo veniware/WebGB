@@ -299,7 +299,7 @@ body.dragging .drop-overlay {
   margin-top: 12px;
 }
 
-.memory-bar input {
+.memory-bar input:not([type="checkbox"]) {
   width: 9em;
   min-width: 0;
   font: inherit;
@@ -308,6 +308,29 @@ body.dragging .drop-overlay {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 4px 8px;
+}
+
+.memory-bar .check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.memory-search {
+  margin-top: 12px;
+}
+
+.memory-search summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.memory-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .memory {
