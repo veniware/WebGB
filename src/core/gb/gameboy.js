@@ -7,6 +7,7 @@ import { CLOCK_RATE, FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, SGB_CLOCK_RATE } f
 import { Cpu } from './cpu.js';
 import { DMG_PALETTES, GBC_PRESETS, gbcCombination, gbcCombinationFor, SGB_PALETTES } from './palettes.js';
 import { Joypad } from './joypad.js';
+import { memoryRegions } from './memory.js';
 import { Ppu } from './ppu.js';
 import { Serial } from './serial.js';
 import { Sgb } from './sgb.js';
@@ -353,6 +354,10 @@ export class GameBoy {
 
   getSaveWrites() {
     return this.saveWrites;
+  }
+
+  getMemoryRegions() {
+    return memoryRegions(this);
   }
 
   screenshot() {

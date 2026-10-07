@@ -11,6 +11,7 @@ import { createControlsDialog } from './controls-dialog.js';
 import { createGameDialog } from './game-dialog.js';
 import { createLibraryDialog } from './library-dialog.js';
 import { createLinkDialog } from './link-dialog.js';
+import { createMemoryDialog } from './memory-dialog.js';
 import { createModals } from './modals.js';
 import { createSettingsDialog } from './settings-dialog.js';
 
@@ -134,6 +135,11 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
     },
   });
   $('controls-open').addEventListener('click', () => controlsDialog.open());
+  const memoryDialog = createMemoryDialog({ dialog: $('memory'), modals, emulator });
+  $('memory-open').addEventListener('click', () => memoryDialog.open());
+  const updateMemoryButton = () => ($('memory-open').disabled = !memoryDialog.available);
+  emulator.on('loaded', updateMemoryButton);
+  emulator.on('stopped', updateMemoryButton);
   const library = createLibraryDialog({
     dialog: $('library'),
     modals,

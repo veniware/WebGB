@@ -79,6 +79,7 @@ src/core/
   registry.js           System -> core lookup; lazy-loads cores with import()
   buttons.js            Button bitmask shared by input and cores
   state.js              Save-state writer/reader with symmetric sync(s) methods
+  memory.js             Helpers for memory regions (memory viewer)
   gb/                   Game Boy / Game Boy Color core (see "Game Boy core")
     index.js            createCore(): CGB mode for Color ROMs; createLinkedCore()
     gameboy.js          System: memory map, I/O registers, OAM DMA, HDMA, speed
@@ -96,6 +97,7 @@ src/core/
     joypad.js
     serial.js           Serial port; `link` points at the other machine's port
     link.js             LinkedGameBoys: two machines on one cable, one Core
+    memory.js           Memory regions: CPU view (through the bus), banks
     sgb.js              Super Game Boy: P1 packets, palettes/attributes, VRAM
                         transfers, border, multiplayer (after SameBoy, MIT)
     palettes.js         DMG shades, CGB boot ROM compatibility palettes for DMG
@@ -117,6 +119,7 @@ src/core/
     sio.js              Serial port with nothing connected
     backup.js           SRAM / Flash / EEPROM, detected from ID strings
     gpio.js             Cartridge GPIO: Seiko RTC (Pokémon, Boktai)
+    memory.js           Memory regions at their bus addresses
   test/test-core.js     Stand-in core: test pattern, button tones, a Start-press
                         counter in battery RAM, save states
 src/video/
@@ -157,6 +160,7 @@ src/ui/
   link-dialog.js        Picks player 2's game and saved game
   settings-dialog.js    Settings (renderer, performance stats, Game Boy palette, ...)
   controls-dialog.js    Rebinding keyboard keys and gamepad buttons
+  memory-dialog.js      Memory viewer/editor (hex pages of the core's regions)
   modals.js             Shows dialogs; pauses the game and input while open
   dom.js                h() element helper, formatting, downloads, file picker
   files.js              Accepted file types and limits
@@ -187,7 +191,10 @@ Defined in `src/core/interface.js`. A core exposes `width`, `height`, `fps`,
 `getFrameBuffer()` (RGBA `Uint8ClampedArray`), `getAudioSamples()`
 (interleaved stereo `Float32Array`), `getSaveData`/`loadSaveData` and
 `saveState`/`loadState`; optional members (peripherals, link, save
-screenshots) are documented in the file.
+screenshots, `getMemoryRegions()` for the memory viewer) are documented in
+the file. Memory regions read without side effects; writes either go
+through the bus (CPU view, I/O) or into the arrays the hardware reads, and
+count as save writes for battery memory so edits get stored.
 
 To add a core: create `src/core/<name>/index.js` exporting
 `createCore(rom, info)`, then register it in `src/core/registry.js`. Bump the
@@ -379,14 +386,13 @@ so short taps are never lost.
 Done: Game Boy and Game Boy Color (with palettes, color correction, Super
 Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core,
 input mapping, performance stats, the renderer setting, the PWA, video
-effects (ghosting, sharpen, outlines, xBR) and sound effects (pitch, low/high
-pass, echo).
+effects (ghosting, sharpen, outlines, xBR), sound effects (pitch, low/high
+pass, echo) and the memory viewer/editor (Settings → Tools).
 
 1. GBA follow-ups: optional user BIOS file in the settings, idle-loop
    detection (speed on slow phones), link cable, solar sensor (Boktai),
    gyro and rumble cartridges.
-2. Memory viewer/editor (inspect and edit RAM, VRAM, OAM, I/O registers
-   of the running game).
+2. Memory viewer: search (cheat finder), watch values while the game runs.
 3. A WebGPU renderer (renderers are separate modules in `src/video/`; the
    Renderer setting picks Auto / WebGL / Canvas 2D today).
 4. More video filters (HQx, CRT, LCD grid, ...; `src/video/filters.js`) and

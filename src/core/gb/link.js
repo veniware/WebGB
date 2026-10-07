@@ -1,3 +1,4 @@
+import { renamed } from '../memory.js';
 import { StateReader, StateWriter } from '../state.js';
 import { FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH } from './constants.js';
 
@@ -106,6 +107,10 @@ export class LinkedGameBoys {
 
   getSaveWrites(player = 0) {
     return this.machines[player].getSaveWrites();
+  }
+
+  getMemoryRegions() {
+    return this.machines.flatMap((gb, player) => renamed(gb.getMemoryRegions(), `Player ${player + 1}: `));
   }
 
   screenshot(player = 0) {

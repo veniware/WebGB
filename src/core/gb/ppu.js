@@ -519,6 +519,11 @@ export class Ppu {
     return this.cgb ? WHITE : this.dmgBg[0];
   }
 
+  /** After the palette RAM was changed directly (memory editor). */
+  refreshPalettes() {
+    this.#refreshColors();
+  }
+
   #refreshColors() {
     for (let i = 0; i < 4; i++) {
       this.bgShades[i] = this.dmgBg[(this.bgp >> (i * 2)) & 3];

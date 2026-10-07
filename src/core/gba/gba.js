@@ -6,6 +6,7 @@ import { Bus } from './bus.js';
 import { Arm7 } from './cpu.js';
 import { Dma, Timing } from './dma.js';
 import { Gpio } from './gpio.js';
+import { memoryRegions } from './memory.js';
 import { LINE_CYCLES, Ppu, SCREEN_HEIGHT, SCREEN_WIDTH } from './ppu.js';
 import { Sio } from './sio.js';
 import { Timers } from './timers.js';
@@ -267,6 +268,10 @@ export class Gba {
 
   getSaveWrites() {
     return this.backup.writes;
+  }
+
+  getMemoryRegions() {
+    return memoryRegions(this);
   }
 
   /** Runs until the next VBlank (one frame). */

@@ -502,3 +502,46 @@ test('APU zombie mode: writing $08 to NRx2 while playing adds 1 to the volume', 
   gb.write(0xff17, 0x08);
   assert.equal(gb.apu.ch2.volume, 7);
 });
+
+// --- Memory viewer ----------------------------------------------------------------
+
+test('memory regions: CPU view, banked memory, cartridge RAM', () => {
+  const gb = new GameBoy(bankedRom(0x1b, 8, 3), { cgb: true });
+  const regions = gb.getMemoryRegions();
+  const byName = (name) => regions.find((r) => r.name.startsWith(name));
+  const bus = byName('CPU address space');
+  assert.equal(bus.size, 0x10000);
+  bus.write(0xc123, 0x5a);
+  assert.equal(gb.wram[0x123], 0x5a);
+  assert.equal(bus.read(0xc123), 0x5a);
+  assert.equal(bus.read(0xfeb0), -1, 'unusable area');
+  // Writes go through the bus: the mapper switches the ROM bank.
+  bus.write(0x2000, 3);
+  assert.equal(bus.read(0x6000), 3);
+  // The CPU view reads VRAM even while the PPU would lock it.
+  gb.ppu.vram[0x10] = 0x77;
+  gb.ppu.vramReadBlocked = true;
+  assert.equal(bus.read(0x8010), 0x77);
+
+  const wram = byName('Work RAM');
+  assert.equal(wram.size, 0x8000);
+  wram.write(0x7fff, 0x42);
+  assert.equal(gb.wram[0x7fff], 0x42);
+
+  const palettes = byName('Background palettes');
+  palettes.write(0, 0x1f);
+  palettes.write(1, 0);
+  assert.equal(gb.ppu.bgPaletteRam[0], 0x1f);
+
+  const ram = byName('Cartridge RAM');
+  assert.equal(ram.size, 0x8000);
+  const writes = gb.getSaveWrites();
+  ram.write(0x2001, 0x99);
+  assert.equal(gb.cart.ram[0x2001], 0x99);
+  assert.notEqual(gb.getSaveWrites(), writes, 'edits get saved');
+});
+
+test('memory regions: a DMG without cartridge RAM has only the CPU view', () => {
+  const regions = new GameBoy(makeGbRom()).getMemoryRegions();
+  assert.deepEqual(regions.map((r) => r.name), ['CPU address space']);
+});

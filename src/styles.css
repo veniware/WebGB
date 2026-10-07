@@ -268,6 +268,72 @@ body.dragging .drop-overlay {
   white-space: nowrap;
 }
 
+.panel#memory {
+  width: min(720px, calc(100vw - 24px));
+}
+
+.memory-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.memory-bar input {
+  width: 9em;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.memory {
+  margin-top: 12px;
+  font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.memory .address {
+  margin-right: 1ch;
+  color: var(--muted);
+}
+
+.memory .byte {
+  width: 2.6ch;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.memory .byte:focus {
+  outline: 1px solid var(--accent);
+}
+
+.memory .byte:disabled {
+  color: var(--muted);
+}
+
+.memory .text {
+  margin-left: 1ch;
+  color: var(--muted);
+  white-space: pre;
+}
+
+@media (max-width: 599px) {
+  /* No room for the text column next to the bytes. */
+  .memory .text {
+    display: none;
+  }
+}
+
 .rows {
   display: grid;
   gap: 4px;

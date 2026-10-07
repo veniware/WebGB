@@ -146,6 +146,12 @@
       </header>
     </section>
     <section>
+      <header>
+        <h3>Tools</h3>
+        <button type="button" id="memory-open" disabled>Memory viewer…</button>
+      </header>
+    </section>
+    <section>
       <header><h3>Display</h3></header>
       <div class="fields">
         <label for="set-renderer">Renderer</label>
@@ -204,6 +210,23 @@
       <tbody data-rows></tbody>
     </table>
     <footer><button type="button" data-reset>Reset to defaults</button></footer>
+  </dialog>
+
+  <dialog id="memory" class="panel">
+    <header>
+      <h2>Memory</h2>
+      <button type="button" data-close>Close</button>
+    </header>
+    <div class="memory-bar">
+      <select data-region aria-label="Memory region"></select>
+      <input data-address placeholder="Address (hex)" aria-label="Go to address" spellcheck="false" autocomplete="off">
+      <button type="button" data-go>Go</button>
+      <button type="button" data-prev aria-label="Previous page">◀</button>
+      <button type="button" data-next aria-label="Next page">▶</button>
+      <button type="button" data-frame>Next frame</button>
+    </div>
+    <div class="memory" data-grid></div>
+    <footer><span data-range></span> · The game is paused; type two hex digits to change a byte.</footer>
   </dialog>
 </body>
 </html>

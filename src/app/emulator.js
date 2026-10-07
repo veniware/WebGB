@@ -193,6 +193,17 @@ export class Emulator extends Emitter {
     this.emit('paused', paused);
   }
 
+  /** Runs one frame with no buttons and no sound, e.g. while paused in the memory viewer. */
+  stepFrame() {
+    const { core } = this;
+    if (!core) return;
+    core.setInput(0);
+    core.runFrame();
+    core.getAudioSamples();
+    this.#watchSaves(core);
+    this.#display.draw(core.getFrameBuffer());
+  }
+
   reset() {
     if (!this.core) return;
     this.core.reset();

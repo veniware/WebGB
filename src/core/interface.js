@@ -40,6 +40,18 @@
  * @property {(options: object) => void} [configure]
  *   Optional: applies user options (e.g. palettes) while running. The host
  *   passes the same options to createCore() and again whenever they change.
+ * @property {() => MemoryRegion[]} [getMemoryRegions]  For the memory viewer/editor.
+ */
+
+/**
+ * A block of memory the user can inspect and edit.
+ * @typedef {object} MemoryRegion
+ * @property {string} name
+ * @property {number} base  Address shown for the first byte.
+ * @property {number} size  In bytes.
+ * @property {(offset: number) => number} read  A byte, or -1 when it can't be
+ *   read; never changes the machine's state.
+ * @property {((offset: number, value: number) => void) | null} write  null: read-only.
  */
 
 /**

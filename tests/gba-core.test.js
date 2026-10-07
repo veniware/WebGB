@@ -275,3 +275,30 @@ test('snapshots restore the whole machine, sound and timers included', () => {
   assert.equal(hash(fresh), expected);
   assert.throws(() => new Gba(cart([0]).subarray(0, 0x800)).loadState(state), /different game/);
 });
+
+test('memory regions: RAM, I/O, video memory, ROM and save memory', () => {
+  const gba = new Gba(cart([], { extra: 'SRAM_V113' }));
+  const regions = gba.getMemoryRegions();
+  const byName = (name) => regions.find((r) => r.name.startsWith(name));
+  const ewram = byName('Work RAM (on board)');
+  assert.equal(ewram.base, 0x02000000);
+  ewram.write(5, 0xab);
+  assert.equal(gba.bus.read8(0x02000005), 0xab);
+
+  const io = byName('I/O registers');
+  io.write(0x200, 0x01);
+  assert.equal(gba.irq.ie & 0xff, 0x01, 'IE written through the registers');
+  assert.equal(io.read(0x200), 0x01);
+  assert.equal(io.read(0x0e0), -1, 'unused register');
+
+  const rom = byName('ROM');
+  assert.equal(rom.write, null);
+  assert.equal(rom.read(0xac), 'T'.charCodeAt(0));
+
+  const save = byName('Save memory');
+  assert.equal(save.name, 'Save memory (SRAM)');
+  const writes = gba.getSaveWrites();
+  save.write(0, 0x12);
+  assert.equal(gba.getSaveData()[0], 0x12);
+  assert.notEqual(gba.getSaveWrites(), writes);
+});
