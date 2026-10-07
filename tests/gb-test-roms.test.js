@@ -1,38 +1,13 @@
 // Runs open-source Game Boy test ROMs: Blargg's tests, the Mooneye Test
-// Suite, dmg-acid2 and cgb-acid2. They are not in the repository; fetch them
-// with `npm run fetch-test-roms` (into tests/roms/), otherwise these are skipped.
+// Suite, the Mealybug Tearoom tests, dmg-acid2 and cgb-acid2 (more suites in
+// gb-test-suites.test.js). Fetch them with `npm run fetch-test-roms`;
+// otherwise these are skipped. Known failures: known-failures.js.
 
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
-import { test } from 'node:test';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { GameBoy } from '../src/core/gb/gameboy.js';
-import { DMG_PALETTES } from '../src/core/gb/palettes.js';
-import { decodePng } from './png.js';
-
-const ROOT = new URL('./roms/', import.meta.url).pathname;
-const available = existsSync(join(ROOT, 'blargg'));
-
-// Known failures, with the reason. Keep this list short and honest.
-const KNOWN_FAILURES = {
-  'mealybug-tearoom-tests/ppu/m3_lcdc_bg_en_change.gb': 'off by a pixel at some transitions',
-  'mealybug-tearoom-tests/ppu/m3_lcdc_obj_en_change.gb': 'sprite fetch aborted by disabling sprites',
-  'mealybug-tearoom-tests/ppu/m3_lcdc_obj_en_change_variant.gb': 'sprite fetch aborted by disabling sprites',
-  'mealybug-tearoom-tests/ppu/m3_lcdc_win_en_change_multiple_wx.gb': 'window re-enabled with WX changes',
-  'mealybug-tearoom-tests/ppu/m3_wx_4_change.gb': 'WX below 7 changed mid-line',
-  'mealybug-tearoom-tests/ppu/m3_wx_4_change_sprites.gb': 'WX below 7 changed mid-line',
-  'mealybug-tearoom-tests/ppu/m3_wx_5_change.gb': 'WX below 7 changed mid-line',
-  'mealybug-tearoom-tests/ppu/m3_wx_6_change.gb': 'WX below 7 changed mid-line',
-};
-
-function load(path) {
-  return new Uint8Array(readFileSync(join(ROOT, path)));
-}
-
-function romTest(path, fn) {
-  const reason = KNOWN_FAILURES[path];
-  test(path, { skip: !available ? 'test ROMs not fetched (npm run fetch-test-roms)' : reason && `known failure: ${reason}` }, fn);
-}
+import { available, exists, listRoms, load, makeGameBoy, ROOT, romTest, runToOpcode, screenDiff } from './test-roms.js';
 
 /**
  * Blargg's tests print to the serial port and/or write a status to cartridge
@@ -88,15 +63,6 @@ function runMooneye(path, cgb) {
   return out.join(' ');
 }
 
-function listRoms(dir) {
-  const path = join(ROOT, dir);
-  if (!existsSync(path)) return [];
-  return readdirSync(path).flatMap((name) => {
-    const full = join(path, name);
-    if (statSync(full).isDirectory()) return listRoms(relative(ROOT, full));
-    return name.endsWith('.gb') ? [relative(ROOT, full)] : [];
-  });
-}
 
 /**
  * Tests are named after the models they pass on; run the ones for the
@@ -112,8 +78,8 @@ function mooneyeModel(path) {
 
 // The misc/boot_* and unused_hwio-C tests are DMG games on a CGB (its DMG
 // compatibility mode), which isn't emulated: DMG games run as DMG.
-const mooneye = [...listRoms('mooneye-test-suite/acceptance'), ...listRoms('mooneye-test-suite/emulator-only'),
-  ...listRoms('mooneye-test-suite/misc').filter((path) => !/\/boot_|unused_hwio-C/.test(path))].sort();
+const mooneye = [...listRoms('mooneye-test-suite/acceptance', /\.gb$/), ...listRoms('mooneye-test-suite/emulator-only', /\.gb$/),
+  ...listRoms('mooneye-test-suite/misc', /\.gb$/).filter((path) => !/\/boot_|unused_hwio-C/.test(path))].sort();
 for (const path of mooneye) {
   const model = mooneyeModel(path);
   if (!model) continue;
@@ -123,28 +89,20 @@ if (!available) romTest('mooneye-test-suite', () => {});
 
 /** The acid2 tests execute LD B,B when done; the screen must match the reference. */
 function runAcid(path, reference, cgb, gbPalette) {
-  const gb = new GameBoy(load(path), { cgb });
+  const gb = makeGameBoy(path, { cgb });
   if (gbPalette) gb.configure({ gbPalette });
-  else gb.ppu.setDmgPalette(DMG_PALETTES.gray);
-  const { cpu } = gb;
-  for (let i = 0; i < 10_000_000 && (cpu.halted || gb.read(cpu.pc) !== 0x40); i++) cpu.step();
+  runToOpcode(gb, 0x40, 10_000_000);
   for (let i = 0; i < 3; i++) gb.runFrame();
-  const frame = gb.getFrameBuffer();
-  const expected = decodePng(load(reference)).pixels;
-  let different = 0;
-  for (let i = 0; i < frame.length; i += 4) {
-    if (frame[i] !== expected[i] || frame[i + 1] !== expected[i + 1] || frame[i + 2] !== expected[i + 2]) different++;
-  }
-  return different;
+  return screenDiff(gb, reference);
 }
 
 // Mealybug Tearoom: register changes in the middle of a line (DMG screenshots).
 const MEALYBUG = 'mealybug-tearoom-tests/ppu';
-const mealybug = available && existsSync(join(ROOT, MEALYBUG))
+const mealybug = available && exists(MEALYBUG)
   ? readdirSync(join(ROOT, MEALYBUG)).filter((name) => name.endsWith('.gb')).sort() : [];
 for (const name of mealybug) {
   const base = name.slice(0, -3);
-  const reference = [`${base}_dmg_blob.png`, `${base}_dmg_b.png`].find((file) => existsSync(join(ROOT, MEALYBUG, file)));
+  const reference = [`${base}_dmg_blob.png`, `${base}_dmg_b.png`].find((file) => exists(`${MEALYBUG}/${file}`));
   if (!reference) continue;
   romTest(`${MEALYBUG}/${name}`, () => {
     assert.equal(runAcid(`${MEALYBUG}/${name}`, `${MEALYBUG}/${reference}`, false), 0);

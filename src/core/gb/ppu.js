@@ -304,6 +304,8 @@ export class Ppu {
           this.windowTriggered = false;
           this.oamReadBlocked = true;
           this.oamScan = !this.cgb;
+          // STAT reads mode 0 for these 4 dots on a DMG (and early CGBs).
+          if (!this.cgb) this.mode = 0;
           this.#next(Phase.OAM_SCAN, 4);
         } else {
           this.ly++;
@@ -692,6 +694,8 @@ export class Ppu {
     this.lcdc = value;
     this.oamScan = false;
     if (wasOn && !(value & 0x80)) {
+      // Switching off outside HBlank lets a waiting HBlank DMA block through.
+      if (this.mode !== 0) this.gb.hblank();
       this.ly = 0;
       this.mode = 0;
       this.irqMode = 0;

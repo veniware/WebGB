@@ -16,8 +16,10 @@ import { Timer } from './timer.js';
 const BOOT_DOT = 396;
 
 const STATE_MAGIC = 0x53424757; // "WGBS"
-// M-cycles the CPU is held while switching speed.
-const SPEED_SWITCH_CYCLES = 2050;
+// M-cycles the CPU is held while switching speed: about 0x20008 T-cycles, so
+// DIV (which keeps counting) wraps around twice and seems to stand still
+// (as measured by the AGE tests; SameBoy agrees).
+const SPEED_SWITCH_CYCLES = 0x20008 / 4 - 2;
 
 /**
  * Game Boy / Game Boy Color system: the memory map, I/O registers, OAM DMA
@@ -664,13 +666,16 @@ export class GameBoy {
 
   #writeHdma(value) {
     if (this.hdmaActive && !(value & 0x80)) {
-      // Stops an HBlank transfer; FF55 then reads the remaining length with bit 7 set.
+      // Stops an HBlank transfer; FF55 then reads bit 7 set and the length just written.
       this.hdmaActive = false;
+      this.hdmaLength = value & 0x7f;
       return;
     }
     this.hdmaLength = value & 0x7f;
     if (value & 0x80) {
       this.hdmaActive = true;
+      // Started in HBlank (or with the LCD off): the first block goes now.
+      if (this.ppu.mode === 0) this.hblank();
       return;
     }
     // General-purpose DMA: everything at once, with the CPU held meanwhile.

@@ -481,3 +481,14 @@ test('Super Game Boy state survives snapshots', () => {
   assert.equal(other.sgb.mask, 2);
   assert.throws(() => new GameBoy(sgbRom()).loadState(state));
 });
+
+test('a running Game Boy can take a link cable; a linked pair cannot', async () => {
+  const { canLink } = await import('../src/core/registry.js');
+  const { createLinkedCore } = await import('../src/core/gb/index.js');
+  const info = { system: 'gb' };
+  const gb = new GameBoy(makeGbRom());
+  assert.equal(canLink(gb, info), true);
+  assert.equal(canLink(gb, { system: 'gba' }), false);
+  const linked = createLinkedCore(gb, makeGbRom(), info, {});
+  assert.equal(canLink(linked, info), false);
+});

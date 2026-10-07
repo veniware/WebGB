@@ -136,7 +136,11 @@ tools/fetch-test-roms.js  Downloads the test ROM collection into tests/roms/
 tests/                  node:test tests (+ helpers.js for fake ROMs/zips, png.js
                         to compare screenshots)
   gb-core.test.js       Game Boy core unit tests (hand-assembled programs, mappers)
-  gb-test-roms.test.js  Runs the downloaded test ROMs; lists known failures
+  gb-test-roms.test.js  Blargg, Mooneye, Mealybug, acid2 test ROMs
+  gb-test-suites.test.js  SameSuite, AGE, GBMicrotest, rtc3test, screenshot tests,
+                        Mooneye (wilbertpol)
+  test-roms.js          Shared helpers for the test ROM files
+  known-failures.js     Test ROMs that don't pass yet, with reasons
 ```
 
 ### Data flow per animation frame
@@ -256,11 +260,16 @@ so short taps are never lost.
 - `tests/gb-core.test.js`: fast unit tests that need no ROMs.
 - `tests/gb-test-roms.test.js`: Blargg's tests (serial or cartridge-RAM
   output), the Mooneye Test Suite (Fibonacci registers over serial),
-  dmg-acid2 and cgb-acid2 (screenshot vs reference PNG). Skipped until
-  `npm run fetch-test-roms` has downloaded them (the c-sp/game-boy-test-roms
-  release). `KNOWN_FAILURES` lists the ones that don't pass yet, with reasons;
-  remove entries as they get fixed, and don't add new ones to hide
-  regressions.
+  Mealybug, dmg-acid2 and cgb-acid2 (screenshot vs reference PNG).
+- `tests/gb-test-suites.test.js`: SameSuite (CGB), AGE, GBMicrotest,
+  rtc3test (on emulated time), Bully, Strikethrough, TurtleTests,
+  scribbltests, little-things-gb, mbc3-tester, cgb-acid-hell, wilbertpol's
+  Mooneye. Each suite's pass criteria follow the c-sp collection's notes.
+- The ROMs are skipped until `npm run fetch-test-roms` has downloaded them
+  (the c-sp/game-boy-test-roms release). `tests/known-failures.js` lists
+  the ones that don't pass yet, with reasons (mostly timing within an
+  M-cycle and APU details); remove entries as they get fixed, and don't add
+  new ones to hide regressions.
 
 ## Conventions
 

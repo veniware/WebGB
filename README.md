@@ -28,7 +28,8 @@ npm run fetch-test-roms   # optional: download test ROMs for the accuracy tests
 ```
 
 `npm test` also runs open-source test ROMs (Blargg's tests, the Mooneye Test
-Suite, dmg-acid2, cgb-acid2) when they have been downloaded to `tests/roms/`.
+Suite, Mealybug, the acid2 tests, SameSuite, AGE, GBMicrotest and more) when
+they have been downloaded to `tests/roms/`.
 
 ## Features
 
