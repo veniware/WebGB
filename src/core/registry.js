@@ -35,7 +35,7 @@ export async function createCore(rom, info, options = {}) {
 
 /** Whether a running core can be linked with another game (link cable). */
 export function canLink(core, info) {
-  return Boolean(core && !core.players && findCore(info.system)?.link);
+  return Boolean(core && (core.players ?? 1) === 1 && findCore(info.system)?.link);
 }
 
 /**
