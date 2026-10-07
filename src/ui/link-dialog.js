@@ -19,8 +19,25 @@ export function createLinkDialog({ dialog, modals, emulator, onError }) {
     async function render() {
         const roms = (await listRoms()).filter((rom) => emulator.canLink(rom.info));
         const rows = await Promise.all(roms.map(async (rom) => romRow(rom, await listSaves(rom.key))));
+        if (emulator.canLinkCartless()) rows.unshift(cartlessRow());
         list.replaceChildren(...rows);
-        empty.hidden = roms.length > 0;
+        empty.hidden = rows.length > 0;
+    }
+
+    /** A GBA without a cartridge: games that support it send it what it runs (multiboot). */
+    function cartlessRow() {
+        return h(
+            "li",
+            {},
+            h("span", { className: "badge", textContent: SYSTEM_SHORT.gba }),
+            h(
+                "div",
+                { className: "grow" },
+                h("strong", { textContent: "No cartridge" }),
+                h("small", { textContent: "For games with single-cartridge multiplayer: player 2 gets the game over the cable." }),
+            ),
+            h("div", { className: "actions" }, h("button", { type: "button", textContent: "Connect", onclick: () => link(null, null) })),
+        );
     }
 
     function romRow(rom, saves) {
@@ -34,11 +51,12 @@ export function createLinkDialog({ dialog, modals, emulator, onError }) {
         );
     }
 
+    /** @param {{ key: string } | null} rom  null: no cartridge. */
     async function link(rom, saveId) {
         try {
             // Portrait screens stack the two games.
             const vertical = window.innerHeight > window.innerWidth;
-            await emulator.link(rom.key, { saveId, vertical });
+            await emulator.link(rom?.key ?? null, { saveId, vertical });
             dialog.close();
         } catch (err) {
             onError(err);

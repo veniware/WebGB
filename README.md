@@ -63,7 +63,8 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
 - **Link cable:** play two games linked side by side (stacked in portrait),
   e.g. to trade or battle; player 2 uses the keyboard or a second gamepad.
   Game Boy / Game Boy Color games link with each other, GBA games with
-  each other (multiplayer, normal and UART modes).
+  each other (multiplayer, normal and UART modes). Player 2 can also be a
+  GBA without a cartridge, for games with single-cartridge multiplayer.
 - **ROM library:** ROMs you open or drop onto the page (`.gb`, `.gbc`,
   `.gba`, plain or zipped) are kept in the browser. Browse, play, export and
   delete them from the Library.

@@ -16,7 +16,8 @@ export const PLAYER_2_SHIFT = 16;
  * Two GBAs connected by a link cable, presented to the host as one core:
  * both screens side by side (or stacked), both sounds mixed, player 2's
  * buttons in the upper 16 bits. Player 1 is the parent (the cable's purple
- * end). The machines run in turn, a slice at a time, each on its own clock
+ * end). Player 2 can be a GBA without a cartridge, booted over the cable
+ * (multiboot.js). The machines run in turn, a slice at a time, each on its own clock
  * (they started at different times); the serial ports convert times with
  * the difference.
  */
@@ -42,12 +43,15 @@ export class LinkedGbas {
         this.audio = new Float32Array(16384);
         this.audioLength = 0;
         this.#connect();
+        for (const gba of [...this.machines].reverse()) gba.sio.plugged();
     }
 
     #connect() {
         const [a, b] = this.machines;
         // Where each machine's clock is at the end of the current slice.
         this.time = a.bus.cycles;
+        a.partner = b;
+        b.partner = a;
         a.sio.link = b.sio;
         b.sio.link = a.sio;
         a.sio.player = 0;
@@ -59,6 +63,7 @@ export class LinkedGbas {
     /** Disconnects; the machines keep running on their own. */
     unlink() {
         for (const gba of this.machines) {
+            gba.partner = null;
             gba.sio.link = null;
             gba.sio.player = 0;
         }

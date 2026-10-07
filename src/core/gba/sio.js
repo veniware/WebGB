@@ -40,6 +40,8 @@ export class Sio {
     player = 0;
     /** The partner's clock minus this machine's clock. */
     offset = 0;
+    /** Called with the parent's word after each linked multiplayer transfer (multiboot.js). */
+    onMulti = null;
 
     /**
      * @param {{ now: () => number, requestIrq: (bit: number, time: number) => void,
@@ -214,9 +216,25 @@ export class Sio {
         }
     }
 
+    /**
+     * The cable was just plugged in (link.js). A multiplayer start written
+     * without it stays busy forever; with the cable, the parent's goes ahead
+     * and a child's clears (its busy bit shows the parent's transfers).
+     */
+    plugged() {
+        if (this.mode !== Mode.MULTI || !(this.siocnt & 0x80) || this.transfer) return;
+        this.siocnt &= ~0x80;
+        if (this.player === 0) this.#startMulti();
+    }
+
+    /** How long a multiplayer transfer takes at the current baud rate. */
+    multiCycles() {
+        return START_DELAY + MULTI_CYCLES[this.siocnt & 3];
+    }
+
     /** The parent starts a multiplayer transfer for both machines. */
     #startMulti() {
-        const end = this.hooks.now() + START_DELAY + MULTI_CYCLES[this.siocnt & 3];
+        const end = this.hooks.now() + this.multiCycles();
         this.transfer = { words: [this.data8, -1] };
         const partner = this.link;
         if (partner.mode === Mode.MULTI) partner.#begin(this.transfer, end + this.offset);
@@ -266,6 +284,7 @@ export class Sio {
             this.data[2] = 0xffff;
             this.data[3] = 0xffff;
             this.siocnt = (this.siocnt & ~0x70) | (this.player << 4);
+            this.onMulti?.(this.data[0]);
         } else if (transfer) {
             // Normal mode: the master (internal clock) and the slave swap words.
             const master = (this.siocnt & 1) !== 0;

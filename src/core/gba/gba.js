@@ -7,6 +7,7 @@ import { Arm7 } from "./cpu.js";
 import { Dma, Timing } from "./dma.js";
 import { Gpio } from "./gpio.js";
 import { IdleLoops } from "./idle.js";
+import { multiBoot, MultibootClient } from "./multiboot.js";
 import { TILT_GAMES, TiltSensor } from "./tilt.js";
 import { memoryRegions } from "./memory.js";
 import { LINE_CYCLES, Ppu, SCREEN_HEIGHT, SCREEN_WIDTH } from "./ppu.js";
@@ -60,12 +61,19 @@ export class Gba {
 
     /**
      * @param {Uint8Array} rom
-     * @param {{ bios?: Uint8Array | null, biosIntro?: boolean, now?: () => number }} [options]
+     * @param {{ bios?: Uint8Array | null, biosIntro?: boolean, cartless?: boolean, now?: () => number }} [options]
      *     bios: a BIOS dump to use instead of the built-in calls; biosIntro: start
-     *     with its boot animation instead of at the game.
+     *     with its boot animation instead of at the game; cartless: no cartridge,
+     *     the machine waits for a program over the link cable (multiboot).
      */
-    constructor(rom, { bios = null, biosIntro = false, now } = {}) {
+    constructor(rom, { bios = null, biosIntro = false, cartless = false, now } = {}) {
         this.rom = rom;
+        this.cartless = cartless;
+        /** The other machine on the link cable, or null (link.js). */
+        this.partner = null;
+        // The BIOS is busy (multiboot) until then: no instructions run, time goes on.
+        this.stallUntil = 0;
+        this.onStallEnd = null;
         this.ioRegs = new Uint16Array(0x200);
         this.irq = new Interrupts((time) => this.#updateIrq(time));
         this.backup = new Backup(detectBackup(rom));
@@ -125,6 +133,8 @@ export class Gba {
         const onLoop = (cpu, target) => this.idleLoops.onLoop(cpu, target);
         this.cpu = new Arm7(this.bus, bios ? { onIrqEnable, onLoop } : { swi: createHleBios(this), onIrqEnable, onLoop });
         this.bus.cpu = this.cpu;
+        // The built-in BIOS's multiboot receiver; a BIOS file brings its own.
+        this.multibootClient = cartless && !bios ? new MultibootClient(this) : null;
         this.buttons = 0;
         this.reset();
     }
@@ -151,13 +161,31 @@ export class Gba {
         // Inside the BIOS's IntrWait (see bios.js).
         this.biosWaiting = false;
         this.frameStart = 0;
-        if (this.realBios && this.biosIntro) {
+        this.stallUntil = 0;
+        this.onStallEnd = null;
+        if (this.realBios && (this.biosIntro || this.cartless)) {
+            // Without a cartridge the BIOS itself waits for multiboot.
             this.cpu.reset();
             this.cpu.branch(0);
+        } else if (this.multibootClient) {
+            this.multibootClient.reset();
         } else {
             bootState(this.cpu);
             this.postflg = 1;
         }
+    }
+
+    /** The BIOS keeps the CPU busy until `until` (then calls `onEnd`), e.g. during multiboot. */
+    stall(until, onEnd = null) {
+        this.stallUntil = until;
+        this.onStallEnd = onEnd;
+        // Stop the instruction loop now.
+        this.eventTime = this.bus.cycles;
+    }
+
+    /** SWI 0x25 on the built-in BIOS (see multiboot.js). */
+    multiBoot(param, mode) {
+        return multiBoot(this, param, mode);
     }
 
     /** SoftReset: restarts the game (or the RAM-loaded program). */
@@ -340,18 +368,28 @@ export class Gba {
         while (bus.cycles < stop && !(untilVblank && ppu.frameDone)) {
             this.eventCount++;
             this.eventTime = Math.min(ppu.nextEvent, this.timers.nextEvent, this.apu.nextEvent, this.sio.nextEvent, stop);
-            // Interrupts are taken between instructions once due; until then they
-            // bring the next stop forward (as do HALT and newly scheduled events).
-            if (this.irqLine && !cpu.irqDisable) {
-                if (bus.cycles >= this.irqReadyAt) cpu.irq();
-                else if (this.irqReadyAt < this.eventTime) this.eventTime = this.irqReadyAt;
+            if (bus.cycles < this.stallUntil) {
+                // The BIOS is busy: time moves on to the next event or the stall's end.
+                bus.cycles = Math.min(this.eventTime, this.stallUntil);
+            } else {
+                if (this.onStallEnd) {
+                    const onEnd = this.onStallEnd;
+                    this.onStallEnd = null;
+                    onEnd();
+                }
+                // Interrupts are taken between instructions once due; until then they
+                // bring the next stop forward (as do HALT and newly scheduled events).
+                if (this.irqLine && !cpu.irqDisable) {
+                    if (bus.cycles >= this.irqReadyAt) cpu.irq();
+                    else if (this.irqReadyAt < this.eventTime) this.eventTime = this.irqReadyAt;
+                }
+                if (cpu.halted) {
+                    if (!this.wakeLine) bus.cycles = this.eventTime;
+                    else if (bus.cycles >= this.irqReadyAt) cpu.halted = false;
+                    else bus.cycles = Math.min(this.irqReadyAt, this.eventTime);
+                }
+                while (bus.cycles < this.eventTime && !cpu.halted) cpu.step();
             }
-            if (cpu.halted) {
-                if (!this.wakeLine) bus.cycles = this.eventTime;
-                else if (bus.cycles >= this.irqReadyAt) cpu.halted = false;
-                else bus.cycles = Math.min(this.irqReadyAt, this.eventTime);
-            }
-            while (bus.cycles < this.eventTime && !cpu.halted) cpu.step();
             const now = bus.cycles;
             if (ppu.nextEvent <= now) ppu.event(ppu.nextEvent);
             if (this.timers.nextEvent <= now) this.timers.event(now);
@@ -369,6 +407,7 @@ export class Gba {
     }
 
     getSaveData() {
+        if (this.cartless) return null;
         // The clock's settings follow the save memory, if the game changed them.
         const clock = this.gpio.rtc ? this.gpio.toSave() : new Uint8Array(0);
         if (this.backup.type === "none" && !clock.length && !this.backup.data.some((b) => b !== 0xff)) return null;
@@ -381,6 +420,7 @@ export class Gba {
     }
 
     loadSaveData(data) {
+        if (this.cartless) return;
         // Save memory sizes are multiples of 512 bytes; 16 more are the clock.
         if (this.gpio.rtc && data.length % 512 === 16 && this.gpio.fromSave(data.subarray(data.length - 16))) {
             data = data.subarray(0, data.length - 16);
@@ -439,6 +479,8 @@ export class Gba {
         this.postflg = s.u8(this.postflg);
         this.biosWaiting = s.bool(this.biosWaiting);
         this.irqReadyAt = s.f64(this.irqReadyAt);
+        // Only linked machines can stall (multiboot); the host keeps no linked states.
+        if (this.sio.link) this.stallUntil = s.f64(this.stallUntil);
         this.wakeLine = false;
         this.irqLine = false;
         const readyAt = this.irqReadyAt;

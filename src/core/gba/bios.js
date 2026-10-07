@@ -477,7 +477,7 @@ export function createHleBios(gba) {
                 r[0] = Math.floor(frequency / 2 ** ((180 - r[1] - r[2] / 256) / 12)) | 0;
                 return true;
             }
-            case 0x25: r[0] = 1; return true; // MultiBoot: no link cable, fails
+            case 0x25: r[0] = gba.multiBoot(r[0] >>> 0, r[1]) ? 0 : 1; return true; // MultiBoot (multiboot.js)
             case 0x26: gba.softReset(false); return true; // HardReset
             case 0x27: gba.halt(); return true; // CustomHalt
             case 0x1a: case 0x1b: case 0x1c: case 0x1d: case 0x1e:

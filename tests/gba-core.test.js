@@ -488,6 +488,21 @@ test("link cable: a multiplayer transfer swaps both words and interrupts both", 
     }
 });
 
+test("link cable: a multiplayer start written before the cable was plugged in goes ahead", async () => {
+    const { createLinkedCore } = await import("../src/core/gba/index.js");
+    const first = new Gba(cart());
+    first.write16(0x134, 0);
+    first.write16(0x128, 0x2003);
+    first.write16(0x12a, 0x1234);
+    first.write16(0x128, 0x2083);
+    run(first, 1);
+    assert.equal(first.read16(0x128) & 0x80, 0x80, "unplugged: busy for good");
+    const linked = createLinkedCore(first, cart(), { system: "gba" }, {});
+    linked.runFrame();
+    assert.equal(first.read16(0x128) & 0x80, 0, "done");
+    assert.deepEqual([0x120, 0x122].map((r) => first.read16(r)), [0x1234, 0xffff], "the child isn't in multiplayer mode");
+});
+
 test("link cable: a Normal-mode transfer swaps words with a slave that waits", async () => {
     const { linked, a, b } = await linkedPair();
     const setWord = (gba, word) => {
@@ -534,4 +549,149 @@ test("link cable: UART sends bytes at the baud rate, through the FIFOs", async (
     a.write16(0x128, 0x7f83);
     a.write16(0x12a, 0x55);
     assert.equal(a.read16(0x128) & 0x30, 0x20);
+});
+
+// --- Multiboot -------------------------------------------------------------------------
+
+/**
+ * A multiboot program (0x1C0 bytes, loaded at 0x02000000): a header, the
+ * entry point at 0x020000C0 jumping over the bytes the BIOS fills in, then
+ * code that writes 0x42 at 0x03000000.
+ */
+function multibootProgram() {
+    const program = new Uint8Array(0x1c0);
+    const view = new DataView(program.buffer);
+    view.setUint32(0, 0xea00002e, true); // b 0x020000C0
+    view.setUint32(0xc0, 0xea000006, true); // b 0x020000E0
+    [0xe3a00403, 0xe3a01042, 0xe5801000, IDLE].forEach((word, i) => view.setUint32(0xe0 + i * 4, word, true));
+    return program;
+}
+
+async function cartlessPair() {
+    const { createLinkedCore } = await import("../src/core/gba/index.js");
+    const first = new Gba(cart());
+    run(first, 3);
+    const linked = createLinkedCore(first, null, { system: "gba" }, {});
+    const [a, b] = linked.machines;
+    a.write16(0x134, 0); // RCNT: SIO
+    a.write16(0x128, 0x2003); // multiplayer, 115200 bps
+    /** One multiplayer transfer from the parent; returns the child's word. */
+    const send = (word) => {
+        a.write16(0x12a, word);
+        a.write16(0x128, 0x2083);
+        linked.runFrame();
+        assert.equal(a.read16(0x128) & 0x80, 0, "transfer done");
+        return a.read16(0x122);
+    };
+    return { linked, a, b, send };
+}
+
+function crc(value, data) {
+    for (let i = 0; i < 32; i++) {
+        const bit = (value ^ data) & 1;
+        data >>>= 1;
+        value >>>= 1;
+        if (bit) value ^= 0xa517;
+    }
+    return value;
+}
+
+/** Steps 1-8 of the multiboot handshake (as gba-link-connection's sender); returns the client's byte. */
+function handshake(send, program, { confirm = true } = {}) {
+    let reply = 0;
+    for (let i = 0; i < 16 && reply !== 0x7202; i++) reply = send(0x6200);
+    assert.equal(reply, 0x7202, "client 1 answers");
+    assert.equal(send(0x6102), 0x7202);
+    for (let i = 0; i < 0x60; i++) {
+        assert.equal(send(program[i * 2] | (program[i * 2 + 1] << 8)), ((0x60 - i) << 8) | 2, "header");
+    }
+    if (confirm) {
+        assert.equal(send(0x6200), 0x0002);
+        assert.equal(send(0x6202), 0x7202);
+    }
+    for (let i = 0; i < 16 && (reply & 0xff00) !== 0x7300; i++) reply = send(0x63d1);
+    assert.equal(reply & 0xff00, 0x7300, "client data");
+    const clientData = reply & 0xff;
+    const handshakeData = (0x11 + clientData + 0xff + 0xff) & 0xff;
+    assert.equal(send(0x6400 | handshakeData) & 0xff00, 0x7300);
+    return { clientData, handshakeData };
+}
+
+test("multiboot: a GBA without a cartridge waits, then runs the program the game sends", async () => {
+    for (const confirm of [true, false]) {
+        const { linked, a, b, send } = await cartlessPair();
+        assert.equal(b.cartless, true);
+        assert.equal(b.getSaveData(), null, "no saves");
+        assert.equal(b.read16(0) & 0x80, 0x80, "forced blank while it waits");
+        run(linked, 2);
+        const program = multibootProgram();
+        const { clientData, handshakeData } = handshake(send, program, { confirm });
+        // The game sends the length and the encrypted words itself.
+        const words = new DataView(program.buffer);
+        const reply = send((program.length - 0x190) / 4);
+        let seed = (0xd1 | (clientData << 8) | 0xffff0000) >>> 0;
+        let check = 0xfff8;
+        for (let i = 0xc0 / 4; i < program.length / 4; i++) {
+            seed = (Math.imul(seed, 0x6f646573) + 1) >>> 0;
+            const plain = words.getUint32(i * 4, true);
+            const data = ((plain ^ (0xfe000000 - (i << 2)) ^ seed ^ 0x6465646f) >>> 0);
+            assert.equal(send(data & 0xffff), (i << 2) & 0xffff);
+            assert.equal(send(data >>> 16), ((i << 2) + 2) & 0xffff);
+            check = crc(check, plain);
+        }
+        check = crc(check & 0xffff, (handshakeData | ((reply & 0xff) << 8) | 0xffff0000) >>> 0);
+        send(0x65);
+        assert.equal(send(0x65), 0x75, "ready for the CRC");
+        send(0x66);
+        assert.equal(send(check), check, "same CRC");
+        run(linked, 1);
+        assert.equal(b.bus.iwram[0], 0x42, "the program ran");
+        assert.equal(b.bus.ewram[0xc4], 3, "multiplayer boot");
+        assert.equal(b.read16(0) & 0x80, 0, "screen on");
+    }
+});
+
+test("multiboot: SWI 0x25 sends the program to a client after the handshake", async () => {
+    const { linked, a, b, send } = await cartlessPair();
+    const program = multibootProgram();
+    const param = 0x03000100;
+    // MultiBootParam: boot_srcp/boot_endp point past the header, at the program in EWRAM.
+    a.bus.ewram.set(program, 0x1000);
+    a.bus.write32(param + 0x20, 0x02001000 + 0xc0);
+    a.bus.write32(param + 0x24, 0x02001000 + program.length);
+    assert.equal(a.multiBoot(param, 1), false, "no client yet");
+    handshake(send, program);
+    a.bus.write32(param + 0x24, 0x02001000 + program.length - 4);
+    assert.equal(a.multiBoot(param, 1), false, "length not a multiple of 16");
+    a.bus.write32(param + 0x24, 0x02001000 + program.length);
+    const start = a.bus.cycles;
+    assert.equal(a.multiBoot(param, 1), true);
+    assert.ok(a.stallUntil > start + 64 * 2 * 6000, "the parent's BIOS is busy for the transfer");
+    run(linked, 1);
+    assert.equal(b.bus.iwram[0], 0, "not started before the transfer would end");
+    run(linked, 2);
+    assert.ok(a.bus.cycles >= a.stallUntil);
+    assert.equal(b.bus.iwram[0], 0x42, "the program ran");
+    assert.deepEqual([...b.bus.ewram.subarray(0, 0xc0)], [...program.subarray(0, 0xc0)], "header from the handshake");
+    assert.deepEqual([...b.bus.ewram.subarray(0xc4, 0xc6)], [3, 1], "boot mode, client number");
+});
+
+test("multiboot: a wrong CRC sends the client back to waiting", async () => {
+    const { linked, b, send } = await cartlessPair();
+    const program = multibootProgram();
+    handshake(send, program);
+    send((program.length - 0x190) / 4);
+    for (let i = 0xc0 / 4; i < program.length / 4; i++) {
+        send(0);
+        send(0);
+    }
+    send(0x65);
+    send(0x65);
+    const check = send(0x66);
+    send(check ^ 1);
+    run(linked, 2);
+    assert.equal(b.bus.iwram[0], 0);
+    assert.equal(b.multibootClient.ready, false);
+    send(0x6200);
+    assert.equal(send(0x6200), 0x7202, "waits for a new handshake");
 });

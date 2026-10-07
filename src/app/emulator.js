@@ -16,6 +16,8 @@ const SAVE_CHECK_INTERVAL = 2000;
 // Rewind: a state every this many emulated frames, played back at this many states per second (3x speed).
 const REWIND_INTERVAL = 6;
 const REWIND_STEPS_PER_SECOND = 30;
+// Player 2 as a GBA without a cartridge (multiboot): no ROM, no saved games.
+const CARTLESS = { key: null, name: "No cartridge", size: 0, info: { system: "gba", title: "a GBA without a cartridge" } };
 
 /**
  * The host: owns the running core and drives it from requestAnimationFrame,
@@ -271,15 +273,21 @@ export class Emulator extends Emitter {
         return !this.player2 && canLink(this.core, info);
     }
 
+    /** Whether a GBA without a cartridge can be linked to the running game (multiboot). */
+    canLinkCartless() {
+        return this.canLink(CARTLESS.info);
+    }
+
     /**
      * Connects a second game from the library with a link cable, as player 2.
      * The running game carries on.
-     * @param {string} key
+     * @param {string | null} key  null: a GBA without a cartridge, which waits
+     *     for the running game to send it a program (multiboot).
      * @param {{ saveId?: number | null, vertical?: boolean }} [options] Player 2's saved game; screen layout.
      */
     async link(key, { saveId = null, vertical = false } = {}) {
-        const [rom, data] = await Promise.all([getRom(key), getRomData(key)]);
-        if (!rom || !data) throw new Error("This ROM is no longer in the library.");
+        const [rom, data] = key === null ? [CARTLESS, null] : await Promise.all([getRom(key), getRomData(key)]);
+        if (!rom || (!data && key !== null)) throw new Error("This ROM is no longer in the library.");
         if (!this.canLink(rom.info)) {
             throw new Error("Only Game Boy / Game Boy Color games can be linked with each other, and GBA games with each other.");
         }

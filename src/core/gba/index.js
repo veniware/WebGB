@@ -16,8 +16,13 @@ export function createCore(rom, info, options = {}) {
 /**
  * Connects a second game to `first` with a link cable (see link.js).
  * @param {import("./gba.js").Gba} first
+ * @param {Uint8Array | null} rom  null: a GBA without a cartridge, which waits
+ *     for the first game to send it a program (multiboot).
  * @param {{ vertical?: boolean }} [layout]
  */
 export function createLinkedCore(first, rom, info, options, layout) {
-    return new LinkedGbas(first, createCore(rom, info, options), layout);
+    const second = rom
+        ? createCore(rom, info, options)
+        : new Gba(new Uint8Array(0), { bios: options.gbaBios ?? null, cartless: true });
+    return new LinkedGbas(first, second, layout);
 }

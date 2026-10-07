@@ -126,6 +126,8 @@ src/core/
     sio.js              Serial port: unlinked as measured; linked multiplayer,
                         Normal (8/32-bit) and UART transfers with the partner
     link.js             LinkedGbas: two GBAs on one cable, one Core
+    multiboot.js        Multiboot: the BIOS's receiving side (player 2 without
+                        a cartridge) and SWI 0x25 MultiBoot
     backup.js           SRAM / Flash / EEPROM, detected from ID strings
     gpio.js             Cartridge GPIO: Seiko RTC (Pokémon, Boktai), solar
                         sensor (Boktai), gyro and rumble (WarioWare Twisted,
@@ -173,7 +175,8 @@ src/ui/
   library-dialog.js     Library: play, export, delete ROMs; add ROMs
   game-dialog.js        Per game: new game, saved games (play/import/export/delete),
                         snapshots (load/take/delete), link cable
-  link-dialog.js        Picks player 2's game and saved game
+  link-dialog.js        Picks player 2's game and saved game, or no cartridge
+                        (GBA multiboot: `emulator.link(null)`)
   settings-dialog.js    Settings (renderer, performance stats, Game Boy palette, ...)
   controls-dialog.js    Rebinding keyboard keys and gamepad buttons
   memory-dialog.js      Memory viewer/editor (hex pages of the core's regions,
@@ -346,9 +349,23 @@ other versions are refused.
   (only while linked; the host keeps no linked states). Tested with
   register-level unit tests and a two-GBA test program built with
   devkitARM's crt0 + libgba (100 multiplayer and 100 Normal-mode transfers
-  each way, IRQ-driven, back to back).
-- **Not emulated:** multiboot (sending a game to a GBA without a
-  cartridge), JOY Bus, the BIOS sound driver calls, mid-line register
+  each way, IRQ-driven, back to back). A multiplayer start written while
+  unplugged stays busy; plugging the cable in (`Sio.plugged`) lets the
+  parent's go ahead.
+- **Multiboot** (`multiboot.js`): player 2 can be a GBA without a cartridge
+  (`cartless`: empty ROM, no saves). With the built-in BIOS it runs no code
+  while it waits (`Gba.stall`): `MultibootClient` answers the parent's
+  multiplayer transfers (`sio.onMulti`) like the BIOS (handshake, header,
+  palette, then the encrypted program word by word and the CRC), then
+  starts the program at 0x020000C0 with the boot mode and client number in
+  its header. A game that calls SWI 0x25 after the handshake gets the
+  program copied over instead, and its BIOS stays busy (`stall`) as long
+  as the transfer would take. With a BIOS file, that BIOS does both sides.
+  Multiplayer mode only (no Normal-mode multiboot); the client's progress
+  isn't in save states (the host keeps no linked states). Tested with
+  unit tests and gba-link-connection's sender (MIT), sync (SWI 0x25) and
+  async (the game sends everything), linked before or after it started.
+- **Not emulated:** JOY Bus, the BIOS sound driver calls, mid-line register
   changes.
 
 ### Library, saved games and snapshots
@@ -486,13 +503,9 @@ performance stats, the renderer setting, the PWA, video effects and scalers
 (ghosting, sharpen, outlines, xBR, LCD grid, CRT), sound effects (pitch,
 low/high pass, bass, echo, mono), the memory viewer/editor with cheat search
 (Settings → Tools), rewind, library backup/restore, video recording, a
-WebGPU renderer, GBA idle-loop skipping and the GBA link cable.
+WebGPU renderer, GBA idle-loop skipping, the GBA link cable and multiboot.
 
 Not done yet:
 
-1. **GBA multiboot**: a player 2 without a cartridge, booted over the
-   cable by the parent's game (single-cartridge multiplayer). Needs the
-   BIOS's receiving side (and SWI 0x25 MultiBoot) in the HLE BIOS, or a
-   BIOS file on both machines.
-2. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
+1. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
    effects (`AudioOutput.setEffects`).
