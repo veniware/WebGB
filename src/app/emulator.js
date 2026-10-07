@@ -1,5 +1,5 @@
 import { Emitter } from './emitter.js';
-import { createCore } from '../core/registry.js';
+import { canLink, createCore, createLinkedCore } from '../core/registry.js';
 import { getRom, getRomData, touchRom } from '../storage/roms.js';
 import { createSave, getSave, updateSave } from '../storage/saves.js';
 import { addSnapshot, getSnapshot, listSnapshots } from '../storage/snapshots.js';
@@ -21,7 +21,8 @@ const SAVE_CHECK_INTERVAL = 2000;
  * yet, the first save creates one.
  *
  * Events: 'loaded' ({ rom, fallback }), 'stopped', 'paused' (boolean),
- * 'fps' (number), 'snapshots' (list changed), 'status' ({ text, error? }).
+ * 'fps' (number), 'snapshots' (list changed), 'status' ({ text, error? }),
+ * 'linked' (player 2's rom), 'unlinked'.
  */
 export class Emulator extends Emitter {
   /** @type {import('../core/interface.js').Core | null} */
@@ -30,6 +31,11 @@ export class Emulator extends Emitter {
   rom = null;
   /** @type {number | null} Saved game that in-game saves are written to. */
   saveId = null;
+  /**
+   * Player 2's game when two games are linked by cable.
+   * @type {{ rom: { key: string, name: string, info: import('../rom/detect.js').RomInfo, size: number }, saveId: number | null } | null}
+   */
+  player2 = null;
   paused = false;
   speed = 1;
 
@@ -46,6 +52,9 @@ export class Emulator extends Emitter {
   // animation frames run no emulated frame, and short taps must not be lost.
   #pendingButtons = 0;
   #lastSave = null;
+  #lastSave2 = null;
+  // The single-player core while linked; it keeps running after unlinking.
+  #single = null;
   #saveQueue = Promise.resolve();
   #fpsFrames = 0;
   #fpsSince = 0;
@@ -151,6 +160,9 @@ export class Emulator extends Emitter {
   async #unload() {
     if (!this.core) return;
     await this.flushSave();
+    this.player2 = null;
+    this.#lastSave2 = null;
+    this.#single = null;
     this.core = null;
     this.rom = null;
     this.saveId = null;
@@ -180,26 +192,80 @@ export class Emulator extends Emitter {
   }
 
   async #writeSave() {
-    const { core, rom } = this;
-    const data = core?.getSaveData();
-    if (!data || sameBytes(data, this.#lastSave)) return;
+    await this.#writePlayerSave(0);
+    if (this.player2) await this.#writePlayerSave(1);
+  }
+
+  async #writePlayerSave(player) {
+    const { core } = this;
+    // Player 1's slot is the emulator itself (rom, saveId); player 2's is player2.
+    const slot = player ? this.player2 : this;
+    const data = core?.getSaveData(player);
+    const last = player ? this.#lastSave2 : this.#lastSave;
+    if (!data || !slot || sameBytes(data, last)) return;
     const copy = data.slice();
-    this.#lastSave = copy;
+    if (player) this.#lastSave2 = copy;
+    else this.#lastSave = copy;
     try {
       // The saved game may have been deleted while in use: start a new one.
-      if (this.saveId === null || !(await updateSave(this.saveId, copy))) {
-        const id = await createSave(rom.key, copy);
-        if (this.core === core) this.saveId = id;
-        this.emit('status', { text: 'Started a new saved game.' });
+      if (slot.saveId === null || !(await updateSave(slot.saveId, copy))) {
+        const id = await createSave(slot.rom.key, copy);
+        if (this.core === core) slot.saveId = id;
+        this.emit('status', { text: player ? 'Started a new saved game for player 2.' : 'Started a new saved game.' });
       }
     } catch (err) {
       this.emit('status', { text: `Could not store the saved game: ${err.message}`, error: true });
     }
   }
 
+  /** Whether a second game can be linked to the running one. */
+  canLink(info) {
+    return !this.player2 && canLink(this.core, info);
+  }
+
+  /**
+   * Connects a second game from the library with a link cable, as player 2.
+   * The running game carries on.
+   * @param {string} key
+   * @param {{ saveId?: number | null, vertical?: boolean }} [options] Player 2's saved game; screen layout.
+   */
+  async link(key, { saveId = null, vertical = false } = {}) {
+    const [rom, data] = await Promise.all([getRom(key), getRomData(key)]);
+    if (!rom || !data) throw new Error('This ROM is no longer in the library.');
+    if (!this.canLink(rom.info)) throw new Error('Only Game Boy and Game Boy Color games can be linked.');
+    const save = saveId !== null ? await getSave(saveId) : null;
+    const single = this.core;
+    const linked = await createLinkedCore(single, data, rom.info, this.#coreOptions, { vertical });
+    if (save) linked.loadSaveData(save.data, 1);
+    if (this.core !== single) return;
+    this.#single = single;
+    this.core = linked;
+    this.player2 = { rom: { key: rom.key, name: rom.name, info: rom.info, size: rom.size }, saveId: save?.id ?? null };
+    this.#lastSave2 = linked.getSaveData(1)?.slice() ?? null;
+    this.#display.setSourceSize(linked.width, linked.height);
+    this.#audio.clear();
+    this.emit('linked', this.player2.rom);
+  }
+
+  /** Disconnects player 2 (after storing its save); player 1 keeps playing. */
+  async unlink() {
+    if (!this.player2) return;
+    await this.flushSave();
+    this.core.unlink();
+    this.core = this.#single;
+    this.#single = null;
+    this.player2 = null;
+    this.#lastSave2 = null;
+    this.#display.setSourceSize(this.core.width, this.core.height);
+    this.#display.draw(this.core.getFrameBuffer());
+    this.#audio.clear();
+    this.emit('unlinked');
+  }
+
   async takeSnapshot() {
     const { core, rom } = this;
     if (!core) return;
+    if (this.player2) throw new Error('Snapshots are not available while two games are linked.');
     await this.flushSave();
     const state = core.saveState();
     const thumbnail = await frameToBlob(core.getFrameBuffer(), core.width, core.height);
@@ -220,6 +286,7 @@ export class Emulator extends Emitter {
   async loadSnapshot(id) {
     const { core, rom } = this;
     if (!core) return;
+    if (this.player2) throw new Error('Disconnect the link cable to load a snapshot.');
     const snapshot = await getSnapshot(id);
     checkSnapshot(snapshot, rom.key, core);
     const save = snapshot.saveId != null ? await getSave(snapshot.saveId) : null;
@@ -243,7 +310,8 @@ export class Emulator extends Emitter {
     requestAnimationFrame(this.#tick);
     const elapsed = Math.min(now - this.#lastTime, MAX_TICK_GAP);
     this.#lastTime = now;
-    const input = this.#input.poll();
+    const players = this.core?.players ?? 1;
+    const input = this.#input.poll(players);
     const { core } = this;
     if (!core || this.paused) {
       this.#pendingButtons = 0;
@@ -261,7 +329,7 @@ export class Emulator extends Emitter {
       this.#frameDebt -= frames;
     }
 
-    this.#pendingButtons |= input.buttons;
+    this.#pendingButtons |= players > 1 ? input.buttons | (input.buttons2 << 16) : input.buttons | input.buttons2;
     if (frames) {
       core.setInput(this.#pendingButtons);
       this.#pendingButtons = 0;

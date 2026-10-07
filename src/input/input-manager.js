@@ -17,23 +17,39 @@ export class InputManager {
     this.sources.push(source);
   }
 
-  poll() {
+  /**
+   * @param {number} [players] 2 when two linked games run: player 2's input
+   *   (second gamepad, second keyboard layout) is then reported as buttons2.
+   */
+  poll(players = 1) {
     let buttons = 0;
+    let buttons2 = 0;
     let fastForward = false;
     let tiltX = 0;
     let tiltY = 0;
     for (const source of this.sources) {
-      const state = source.poll();
+      const state = source.poll(players);
       buttons |= state.buttons;
+      buttons2 |= state.buttons2 ?? 0;
       fastForward ||= state.fastForward;
       tiltX += state.tiltX ?? 0;
       tiltY += state.tiltY ?? 0;
     }
     // The D-pad can't press opposite directions at once; some games break if they see it.
-    if ((buttons & HORIZONTAL) === HORIZONTAL) buttons &= ~HORIZONTAL;
-    if ((buttons & VERTICAL) === VERTICAL) buttons &= ~VERTICAL;
-    return { buttons, fastForward, tiltX: clampTilt(tiltX), tiltY: clampTilt(tiltY) };
+    return {
+      buttons: cancelOpposites(buttons),
+      buttons2: cancelOpposites(buttons2),
+      fastForward,
+      tiltX: clampTilt(tiltX),
+      tiltY: clampTilt(tiltY),
+    };
   }
+}
+
+function cancelOpposites(buttons) {
+  if ((buttons & HORIZONTAL) === HORIZONTAL) buttons &= ~HORIZONTAL;
+  if ((buttons & VERTICAL) === VERTICAL) buttons &= ~VERTICAL;
+  return buttons;
 }
 
 function clampTilt(value) {

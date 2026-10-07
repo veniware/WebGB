@@ -25,6 +25,12 @@
  * @property {(data: Uint8Array) => void} loadSaveData
  * @property {() => Uint8Array} saveState
  * @property {(state: Uint8Array) => void} loadState
+ * @property {number} [players]  2 for linked games: player 2's buttons are in bits 16+
+ *   and getSaveData/loadSaveData take the player (0 or 1).
+ * @property {() => number} [getRumble]  Rumble motor strength over the last frame, 0-1.
+ * @property {boolean} [wantsTilt]  Has a tilt sensor; the host then calls setTilt(x, y) (in g).
+ * @property {boolean} [wantsCamera]  Has a camera; the host then calls setCameraImage(pixels)
+ *   with 8-bit grayscale frames of cameraSize ({ width, height }).
  * @property {(options: object) => void} [configure]
  *   Optional: applies user options (e.g. palettes) while running. The host
  *   passes the same options to createCore() and again whenever they change.
@@ -38,6 +44,7 @@
  * @property {string} id
  * @property {string} name
  * @property {Array<'gb' | 'gbc' | 'gba'>} systems
+ * @property {boolean} [link]  Supports link cables (the module exports createLinkedCore).
  * @property {() => Promise<{ createCore: (rom: Uint8Array, info: import('../rom/detect.js').RomInfo, options: object) => Core }>} load
  */
 

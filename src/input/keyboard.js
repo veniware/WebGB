@@ -24,6 +24,18 @@ export const DEFAULT_HOTKEYS = {
   F4: 'loadSnapshot',
 };
 
+/** Player 2 (two linked games): WASD, G = B, H = A, T = Select, Y = Start. */
+export const DEFAULT_PLAYER_2_MAP = {
+  KeyW: Button.UP,
+  KeyS: Button.DOWN,
+  KeyA: Button.LEFT,
+  KeyD: Button.RIGHT,
+  KeyH: Button.A,
+  KeyG: Button.B,
+  KeyY: Button.START,
+  KeyT: Button.SELECT,
+};
+
 /** KeyboardEvent.code -> tilt direction, for tilt-sensor cartridges (Kirby Tilt 'n' Tumble). */
 export const DEFAULT_TILT_KEYS = {
   KeyJ: [-1, 0],
@@ -43,8 +55,15 @@ export class KeyboardInput {
   /**
    * @param {{ keyMap?: Record<string, number>, hotkeys?: Record<string, string>, onHotkey?: (name: string) => void }} [options]
    */
-  constructor({ keyMap = DEFAULT_KEY_MAP, hotkeys = DEFAULT_HOTKEYS, tiltKeys = DEFAULT_TILT_KEYS, onHotkey = () => {} } = {}) {
+  constructor({
+    keyMap = DEFAULT_KEY_MAP,
+    player2Map = DEFAULT_PLAYER_2_MAP,
+    hotkeys = DEFAULT_HOTKEYS,
+    tiltKeys = DEFAULT_TILT_KEYS,
+    onHotkey = () => {},
+  } = {}) {
     this.keyMap = keyMap;
+    this.player2Map = player2Map;
     this.hotkeys = hotkeys;
     this.tiltKeys = tiltKeys;
     this.onHotkey = onHotkey;
@@ -59,7 +78,9 @@ export class KeyboardInput {
   #keydown(e) {
     if (!this.enabled || e.ctrlKey || e.metaKey || e.altKey || TEXT_FIELDS.has(e.target?.tagName)) return;
     const hotkey = this.hotkeys[e.code];
-    if (this.keyMap[e.code] === undefined && !hotkey && !this.tiltKeys[e.code]) return;
+    if (this.keyMap[e.code] === undefined && !hotkey && !this.tiltKeys[e.code] && this.player2Map[e.code] === undefined) {
+      return;
+    }
     e.preventDefault();
     if (e.repeat) return;
     this.#down.add(e.code);
@@ -71,14 +92,16 @@ export class KeyboardInput {
     if (this.#down.delete(e.code)) e.preventDefault();
   }
 
-  poll() {
+  poll(players = 1) {
     let buttons = 0;
+    let buttons2 = 0;
     let fastForward = false;
     let tiltX = 0;
     let tiltY = 0;
     if (this.enabled) {
       for (const code of [...this.#down, ...this.#tapped]) {
         buttons |= this.keyMap[code] ?? 0;
+        if (players > 1) buttons2 |= this.player2Map[code] ?? 0;
         if (this.hotkeys[code] === 'fastForward') fastForward = true;
       }
       for (const code of this.#down) {
@@ -90,6 +113,6 @@ export class KeyboardInput {
       }
     }
     this.#tapped.clear();
-    return { buttons, fastForward, tiltX, tiltY };
+    return { buttons, buttons2, fastForward, tiltX, tiltY };
   }
 }

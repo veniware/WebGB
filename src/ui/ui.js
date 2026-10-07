@@ -8,6 +8,7 @@ import { baseName, formatSize, pickFiles, SYSTEM_NAMES } from './dom.js';
 import { ROM_ACCEPT, SAVE_EXTENSION } from './files.js';
 import { createGameDialog } from './game-dialog.js';
 import { createLibraryDialog } from './library-dialog.js';
+import { createLinkDialog } from './link-dialog.js';
 import { createModals } from './modals.js';
 import { createSettingsDialog } from './settings-dialog.js';
 
@@ -75,12 +76,14 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
 
   // --- Dialogs -----------------------------------------------------------
   const modals = createModals({ emulator, inputs });
+  const linkDialog = createLinkDialog({ dialog: $('link'), modals, emulator, onError: reportError });
   const gameDialog = createGameDialog({
     dialog: $('game'),
     modals,
     emulator,
     onError: reportError,
     onStatus: flash,
+    onLink: () => linkDialog.open().catch(reportError),
   });
   // Settings the cores read (see Emulator.configure).
   const coreOptions = () => ({ gbPalette: settings.gbPalette, colorCorrection: settings.colorCorrection });
@@ -280,6 +283,18 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
   });
   emulator.on('fps', (fps) => (el.fps.textContent = `${fps.toFixed(1)} fps`));
   emulator.on('status', ({ text, error }) => flash(text, error));
+  let singleStatus = '';
+  emulator.on('linked', (rom) => {
+    singleStatus = romStatus;
+    romStatus += ` · linked with ${rom.info.title || baseName(rom.name)}`;
+    el.snapshot.disabled = true;
+    showRomStatus();
+  });
+  emulator.on('unlinked', () => {
+    romStatus = singleStatus;
+    el.snapshot.disabled = false;
+    showRomStatus();
+  });
   audio.on('state', () => {
     if (el.status.textContent.startsWith(romStatus)) showRomStatus();
   });

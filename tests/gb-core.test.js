@@ -364,3 +364,29 @@ test('reports rumble strength per frame', () => {
   gb.runFrame();
   assert.equal(gb.getRumble(), 1);
 });
+
+test('a link cable swaps bytes between two Game Boys', async () => {
+  const { LinkedGameBoys } = await import('../src/core/gb/link.js');
+  const program = (byte, control) => makeGbRom({
+    code: [
+      0x3e, byte, 0xe0, 0x01, // SB = byte
+      0x3e, control, 0xe0, 0x02, // SC: start (internal clock on the master)
+      0xf0, 0x02, 0xcb, 0x7f, 0x20, 0xfa, // wait for the transfer
+      0xf0, 0x01, 0xea, 0x00, 0xc0, // ($C000) = received byte
+      0x76, 0x18, 0xfe,
+    ],
+  });
+  const master = new GameBoy(program(0x42, 0x81));
+  const slave = new GameBoy(program(0x99, 0x80));
+  const link = new LinkedGameBoys(master, slave);
+  for (let i = 0; i < 3; i++) link.runFrame();
+  assert.equal(master.wram[0], 0x99);
+  assert.equal(slave.wram[0], 0x42);
+  assert.equal(link.getFrameBuffer().length, 320 * 144 * 4);
+
+  link.setInput(0x01 | (0x08 << 16)); // A for player 1, Start for player 2
+  assert.equal(master.joypad.buttons, 0x01);
+  assert.equal(slave.joypad.buttons, 0x08);
+  const state = link.saveState();
+  link.loadState(state);
+});

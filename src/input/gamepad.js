@@ -43,21 +43,28 @@ export class GamepadInput {
     }
   }
 
-  poll() {
+  /** With two players (linked games) the second connected pad is player 2; otherwise all pads are player 1. */
+  poll(players = 1) {
     let buttons = 0;
+    let buttons2 = 0;
     let fastForward = false;
     let tiltX = 0;
     let tiltY = 0;
+    let connected = 0;
     for (const pad of navigator.getGamepads?.() ?? []) {
       if (!pad?.connected) continue;
+      let pressed = 0;
       for (const [index, button] of this.map) {
-        if (isPressed(pad.buttons[index])) buttons |= button;
+        if (isPressed(pad.buttons[index])) pressed |= button;
       }
       const [x = 0, y = 0] = pad.axes;
-      if (x < -STICK_DEADZONE) buttons |= Button.LEFT;
-      if (x > STICK_DEADZONE) buttons |= Button.RIGHT;
-      if (y < -STICK_DEADZONE) buttons |= Button.UP;
-      if (y > STICK_DEADZONE) buttons |= Button.DOWN;
+      if (x < -STICK_DEADZONE) pressed |= Button.LEFT;
+      if (x > STICK_DEADZONE) pressed |= Button.RIGHT;
+      if (y < -STICK_DEADZONE) pressed |= Button.UP;
+      if (y > STICK_DEADZONE) pressed |= Button.DOWN;
+      if (players > 1 && connected === 1) buttons2 |= pressed;
+      else buttons |= pressed;
+      connected++;
       if (isPressed(pad.buttons[FAST_FORWARD_BUTTON])) fastForward = true;
       const [, , rx = 0, ry = 0] = pad.axes;
       if (Math.hypot(rx, ry) > TILT_DEADZONE) {
@@ -65,6 +72,6 @@ export class GamepadInput {
         tiltY += ry;
       }
     }
-    return { buttons, fastForward, tiltX, tiltY };
+    return { buttons, buttons2, fastForward, tiltX, tiltY };
   }
 }

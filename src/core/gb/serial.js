@@ -1,14 +1,16 @@
 import { Interrupt } from './constants.js';
 
 /**
- * Serial port (SB/SC) with nothing connected: a transfer on the internal
- * clock completes after 8 bits and reads 0xFF; on the external clock it
- * never completes. Bytes are passed to `onByte` when a transfer starts;
+ * Serial port (SB/SC). With nothing connected, a transfer on the internal
+ * clock completes after 8 bits and reads 0xFF, and one on the external clock
+ * never completes; with a link (another Game Boy), the bytes are swapped. Bytes are passed to `onByte` when a transfer starts;
  * test ROMs report their results this way.
  */
 export class Serial {
   /** @type {((byte: number) => void) | null} */
   onByte = null;
+  /** @type {Serial | null} The other Game Boy, when linked. */
+  link = null;
 
   /** @param {import('./gameboy.js').GameBoy} gb */
   constructor(gb) {
@@ -44,12 +46,24 @@ export class Serial {
     }
   }
 
-  /** Advances one M-cycle while a transfer is running. */
+  /**
+   * Advances one M-cycle while a transfer is running. When it completes, a
+   * linked Game Boy waiting on the external clock exchanges its byte.
+   */
   tick() {
     this.cycles -= 4;
     if (this.cycles > 0) return;
     this.cycles = 0;
-    this.sb = 0xff;
+    const peer = this.link;
+    if (peer && (peer.sc & 0x81) === 0x80) {
+      const received = peer.sb;
+      peer.sb = this.sb;
+      peer.sc &= 0x7f;
+      peer.gb.if |= Interrupt.SERIAL;
+      this.sb = received;
+    } else {
+      this.sb = 0xff;
+    }
     this.sc &= 0x7f;
     this.gb.if |= Interrupt.SERIAL;
   }

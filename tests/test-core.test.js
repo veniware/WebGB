@@ -43,7 +43,7 @@ test('test core state round-trips through saveState/loadState', () => {
 test('input manager merges sources, cancels opposite directions and limits tilt', () => {
   const source = (buttons, fastForward = false, tiltX = 0) => ({ poll: () => ({ buttons, fastForward, tiltX }) });
   const input = new InputManager([source(Button.A | Button.LEFT, false, 1), source(Button.RIGHT | Button.UP, true, 1)]);
-  assert.deepEqual(input.poll(), { buttons: Button.A | Button.UP, fastForward: true, tiltX: 1.5, tiltY: 0 });
+  assert.deepEqual(input.poll(), { buttons: Button.A | Button.UP, buttons2: 0, fastForward: true, tiltX: 1.5, tiltY: 0 });
 });
 
 test('test core counts Start presses in battery RAM', () => {

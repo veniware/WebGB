@@ -60,7 +60,8 @@ src/main.js             Composition root: builds the modules and wires them toge
 src/styles.css          All styles (touch layout under @media (pointer: coarse))
 src/app/
   emulator.js           Host: owns the core, runs the rAF loop, speed, launching,
-                        in-game saves, snapshots
+                        in-game saves, snapshots, link cable (player 2),
+                        tilt/camera/rumble peripherals
   settings.js           Persisted user preferences (localStorage)
   emitter.js            Tiny event emitter
 src/core/
@@ -69,17 +70,24 @@ src/core/
   buttons.js            Button bitmask shared by input and cores
   state.js              Save-state writer/reader with symmetric sync(s) methods
   gb/                   Game Boy / Game Boy Color core (see "Game Boy core")
-    index.js            createCore(): CGB mode for Color ROMs
+    index.js            createCore(): CGB mode for Color ROMs; createLinkedCore()
     gameboy.js          System: memory map, I/O registers, OAM DMA, HDMA, speed
                         switch, frame loop, save states; implements Core
     cpu.js              SM83 CPU, M-cycle accurate
     ppu.js              PPU: mode/STAT timing, line renderer, DMG and CGB
+    fifo.js             Dot-by-dot pixel FIFO for lines changed during drawing
+                        (adapted from SameBoy, MIT)
     apu.js              APU: 4 channels, frame sequencer, mixing, filtering
     timer.js            DIV/TIMA from the 16-bit system counter (falling edges)
-    cartridge.js        Header parsing and mappers (ROM, MBC1/2/3/5, HuC1)
+    cartridge.js        Header parsing, cartridge type table, createCartridge()
+    mappers/            base.js; mbc.js (MBC1/2/3/5, HuC1); mbc6.js, mbc7.js
+                        (tilt + EEPROM), mmm01.js, huc3.js, tama5.js, camera.js
     rtc.js              MBC3 real-time clock (wall clock) and its save format
-    joypad.js, serial.js
-    palettes.js         DMG shades and CGB color conversion
+    joypad.js
+    serial.js           Serial port; `link` points at the other machine's port
+    link.js             LinkedGameBoys: two machines on one cable, one Core
+    palettes.js         DMG shades, CGB boot ROM compatibility palettes for DMG
+                        games, button-combo presets, CGB color (correction)
     constants.js        Clock rate, frame size, interrupt bits
   test/test-core.js     Stand-in core: test pattern, button tones, a Start-press
                         counter in battery RAM, save states
@@ -95,9 +103,12 @@ src/audio/
   resampler.js          Ring buffer + resampler + dynamic rate control
 src/input/
   input-manager.js      Merges sources; cancels opposite D-pad directions
-  keyboard.js           Key map and hotkeys
-  gamepad.js            Gamepad API polling
+  keyboard.js           Key maps (player 1, player 2, tilt keys) and hotkeys
+  gamepad.js            Gamepad API polling; 2nd pad = player 2; rumble
   touch.js              On-screen controls (multi-touch, slide between buttons)
+  motion.js             Device orientation -> tilt (MBC7)
+  camera.js             Webcam -> grayscale frames (Game Boy Camera)
+  rumble.js             Rumble on gamepads / phone vibration
 src/rom/
   loader.js             File -> { name, data, info, key }; unzips
   detect.js             System detection from the cartridge header
@@ -111,7 +122,9 @@ src/ui/
   ui.js                 Toolbar, opening files, drag-and-drop, status bar, hotkeys
   library-dialog.js     Library: play, export, delete ROMs; add ROMs
   game-dialog.js        Per game: new game, saved games (play/import/export/delete),
-                        snapshots (load/take/delete)
+                        snapshots (load/take/delete), link cable
+  link-dialog.js        Picks player 2's game and saved game
+  settings-dialog.js    Settings (Game Boy palette, color correction, ...)
   modals.js             Shows dialogs; pauses the game and input while open
   dom.js                h() element helper, formatting, downloads, file picker
   files.js              Accepted file types and limits
@@ -168,9 +181,22 @@ other versions are refused.
   48-byte RTC block used by VBA-M/BGB/mGBA. The RTC follows the wall clock
   (like the real cartridge, it keeps running while the game is closed), and
   its saved form doesn't change while it runs, so it doesn't trigger writes.
-- **Not emulated:** CGB compatibility palettes for DMG games, mid-line PPU
-  effects, the DMG's OAM corruption bug and wave-RAM access quirks, the
-  infrared port, rumble, MBC6/MBC7/MMM01/HuC3/camera cartridges.
+- **Mid-line effects:** while the PPU draws, register writes that change the
+  picture (LCDC, SCX/SCY, palettes, WX) are logged with their dot; lines with
+  such writes are re-rendered dot by dot by `fifo.js`, the rest use the fast
+  line renderer. Tuned against the Mealybug tests.
+- **Boot:** no boot ROM is run (copyright); registers, I/O and the DMG's VRAM
+  logo are set to their post-boot values. DMG games on a CGB get the boot
+  ROM's compatibility palette (or a user preset) from `palettes.js`.
+- **Peripherals:** optional Core members `getRumble()`, `wantsTilt`/`setTilt`,
+  `wantsCamera`/`setCameraImage` are fed by the host from `src/input/`.
+  HuC3 and TAMA5 clocks follow the wall clock like MBC3.
+- **Link cable:** `LinkedGameBoys` runs both machines in 32-dot slices and
+  swaps serial bytes and infrared light between them; screens side by side
+  (stacked in portrait), sound mixed, player 2's buttons in bits 16+.
+  Snapshots are disabled while linked. Player 2's saved game is written too.
+- **Not emulated:** the DMG's OAM corruption bug and wave-RAM access quirks,
+  Super Game Boy.
 
 ### Library, saved games and snapshots
 
@@ -249,5 +275,9 @@ Color support.
    (renderers are separate modules in `src/video/`).
 7. Make it a PWA: web app manifest and service worker, so it installs to
    the home screen (fullscreen on iPhone) and works offline.
-8. Possibly later: rewind, audio/video recording, full backup export/import
+8. More video filters: motion blur (LCD ghosting), smooth edges (xBR/HQx
+   style), edge detection, sharpening, ... (shaders in `src/video/filters.js`).
+9. Audio filters: low pass, high pass, pitch shifting, echo, ... (Web Audio
+   nodes after the worklet in `src/audio/`).
+10. Possibly later: rewind, audio/video recording, full backup export/import
    of the library.

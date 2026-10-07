@@ -202,13 +202,32 @@ export class GameBoy {
    */
   runFrame() {
     const { cpu, ppu } = this;
+    this.beginFrame();
+    while (this.frameBudget > 0 && !ppu.frameDone) cpu.step();
+    this.endFrame(true);
+  }
+
+  // Linked machines run in small slices instead: beginFrame(), runDots()
+  // until the frame's time is used, endFrame(false).
+
+  beginFrame() {
     this.apu.beginFrame();
-    ppu.frameDone = false;
+    this.ppu.frameDone = false;
     this.frameBudget += FRAME_DOTS;
     this.frameStart = this.frameBudget;
-    while (this.frameBudget > 0 && !ppu.frameDone) cpu.step();
+  }
+
+  /** Runs whole instructions until `dots` more dots have passed. */
+  runDots(dots) {
+    const { cpu } = this;
+    const target = this.frameBudget - dots;
+    while (this.frameBudget > target) cpu.step();
+  }
+
+  /** @param {boolean} alignToVBlank Start the next frame right after VBlank. */
+  endFrame(alignToVBlank) {
     const elapsed = this.frameStart - this.frameBudget;
-    if (ppu.frameDone) this.frameBudget = 0;
+    if (alignToVBlank && this.ppu.frameDone) this.frameBudget = 0;
     this.apu.catchUp();
     if (this.rumbleOn) this.rumbleDots += elapsed - this.rumbleSince;
     this.rumbleLevel = elapsed > 0 ? Math.min(1, this.rumbleDots / elapsed) : 0;

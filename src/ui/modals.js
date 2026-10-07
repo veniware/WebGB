@@ -7,14 +7,15 @@
  */
 export function createModals({ emulator, inputs }) {
   let openCount = 0;
-  let resumeCore = null;
+  // The game (not the core: linking swaps the core of the same game).
+  let resumeRom = null;
 
   return {
     /** @param {HTMLDialogElement} dialog */
     show(dialog) {
       if (dialog.open) return;
       if (openCount++ === 0) {
-        resumeCore = emulator.core && !emulator.paused ? emulator.core : null;
+        resumeRom = emulator.core && !emulator.paused ? emulator.rom : null;
         emulator.setPaused(true);
         inputs.forEach((input) => (input.enabled = false));
       }
@@ -23,7 +24,7 @@ export function createModals({ emulator, inputs }) {
         () => {
           if (--openCount > 0) return;
           inputs.forEach((input) => (input.enabled = true));
-          if (resumeCore && emulator.core === resumeCore) emulator.setPaused(false);
+          if (resumeRom && emulator.rom === resumeRom) emulator.setPaused(false);
         },
         { once: true },
       );

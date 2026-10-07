@@ -14,9 +14,10 @@ import { MAX_SAVE_SIZE, SAVE_ACCEPT } from './files.js';
  *   emulator: import('../app/emulator.js').Emulator,
  *   onError: (err: Error) => void,
  *   onStatus: (text: string) => void,
+ *   onLink: () => void,
  * }} deps
  */
-export function createGameDialog({ dialog, modals, emulator, onError, onStatus }) {
+export function createGameDialog({ dialog, modals, emulator, onError, onStatus, onLink }) {
   const $ = (selector) => dialog.querySelector(selector);
   const title = $('[data-title]');
   const savesList = $('[data-saves]');
@@ -24,6 +25,10 @@ export function createGameDialog({ dialog, modals, emulator, onError, onStatus }
   const snapshotsList = $('[data-snapshots]');
   const snapshotsEmpty = $('[data-snapshots-empty]');
   const takeButton = $('[data-take]');
+  const linkSection = $('[data-link-section]');
+  const linkButton = $('[data-link]');
+  const unlinkButton = $('[data-unlink]');
+  const linkStatus = $('[data-link-status]');
   let rom = null;
   let thumbnailUrls = [];
 
@@ -37,7 +42,14 @@ export function createGameDialog({ dialog, modals, emulator, onError, onStatus }
     }
     const [saves, snapshots] = await Promise.all([listSaves(rom.key), listSnapshots(rom.key)]);
     title.textContent = rom.info.title || baseName(rom.name);
-    takeButton.hidden = !isRunning();
+    takeButton.hidden = !isRunning() || Boolean(emulator.player2);
+    const partner = emulator.player2;
+    linkSection.hidden = !isRunning() || (!partner && !emulator.canLink(rom.info));
+    linkButton.hidden = Boolean(partner);
+    unlinkButton.hidden = !partner;
+    linkStatus.textContent = partner
+      ? `Linked with ${partner.rom.info.title || baseName(partner.rom.name)} (player 2).`
+      : 'Play with a second game, e.g. to trade or battle.';
 
     savesList.replaceChildren(...saves.map(saveRow));
     savesEmpty.hidden = saves.length > 0;
@@ -147,6 +159,11 @@ export function createGameDialog({ dialog, modals, emulator, onError, onStatus }
     if (files.length) await importSaves(files).catch(onError);
   });
   takeButton.addEventListener('click', () => emulator.takeSnapshot().then(render).catch(onError));
+  linkButton.addEventListener('click', () => {
+    dialog.close();
+    onLink();
+  });
+  unlinkButton.addEventListener('click', () => emulator.unlink().then(render).catch(onError));
   $('[data-close]').addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', releaseThumbnails);
 
