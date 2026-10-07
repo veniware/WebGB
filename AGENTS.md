@@ -94,7 +94,9 @@ src/core/
     ppu.js              PPU: mode/STAT timing, line renderer, DMG and CGB
     fifo.js             Dot-by-dot pixel FIFO for lines changed during drawing
                         (adapted from SameBoy, MIT)
-    apu.js              APU: 4 channels, frame sequencer, mixing, filtering
+    apu.js              APU: 2 MHz channel timing ported from SameBoy (MIT),
+                        DIV events, mixing, filtering
+    channels.js         Simple channel models (the GBA's sound; reading old states)
     timer.js            DIV/TIMA from the 16-bit system counter (falling edges)
     cartridge.js        Header parsing, cartridge type table, createCartridge()
     mappers/            base.js; mbc.js (MBC1/2/3/5, HuC1); mbc6.js, mbc7.js
@@ -125,7 +127,7 @@ src/core/
                         sprites a line ahead, windows, blending, mosaic)
     dma.js              Four channels; HBlank/VBlank/sound FIFO/immediate
     timers.js           Lazy counters, overflow events, cascade
-    apu.js              Game Boy channels (from gb/apu.js) + DMA sound FIFOs
+    apu.js              Game Boy channels (from gb/channels.js) + DMA sound FIFOs
     sio.js              Serial port: unlinked as measured; linked multiplayer,
                         Normal (8/32-bit) and UART transfers with the partner
     link.js             LinkedGbas: two GBAs on one cable, one Core
@@ -225,7 +227,9 @@ count as save writes for battery memory so edits get stored.
 To add a core: create `src/core/<name>/index.js` exporting
 `createCore(rom, info)`, then register it in `src/core/registry.js`. Bump the
 core's `version` whenever its `saveState()` format changes; snapshots from
-other versions are refused.
+other versions are refused unless the core lists them in `stateVersions`
+(`loadState(state, version)` then converts them; the Game Boy reads version 4,
+before the SameBoy APU, through `channels.js`).
 
 ### Game Boy core
 
@@ -239,10 +243,16 @@ other versions are refused.
   slightly different dots. Each line is rendered in one go when drawing ends,
   so mid-line register writes aren't shown. Frames go to a back buffer that
   is swapped in at VBlank.
-- **APU:** lazy. `tick()` only adds to `apu.pending`; `catchUp()` runs the
-  channels up to now before any APU register access, on each frame
-  sequencer clock and at the end of `runFrame()`. Output is box-filtered to
-  48 kHz, then high-pass filtered like the hardware's output capacitor.
+- **APU** (`apu.js`, ported from SameBoy, DMG and CGB-E): a 2 MHz clock
+  with the channels' start delays and 1 MHz phase (`lfDiv`), the noise
+  LFSR clocked by a counter, envelope locks, the NRx2/NR10/NR43 write
+  glitches. DIV's falling edges are the 512 Hz events (`divEvent`), rising
+  edges reload envelopes (`divSecondaryEvent`). Lazy: `tick()` only adds to
+  `apu.pending`; `catchUp()` runs up to now before APU register accesses,
+  DIV events and the end of `runFrame()` (an M-cycle at a time around sweep
+  and restart timing, as SameBoy does). Each channel's level is averaged
+  over each 48 kHz sample, then high-pass filtered like the hardware's
+  output capacitor. SameSuite's APU tests all pass on the CGB-E.
 - **Frames:** `runFrame()` runs until the next VBlank (or one frame's worth
   of time while the LCD is off), so frames stay in step with the display.
 - **Save states:** each component has `sync(s)` (see `src/core/state.js`);
@@ -334,7 +344,7 @@ other versions are refused.
   sprites for a line are drawn during the line before (OAM changes show one
   line later, palette changes at once); a BG enabled mid-frame shows from the
   third line start after; windows open/close on their top/bottom lines.
-- **Sound:** the Game Boy channel classes from `gb/apu.js` on a quarter clock,
+- **Sound:** the Game Boy channel classes from `gb/channels.js` on a quarter clock,
   mixed with the FIFOs like the hardware (10 bits around SOUNDBIAS); FIFO
   samples are played on timer overflows and refilled by DMA 1/2.
 - **Saves:** the backup type comes from the SDK's ID string in the ROM. The
@@ -488,10 +498,12 @@ so short taps are never lost.
   and BIOS math all, DMA 1244/1244, SIO all, misc 4/12, video tests all but
   sub-line glitches. A build from source with a newer GCC times its C
   functions differently ("C loop", the IRQ handlers).
+- `RUN_KNOWN_FAILURES=1 npm test` runs the known failures too, to find the
+  ones that pass now.
 - The ROMs are skipped until `npm run fetch-test-roms` has downloaded them
   (the c-sp/game-boy-test-roms release and jsmolka/gba-tests). `tests/known-failures.js` lists
-  the ones that don't pass yet, with reasons (mostly timing within an
-  M-cycle and APU details); remove entries as they get fixed, and don't add
+  the ones that don't pass yet, with reasons (mostly PPU and interrupt timing
+  within an M-cycle); remove entries as they get fixed, and don't add
   new ones to hide regressions.
 
 ## Conventions

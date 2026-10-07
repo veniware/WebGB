@@ -141,17 +141,19 @@ export class Emulator extends Emitter {
     async play(rom, data, { saveId = null, snapshotId = null } = {}) {
         const { core, fallback } = await createCore(data, rom.info, this.#coreOptions);
         let state = null;
+        let stateVersion;
         if (snapshotId !== null) {
             const snapshot = await getSnapshot(snapshotId);
             checkSnapshot(snapshot, rom.key, core);
             state = snapshot.state;
+            stateVersion = snapshot.coreVersion;
             saveId = snapshot.saveId ?? null;
         }
         const save = saveId !== null ? await getSave(saveId) : null;
 
         await this.#unload();
         if (save) core.loadSaveData(save.data);
-        if (state) core.loadState(state);
+        if (state) core.loadState(state, stateVersion);
         this.core = core;
         this.rom = { key: rom.key, name: rom.name, info: rom.info, size: rom.size };
         this.saveId = save?.id ?? null;
@@ -355,7 +357,7 @@ export class Emulator extends Emitter {
         checkSnapshot(snapshot, rom.key, core);
         const save = snapshot.saveId != null ? await getSave(snapshot.saveId) : null;
         await this.flushSave();
-        core.loadState(snapshot.state);
+        core.loadState(snapshot.state, snapshot.coreVersion);
         this.saveId = save?.id ?? null;
         this.#lastSave = core.getSaveData()?.slice() ?? null;
         this.#watchSaves(core, true);
@@ -494,7 +496,8 @@ export class Emulator extends Emitter {
 
 function checkSnapshot(snapshot, romKey, core) {
     if (!snapshot || snapshot.romKey !== romKey) throw new Error("Snapshot not found for this game.");
-    if (snapshot.coreId !== core.id || snapshot.coreVersion !== core.version) {
+    const versions = core.stateVersions ?? [core.version];
+    if (snapshot.coreId !== core.id || !versions.includes(snapshot.coreVersion)) {
         throw new Error("This snapshot was made with a different emulator core version.");
     }
 }

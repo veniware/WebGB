@@ -25,6 +25,7 @@ const FILES = [
     "src/core/buttons.js",
     "src/core/gb/apu.js",
     "src/core/gb/cartridge.js",
+    "src/core/gb/channels.js",
     "src/core/gb/constants.js",
     "src/core/gb/cpu.js",
     "src/core/gb/fifo.js",

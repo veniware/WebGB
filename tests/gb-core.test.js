@@ -498,9 +498,9 @@ test("APU zombie mode: writing $08 to NRx2 while playing adds 1 to the volume", 
     gb.write(0xff17, 0x58); // channel 2: volume 5, increase, no envelope steps
     gb.write(0xff19, 0x80); // trigger
     gb.write(0xff17, 0x08);
-    assert.equal(gb.apu.ch2.volume, 6);
+    assert.equal(gb.apu.square[1].currentVolume, 6);
     gb.write(0xff17, 0x08);
-    assert.equal(gb.apu.ch2.volume, 7);
+    assert.equal(gb.apu.square[1].currentVolume, 7);
 });
 
 // --- Memory viewer ----------------------------------------------------------------

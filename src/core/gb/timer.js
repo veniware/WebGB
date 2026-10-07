@@ -44,6 +44,8 @@ export class Timer {
 
     /** Advances one M-cycle. */
     tick() {
+        // An envelope step postponed by the last DIV event (double speed).
+        if (this.gb.apu.pendingEnvelopeTick) this.gb.apu.delayedEnvelopeTick();
         this.reloaded = false;
         if (this.overflow) {
             this.overflow = false;
@@ -59,7 +61,9 @@ export class Timer {
     writeDiv() {
         const old = this.counter;
         this.counter = 0;
+        this.gb.apu.duringDivWrite = true;
         this.#edges(old, 0);
+        this.gb.apu.duringDivWrite = false;
     }
 
     writeTima(value) {
@@ -93,7 +97,10 @@ export class Timer {
     #edges(old, now) {
         const fallen = old & ~now;
         if (this.tac & 4 && fallen & TAC_BITS[this.tac & 3]) this.#incrementTima();
-        if (fallen & (this.gb.doubleSpeed ? 0x2000 : 0x1000)) this.gb.apu.clockFrameSequencer();
+        // The APU's 512 Hz events: falling edges, and rising ones for the envelopes.
+        const apuBit = this.gb.doubleSpeed ? 0x2000 : 0x1000;
+        if (fallen & apuBit) this.gb.apu.divEvent();
+        else if (~old & now & apuBit) this.gb.apu.divSecondaryEvent();
         // The serial clock sees the counter one M-cycle ahead of DIV reads
         // (boot_div and boot_sclk_align agree only this way).
         if ((old + 4) & ~(now + 4) & this.gb.serial.mask) this.gb.serial.edge();

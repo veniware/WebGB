@@ -32,9 +32,12 @@ export function listRoms(dir, extensions = /\.gbc?$/) {
     });
 }
 
-/** A test that is skipped when the ROMs are missing or the test is a known failure. */
+/**
+ * A test that is skipped when the ROMs are missing or the test is a known
+ * failure (RUN_KNOWN_FAILURES=1 runs those too, to see which pass now).
+ */
 export function romTest(name, fn) {
-    const reason = KNOWN_FAILURES[name];
+    const reason = process.env.RUN_KNOWN_FAILURES ? undefined : KNOWN_FAILURES[name];
     test(name, { skip: !available ? "test ROMs not fetched (npm run fetch-test-roms)" : reason && `known failure: ${reason}` }, fn);
 }
 

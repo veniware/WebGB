@@ -33,7 +33,9 @@ const SPEED_SWITCH_CYCLES = 0x20008 / 4 - 2;
  */
 export class GameBoy {
     id = "gb";
-    version = 4;
+    version = 5;
+    // Versions loadState() reads: 4 had a simpler APU (its state is carried over).
+    stateVersions = [4, 5];
     fps = CLOCK_RATE / FRAME_DOTS;
     sampleRate = SAMPLE_RATE;
     // Cartridge RAM writes so far (see getSaveWrites()); not part of the state.
@@ -188,10 +190,8 @@ export class GameBoy {
             [0xff1c, 0x9f], [0xff1d, 0xff], [0xff1e, 0x3f], [0xff20, 0xff], [0xff21, 0x00], [0xff22, 0x00],
             [0xff23, 0x3f], [0xff24, 0x77], [0xff25, 0xf3],
         ];
-        for (const [addr, value] of sound) this.apu.write(addr, value);
         // The chime's channel is still on, faded out (the SGB plays no chime).
-        this.apu.ch1.enabled = !this.sgb;
-        this.apu.settle();
+        this.apu.bootState(sound, !this.sgb);
 
         this.ppu.writeRegister(0xff47, 0xfc);
         if (this.cgb) {
@@ -379,8 +379,9 @@ export class GameBoy {
         return s.finish();
     }
 
-    loadState(data) {
+    loadState(data, version = this.version) {
         const s = new StateReader(data);
+        s.version = version;
         if (!this.#header(s)) throw new Error("This snapshot is for a different game or system.");
         const backup = this.saveState();
         try {

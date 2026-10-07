@@ -1,4 +1,4 @@
-import { NoiseChannel, SquareChannel, WaveChannel } from "../gb/apu.js";
+import { NoiseChannel, SquareChannel, WaveChannel } from "../gb/channels.js";
 
 export const SAMPLE_RATE = 48000;
 const CLOCK_RATE = 16777216;

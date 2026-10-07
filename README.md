@@ -131,6 +131,8 @@ See [AGENTS.md](AGENTS.md) for the architecture and conventions.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). `src/core/gba/multiply-carry.js` is adapted
-from zaydlang's [multiplication-algorithm](https://github.com/zaydlang/multiplication-algorithm)
+MIT, see [LICENSE](LICENSE). `src/core/gb/apu.js` is ported from
+[SameBoy](https://github.com/LIJI32/SameBoy)'s APU (MIT, notice in the file).
+`src/core/gba/multiply-carry.js` is adapted from zaydlang's
+[multiplication-algorithm](https://github.com/zaydlang/multiplication-algorithm)
 (zlib license, notice in the file).

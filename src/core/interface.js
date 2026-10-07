@@ -8,6 +8,7 @@
  * @typedef {object} Core
  * @property {string} id                    Stable identifier, stored with snapshots.
  * @property {number} version         Bump when the saveState() format changes.
+ * @property {number[]} [stateVersions]    The versions loadState() reads (default: version).
  * @property {number} width             Frame width in pixels.
  * @property {number} height            Frame height in pixels.
  * @property {number} fps                 Native frame rate (GB and GBA: ~59.7275).
@@ -24,7 +25,8 @@
  *     Battery-backed cartridge memory, or null when the cartridge has none.
  * @property {(data: Uint8Array) => void} loadSaveData
  * @property {() => Uint8Array} saveState
- * @property {(state: Uint8Array) => void} loadState
+ * @property {(state: Uint8Array, version?: number) => void} loadState
+ *     `version`: the core version the state was saved with (default: the current one).
  * @property {number} [players]    2 for linked games: player 2's buttons are in bits 16+
  *     and getSaveData/loadSaveData/getSaveWrites/screenshot take the player (0 or 1).
  * @property {(player?: number) => number} [getSaveWrites]    A count that changes when the
