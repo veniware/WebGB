@@ -473,10 +473,14 @@ so short taps are never lost.
 - `tests/gba-core.test.js`: GBA unit tests (hand-assembled programs, BIOS
   calls, pipeline, open bus, timers, sound, clock, save states).
 - `tests/gba-test-roms.test.js`: jsmolka's gba-tests (r12 = 0 when passed).
-- mGBA's test suite isn't run by `npm test` (it has to be built from source
-  with an ARM toolchain); current results: memory 1552/1552, I/O read
-  130/130, timing 1794/2020, timer count-up 816/936, timer IRQ 73/90,
-  shifter, carry, multiply long and BIOS math all, DMA 1244/1244, SIO all, misc 4/12, video tests all but sub-line glitches.
+- mGBA's test suite isn't run by `npm test` (it isn't in the downloaded
+  collection; mGBA's own build is at
+  https://s3.amazonaws.com/mgba/suite-latest.zip). Current results: memory
+  1552/1552, I/O read 130/130, timing 1814/2020, timer count-up 816/936
+  (back-to-back interrupts), timer IRQ 90/90, shifter, carry, multiply long
+  and BIOS math all, DMA 1244/1244, SIO all, misc 4/12, video tests all but
+  sub-line glitches. A build from source with a newer GCC times its C
+  functions differently ("C loop", the IRQ handlers).
 - The ROMs are skipped until `npm run fetch-test-roms` has downloaded them
   (the c-sp/game-boy-test-roms release and jsmolka/gba-tests). `tests/known-failures.js` lists
   the ones that don't pass yet, with reasons (mostly timing within an

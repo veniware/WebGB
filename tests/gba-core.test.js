@@ -443,6 +443,26 @@ test("idle loops: reading a timer is never skipped", () => {
     assert.equal(gba.idleLoops.skipped, 0);
 });
 
+test("timers: a reload written in the cycle of an overflow is the one loaded", () => {
+    let now = 0;
+    const irqs = [];
+    const timers = new Timers({
+        now: () => now,
+        requestIrq: (bit, time) => irqs.push(time),
+        onOverflow: () => {},
+        feedsSound: () => false,
+        onSchedule: () => {},
+    });
+    timers.write16(0x100, 0xffff);
+    timers.write16(0x102, 0xc0); // start, IRQ, every cycle
+    now = 2; // overflows at 1 and 2
+    timers.write16(0x100, 0);
+    assert.equal(timers.counter(0), 0, "reloaded with the new value");
+    assert.deepEqual(irqs, [1, 2], "both overflows interrupt");
+    now = 5;
+    assert.equal(timers.counter(0), 3);
+});
+
 // --- Multiply carry --------------------------------------------------------------------
 
 test("multiplies set the carry flag like the ARM7TDMI's Booth multiplier", async () => {

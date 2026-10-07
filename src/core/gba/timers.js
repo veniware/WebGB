@@ -67,9 +67,14 @@ export class Timers {
         const i = (address - 0x100) >> 2;
         const now = this.hooks.now();
         if (!(address & 2)) {
-            // The new reload value applies from the next overflow.
+            // The new reload value applies from the next overflow, including
+            // one in this very cycle.
+            const reloading = this.#overflowsAt(i, now);
+            // That overflow still interrupts, cascades and feeds the sound.
+            if (this.due[i] <= now) this.event(now);
             this.#rebase(i, now);
             this.reload[i] = value;
+            if (reloading) this.startCounter[i] = value;
             this.schedule();
             return;
         }
@@ -85,6 +90,17 @@ export class Timers {
             this.start[i] = Math.floor(now / prescale) * prescale;
         }
         this.schedule();
+    }
+
+    /** Whether timer i overflows (and reloads) exactly at `time`. */
+    #overflowsAt(i, time) {
+        if (!this.#running(i) || (i > 0 && this.control[i] & 4)) return false;
+        const prescale = PRESCALERS[this.control[i] & 3];
+        const elapsed = time - this.start[i];
+        if (elapsed <= 0 || elapsed % prescale) return false;
+        const ticks = elapsed / prescale;
+        const first = 0x10000 - this.startCounter[i];
+        return ticks >= first && (ticks - first) % (0x10000 - this.reload[i]) === 0;
     }
 
     /** Restarts the bookkeeping of timer i from now. */
