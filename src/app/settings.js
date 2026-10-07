@@ -29,6 +29,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // Super Game Boy features for the games that have them (from the next start), and its border.
   sgb: true,
   sgbBorder: true,
+  // GBA: boot through the BIOS file's intro (when one is loaded; the file is in IndexedDB).
+  gbaBiosIntro: false,
 });
 
 export function loadSettings() {

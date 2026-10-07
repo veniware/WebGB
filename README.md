@@ -7,7 +7,8 @@ JavaScript. It runs entirely in the browser: no server-side processing, no
 build step and no dependencies.
 
 > **Status:** Game Boy, Game Boy Color and Game Boy Advance games run. No
-> BIOS file is needed: the GBA's BIOS functions are built in.
+> BIOS file is needed: the GBA's BIOS functions are built in (you can load a
+> dump of your own console's BIOS in the settings).
 
 ## Running
 
@@ -41,7 +42,8 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
   wait states and the cartridge prefetch buffer, all video modes with
   sprites, windows, blending and mosaic, both kinds of sound (the Game Boy
   channels and the DMA sound FIFOs), DMA, timers and the serial port. The
-  BIOS is emulated (no BIOS file needed). Saves: SRAM, Flash (64/128 KB) and
+  BIOS is emulated (no BIOS file needed; your own BIOS dump can be loaded in
+  the settings, with or without its boot animation). Saves: SRAM, Flash (64/128 KB) and
   EEPROM, detected automatically; the cartridge clock of the Pokémon games
   and Boktai. Passes jsmolka's gba-tests and most of mGBA's test suite.
 - **Cartridges:** MBC1, MBC2, MBC3 (real-time clock), MBC5 (rumble), MBC6,

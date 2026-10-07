@@ -302,3 +302,16 @@ test('memory regions: RAM, I/O, video memory, ROM and save memory', () => {
   assert.equal(gba.getSaveData()[0], 0x12);
   assert.notEqual(gba.getSaveWrites(), writes);
 });
+
+test('a BIOS file: intro or straight to the game, and snapshots that do not mix', () => {
+  const bios = new Uint8Array(0x4000);
+  const rom = cart();
+  const intro = new Gba(rom, { bios, biosIntro: true });
+  assert.equal(intro.cpu.pc, 0, 'starts at the reset vector');
+  const direct = new Gba(rom, { bios });
+  assert.equal(direct.cpu.pc, 0x08000000, 'starts at the game');
+  const builtIn = new Gba(rom);
+  assert.throws(() => builtIn.loadState(direct.saveState()), /with the BIOS file/);
+  assert.throws(() => direct.loadState(builtIn.saveState()), /without the BIOS file/);
+  direct.loadState(direct.saveState());
+});

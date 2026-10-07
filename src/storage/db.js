@@ -3,7 +3,7 @@
 // limited to ~5 MB.
 
 const DB_NAME = 'webgb';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -26,8 +26,20 @@ function openDb() {
         snapshots.createIndex('romKey', 'romKey');
         db.createObjectStore('snapshotStates', { keyPath: 'id' });
       }
+      if (event.oldVersion < 2) {
+        // Files that aren't games, e.g. a GBA BIOS.
+        db.createObjectStore('files', { keyPath: 'name' });
+      }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      // Let a newer version of the page (in another tab) upgrade the database.
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
+    };
     request.onerror = () => reject(request.error);
   });
   dbPromise.catch(() => (dbPromise = null));

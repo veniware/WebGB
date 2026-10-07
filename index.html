@@ -197,6 +197,21 @@
           Show the border around the screen</label>
       </div>
     </section>
+    <section>
+      <header><h3>Game Boy Advance</h3></header>
+      <div class="fields">
+        <label for="gba-bios-load">BIOS</label>
+        <div class="buttons">
+          <span id="gba-bios-status">Built in</span>
+          <button type="button" id="gba-bios-load">Load file…</button>
+          <button type="button" id="gba-bios-remove" hidden>Remove</button>
+        </div>
+        <label for="set-gba-bios-intro">BIOS intro</label>
+        <label class="check"><input id="set-gba-bios-intro" type="checkbox" data-setting="gbaBiosIntro">
+          Show the BIOS file's boot animation</label>
+      </div>
+      <p class="empty">Games run without a BIOS file. A dump of your console's BIOS (16 KB) is used from the next start.</p>
+    </section>
   </dialog>
 
   <dialog id="controls" class="panel">

@@ -7,6 +7,7 @@ import { FILTERS } from '../video/filters.js';
 import { baseName, formatSize, pickFiles, SYSTEM_NAMES } from './dom.js';
 import { ROM_ACCEPT, SAVE_EXTENSION } from './files.js';
 import { defaultKeyBindings, defaultPadBindings, gamepadMaps, keyboardMaps, withDefaults } from '../input/bindings.js';
+import { setupBiosSetting } from './bios-setting.js';
 import { createControlsDialog } from './controls-dialog.js';
 import { createGameDialog } from './game-dialog.js';
 import { createLibraryDialog } from './library-dialog.js';
@@ -92,14 +93,26 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
     onStatus: flash,
     onLink: () => linkDialog.open().catch(reportError),
   });
+  // The GBA BIOS file, if the user gave one.
+  let gbaBios = null;
   // Settings the cores read (see Emulator.configure).
   const coreOptions = () => ({
     gbPalette: settings.gbPalette,
     colorCorrection: settings.colorCorrection,
     sgb: settings.sgb,
     sgbBorder: settings.sgbBorder,
+    gbaBios,
+    gbaBiosIntro: settings.gbaBiosIntro,
   });
   emulator.configure(coreOptions());
+  setupBiosSetting({
+    onChange: (bios) => {
+      gbaBios = bios;
+      emulator.configure(coreOptions());
+    },
+    onStatus: flash,
+    onError: reportError,
+  });
   const settingsDialog = createSettingsDialog({
     dialog: $('settings'),
     modals,

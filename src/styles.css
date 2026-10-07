@@ -225,6 +225,13 @@ body.dragging .drop-overlay {
   gap: 8px;
 }
 
+.fields .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .fields .checks {
   display: grid;
   gap: 6px;

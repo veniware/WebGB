@@ -15,6 +15,9 @@ import { Timers } from './timers.js';
 export const CLOCK_RATE = 16777216;
 export const FRAME_CYCLES = LINE_CYCLES * 228;
 const STATE_MAGIC = 0x41424757; // "WGBA"
+// States of a machine running a BIOS file: the CPU can be inside the BIOS,
+// whose code differs from the built-in one, so they don't mix.
+const STATE_MAGIC_BIOS = 0x42424757; // "WGBB"
 // Cycles from an interrupt request to the CPU taking it, and from
 // unmasking a pending one (CPSR) to taking it. Tuned against mGBA's suite.
 const IRQ_DELAY = 5;
@@ -55,10 +58,11 @@ export class Gba {
 
   /**
    * @param {Uint8Array} rom
-   * @param {{ bios?: Uint8Array | null, now?: () => number }} [options]
-   *   bios: a BIOS dump to use instead of the built-in calls.
+   * @param {{ bios?: Uint8Array | null, biosIntro?: boolean, now?: () => number }} [options]
+   *   bios: a BIOS dump to use instead of the built-in calls; biosIntro: start
+   *   with its boot animation instead of at the game.
    */
-  constructor(rom, { bios = null, now } = {}) {
+  constructor(rom, { bios = null, biosIntro = false, now } = {}) {
     this.rom = rom;
     this.ioRegs = new Uint16Array(0x200);
     this.irq = new Interrupts((time) => this.#updateIrq(time));
@@ -71,6 +75,7 @@ export class Gba {
       onCaptureLine: (line) => this.dma.videoCapture(line),
     });
     this.realBios = bios;
+    this.biosIntro = biosIntro;
     this.bus = new Bus({
       rom,
       bios: bios ? new Uint8Array(bios.slice(0, 0x4000)) : createBios(),
@@ -134,7 +139,7 @@ export class Gba {
     // Inside the BIOS's IntrWait (see bios.js).
     this.biosWaiting = false;
     this.frameStart = 0;
-    if (this.realBios) {
+    if (this.realBios && this.biosIntro) {
       this.cpu.reset();
       this.cpu.branch(0);
     } else {
@@ -333,7 +338,7 @@ export class Gba {
 
   saveState() {
     const s = new StateWriter();
-    s.u32(STATE_MAGIC);
+    s.u32(this.realBios ? STATE_MAGIC_BIOS : STATE_MAGIC);
     s.u32(this.rom.length);
     this.#sync(s);
     return s.finish();
@@ -341,7 +346,13 @@ export class Gba {
 
   loadState(data) {
     const s = new StateReader(data);
-    if (s.u32() !== STATE_MAGIC || s.u32() !== this.rom.length) throw new Error('This snapshot is for a different game or system.');
+    const magic = s.u32();
+    if (magic === (this.realBios ? STATE_MAGIC : STATE_MAGIC_BIOS)) {
+      throw new Error(this.realBios ? 'This snapshot was taken without the BIOS file.' : 'This snapshot was taken with the BIOS file.');
+    }
+    if (magic !== (this.realBios ? STATE_MAGIC_BIOS : STATE_MAGIC) || s.u32() !== this.rom.length) {
+      throw new Error('This snapshot is for a different game or system.');
+    }
     const backup = this.saveState();
     try {
       this.#sync(s);

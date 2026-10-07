@@ -20,8 +20,8 @@ Decisions so far:
   systems without a core.
 - **No boot ROMs or BIOS files** (they're copyrighted): cores start in the
   state the boot ROM leaves behind, and the GBA's BIOS calls are implemented
-  in JavaScript (high-level emulation; the core can also run a real BIOS
-  dump, not exposed in the UI). Game Boy games run as on a DMG, Color games
+  in JavaScript (high-level emulation). Users can load their own GBA BIOS
+  dump in the settings (kept in IndexedDB, never shipped). Game Boy games run as on a DMG, Color games
   as on a CGB (no CGB compatibility mode for DMG games).
 - **Accuracy is measured with open-source test ROMs** (see Testing); keep
   them passing.
@@ -152,6 +152,7 @@ src/storage/
   roms.js               ROM library (metadata and bytes in separate stores)
   saves.js              Saved games (battery RAM), several per ROM
   snapshots.js          Snapshot metadata and states (separate stores)
+  files.js              Other user files by name (the GBA BIOS)
 src/ui/
   ui.js                 Toolbar, opening files, drag-and-drop, status bar, hotkeys
   library-dialog.js     Library: play, export, delete ROMs; add ROMs
@@ -161,6 +162,7 @@ src/ui/
   settings-dialog.js    Settings (renderer, performance stats, Game Boy palette, ...)
   controls-dialog.js    Rebinding keyboard keys and gamepad buttons
   memory-dialog.js      Memory viewer/editor (hex pages of the core's regions)
+  bios-setting.js       GBA BIOS file in the settings (load, remove)
   modals.js             Shows dialogs; pauses the game and input while open
   dom.js                h() element helper, formatting, downloads, file picker
   files.js              Accepted file types and limits
@@ -280,6 +282,12 @@ other versions are refused.
   dispatcher that calls the game's handler) and implements the SWIs in JS,
   including the BIOS's side effects on registers and its cycle counts.
   IntrWait halts and re-runs the SWI after each interrupt.
+- **BIOS file** (optional, `gbaBios` core option): replaces the built-in
+  image and the HLE SWIs; the game starts directly (`bootState`) unless
+  `gbaBiosIntro`. Its snapshots use another magic ("WGBB") and don't load
+  into a core without the file, or the other way round (the CPU may be
+  inside BIOS code). Tested with the open-source Cult-of-GBA BIOS (fails
+  only jsmolka's bios.gba checks for official BIOS opcodes).
 - **PPU:** each line is rendered at HBlank with the registers of that moment;
   sprites for a line are drawn during the line before (OAM changes show one
   line later, palette changes at once); a BG enabled mid-frame shows from the
@@ -318,10 +326,10 @@ other versions are refused.
 
 - ROM key: `<system>-<crc32>-<size>` (from `loader.js`). Library entries,
   saved games and snapshots are keyed by it.
-- IndexedDB `webgb`, version 1: `roms` (metadata, keyPath `key`), `romData`
+- IndexedDB `webgb`, version 2: `roms` (metadata, keyPath `key`), `romData`
   (`key` -> bytes), `saves` (autoIncrement `id`, index `romKey`), `snapshots`
   (metadata, autoIncrement `id`, index `romKey`), `snapshotStates` (`id` ->
-  state bytes). Schema changes go in `db.js` `onupgradeneeded`, keyed on
+  state bytes), `files` (keyPath `name`: other user files, e.g. `gba-bios`). Schema changes go in `db.js` `onupgradeneeded`, keyed on
   `event.oldVersion`, and bump `DB_VERSION`.
 - In-game saves are written when they change (checked every 2 s, on tab hide
   and on pagehide).
@@ -389,7 +397,7 @@ input mapping, performance stats, the renderer setting, the PWA, video
 effects (ghosting, sharpen, outlines, xBR), sound effects (pitch, low/high
 pass, echo) and the memory viewer/editor (Settings → Tools).
 
-1. GBA follow-ups: optional user BIOS file in the settings, idle-loop
+1. GBA follow-ups: idle-loop
    detection (speed on slow phones), link cable, solar sensor (Boktai),
    gyro and rumble cartridges.
 2. Memory viewer: search (cheat finder), watch values while the game runs.
