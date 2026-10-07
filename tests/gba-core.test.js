@@ -463,6 +463,26 @@ test("timers: a reload written in the cycle of an overflow is the one loaded", (
     assert.equal(timers.counter(0), 3);
 });
 
+test("an immediate DMA starts shortly after it is enabled, before the CPU's next bus access", () => {
+    const gba = new Gba(cart([
+        0xe3a00301, // mov r0, #0x04000000
+        0xe28000d4, // add r0, r0, #0xd4 (DMA3SAD)
+        0xe3a01403, // mov r1, #0x03000000
+        0xe3a02042, // mov r2, #0x42
+        0xe5812000, // str r2, [r1]
+        0xe5801000, // str r1, [r0] (source)
+        0xe2813c01, // add r3, r1, #0x100
+        0xe5803004, // str r3, [r0, #4] (destination)
+        0xe3a04484, // mov r4, #0x84000000 (enable, 32-bit)
+        0xe3844001, // orr r4, r4, #1 (one word)
+        0xe5804008, // str r4, [r0, #8]
+        0xe5935000, // ldr r5, [r3]
+    ]));
+    run(gba, 1);
+    assert.equal(gba.cpu.r[5], 0x42, "the load sees the copied word");
+    assert.equal(gba.bus.iwram32[0x40], 0x42);
+});
+
 // --- Multiply carry --------------------------------------------------------------------
 
 test("multiplies set the carry flag like the ARM7TDMI's Booth multiplier", async () => {

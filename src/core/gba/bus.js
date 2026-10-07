@@ -55,6 +55,9 @@ export class Bus {
         // what changes without the CPU or an event (timers, sound, EEPROM).
         this.writes = 0;
         this.volatileReads = 0;
+        // An immediate DMA starting then takes the bus before the next access (dma.js).
+        this.dmaDue = Infinity;
+        this.onDmaDue = null;
         this.reset();
     }
 
@@ -194,6 +197,25 @@ export class Bus {
         }
     }
 
+    /**
+     * A data access (CPU or DMA) takes the cartridge bus: the prefetch buffer
+     * stops; an opcode fetch about to end finishes first.
+     */
+    stopPrefetch() {
+        if (!this.pfActive) return;
+        this.pfActive = false;
+        const thumb = this.cpu?.thumb;
+        const capacity = thumb ? 8 : 4;
+        const s = (thumb ? this.s16 : this.s32)[(this.pfHead >>> 24) & 0xf];
+        let count = this.pfCount;
+        let countdown = this.pfCountdown - (this.cycles - this.pfTime);
+        while (countdown <= 0 && count < capacity) {
+            count++;
+            countdown += s;
+        }
+        if (count < capacity && countdown === 1) this.cycles += 1;
+    }
+
     /** Cartridge opcode fetches (cycles, then the opcode). */
     #romFetchCycles(address, region, n, s, width) {
         if (this.prefetch) this.#prefetchFetch(address, n, s, width);
@@ -205,6 +227,7 @@ export class Bus {
     }
 
     fetch16(address) {
+        if (this.cycles >= this.dmaDue) this.onDmaDue();
         const region = (address >>> 24) & 0xf;
         if (region >= Region.ROM0 && region <= Region.ROM2_HI) {
             this.#romFetchCycles(address, region, this.n16[region], this.s16[region], 2);
@@ -223,6 +246,7 @@ export class Bus {
     }
 
     fetch32(address) {
+        if (this.cycles >= this.dmaDue) this.onDmaDue();
         const region = (address >>> 24) & 0xf;
         if (region >= Region.ROM0 && region <= Region.ROM2_HI) {
             this.#romFetchCycles(address, region, this.n32[region], this.s32[region], 4);
@@ -257,9 +281,9 @@ export class Bus {
 
     /** Cycles of a data access; the next opcode fetch is non-sequential. */
     #access(address, region, n, s, sequential) {
+        if (this.cycles >= this.dmaDue) this.onDmaDue();
         if (region >= Region.ROM0) {
-            // The cartridge bus is taken: the prefetch buffer stops.
-            this.pfActive = false;
+            this.stopPrefetch();
             if ((address & 0x1ffff) === 0) sequential = false;
         }
         this.cycles += sequential ? s : n;

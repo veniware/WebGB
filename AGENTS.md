@@ -310,7 +310,12 @@ other versions are refused.
   that changes without an event must count as a volatile read.
 - **Bus timing:** WAITCNT wait states, forced non-sequential accesses at
   128 KB ROM boundaries, and a prefetch buffer worked out lazily from the
-  time since the last fetch (ROM data accesses stop it).
+  time since the last fetch (cartridge data accesses, by the CPU or DMA,
+  stop it; an opcode fetch one cycle from done finishes first).
+- **DMA:** a transfer runs in one go (the CPU waits). An immediate one
+  starts 2 cycles after the enabling write: the CPU runs on until its next
+  bus access (`bus.dmaDue`) or the next event. From the cartridge to the
+  cartridge, the first write is sequential.
 - **Interrupts** reach the CPU a few cycles after the request
   (`IRQ_DELAY`, `UNMASK_DELAY`); timer reads lag a little (`READ_DELAY`);
   HBlank starts at cycle 1008. These were tuned against mGBA's test suite.
@@ -476,7 +481,8 @@ so short taps are never lost.
 - mGBA's test suite isn't run by `npm test` (it isn't in the downloaded
   collection; mGBA's own build is at
   https://s3.amazonaws.com/mgba/suite-latest.zip). Current results: memory
-  1552/1552, I/O read 130/130, timing 1814/2020, timer count-up 816/936
+  1552/1552, I/O read 130/130, timing 1984/2020 (prefetch buffer meeting
+  DMA), timer count-up 816/936
   (back-to-back interrupts), timer IRQ 90/90, shifter, carry, multiply long
   and BIOS math all, DMA 1244/1244, SIO all, misc 4/12, video tests all but
   sub-line glitches. A build from source with a newer GCC times its C

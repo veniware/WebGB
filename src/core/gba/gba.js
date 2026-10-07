@@ -119,8 +119,10 @@ export class Gba {
         });
         this.dma = new Dma(this.bus, {
             requestIrq: (bit) => this.irq.request(bit),
+            onSchedule: (time) => this.#schedule(time),
             eepromTransfer: (count) => this.backup.eepromTransfer(count),
         });
+        this.bus.onDmaDue = () => this.dma.runPending();
         const onIrqEnable = () => {
             // A pending interrupt is taken a few cycles after it gets unmasked.
             if (this.irqLine && this.irqReadyAt < this.bus.cycles) this.irqReadyAt = this.bus.cycles + UNMASK_DELAY;
@@ -354,6 +356,8 @@ export class Gba {
     }
 
     endFrame() {
+        // No transfer is left waiting in save states.
+        if (this.dma.pending) this.dma.runPending();
         this.apu.endFrame();
     }
 
@@ -367,7 +371,7 @@ export class Gba {
         const { cpu, bus, ppu } = this;
         while (bus.cycles < stop && !(untilVblank && ppu.frameDone)) {
             this.eventCount++;
-            this.eventTime = Math.min(ppu.nextEvent, this.timers.nextEvent, this.apu.nextEvent, this.sio.nextEvent, stop);
+            this.eventTime = Math.min(ppu.nextEvent, this.timers.nextEvent, this.apu.nextEvent, this.sio.nextEvent, this.dma.nextEvent, stop);
             if (bus.cycles < this.stallUntil) {
                 // The BIOS is busy: time moves on to the next event or the stall's end.
                 bus.cycles = Math.min(this.eventTime, this.stallUntil);
@@ -391,6 +395,7 @@ export class Gba {
                 while (bus.cycles < this.eventTime && !cpu.halted) cpu.step();
             }
             const now = bus.cycles;
+            if (this.dma.nextEvent <= now) this.dma.runPending();
             if (ppu.nextEvent <= now) ppu.event(ppu.nextEvent);
             if (this.timers.nextEvent <= now) this.timers.event(now);
             if (this.apu.nextEvent <= now) this.apu.event(now);

@@ -4,6 +4,13 @@ export const Timing = { IMMEDIATE: 0, VBLANK: 1, HBLANK: 2, SPECIAL: 3 };
 const SRC_MASK = [0x07ffffff, 0x0fffffff, 0x0fffffff, 0x0fffffff];
 const DST_MASK = [0x07ffffff, 0x07ffffff, 0x07ffffff, 0x0fffffff];
 const COUNT_MASK = [0x3fff, 0x3fff, 0x3fff, 0xffff];
+// Cycles from the write that enables an immediate transfer to its start;
+// the CPU runs on meanwhile, until it next uses the bus.
+const START_DELAY = 2;
+
+function isCart(region) {
+    return region >= 8 && region <= 0xd;
+}
 
 /**
  * The four DMA channels. A transfer runs in one go when it starts (the CPU
@@ -13,7 +20,8 @@ const COUNT_MASK = [0x3fff, 0x3fff, 0x3fff, 0xffff];
 export class Dma {
     /**
      * @param {import("./bus.js").Bus} bus
-     * @param {{ requestIrq: (bit: number) => void, eepromTransfer?: (count: number) => void }} hooks
+     * @param {{ requestIrq: (bit: number) => void, eepromTransfer?: (count: number) => void,
+     *     onSchedule?: (time: number) => void }} hooks
      */
     constructor(bus, hooks) {
         this.bus = bus;
@@ -32,6 +40,10 @@ export class Dma {
     }
 
     reset() {
+        // Immediate transfers waiting to start (channel bits), and when.
+        this.pending = 0;
+        this.nextEvent = Infinity;
+        this.bus.dmaDue = Infinity;
         for (const array of [this.sad, this.dad, this.count, this.control, this.src, this.dst, this.remaining, this.latch]) {
             array.fill(0);
         }
@@ -70,7 +82,26 @@ export class Dma {
         this.src[i] = this.sad[i] & SRC_MASK[i];
         this.dst[i] = this.dad[i] & DST_MASK[i];
         this.remaining[i] = (this.count[i] & COUNT_MASK[i]) || COUNT_MASK[i] + 1;
-        if (((value >>> 12) & 3) === Timing.IMMEDIATE) this.#transfer(i);
+        if (((value >>> 12) & 3) === Timing.IMMEDIATE) {
+            this.pending |= 1 << i;
+            const time = this.bus.cycles + START_DELAY;
+            if (time < this.nextEvent) {
+                this.nextEvent = time;
+                this.bus.dmaDue = time;
+                this.hooks.onSchedule?.(time);
+            }
+        }
+    }
+
+    /** Runs the immediate transfers that are due (at the CPU's next bus access or event). */
+    runPending() {
+        const pending = this.pending;
+        this.pending = 0;
+        this.nextEvent = Infinity;
+        this.bus.dmaDue = Infinity;
+        for (let i = 0; i < 4; i++) {
+            if (pending & (1 << i) && this.control[i] & 0x8000) this.#transfer(i);
+        }
     }
 
     /** Starts the enabled channels waiting for `timing` (VBlank, HBlank). */
@@ -118,7 +149,11 @@ export class Dma {
         const dstRegion = (dst >>> 24) & 0xf;
         const n = wide ? bus.n32 : bus.n16;
         const s = wide ? bus.s32 : bus.s16;
-        bus.cycles += 2 + n[srcRegion] + n[dstRegion] + (count - 1) * (s[srcRegion] + s[dstRegion]);
+        // From the cartridge to the cartridge, the first write continues the
+        // read's access (sequential).
+        const cartToCart = isCart(srcRegion) && isCart(dstRegion);
+        if (isCart(srcRegion) || isCart(dstRegion)) bus.stopPrefetch();
+        bus.cycles += 2 + n[srcRegion] + (cartToCart ? s[dstRegion] : n[dstRegion]) + (count - 1) * (s[srcRegion] + s[dstRegion]);
         const latch = this.latch;
         for (let k = 0; k < count; k++) {
             // Reads below 0x02000000 (the BIOS) give the last value instead.
