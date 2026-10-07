@@ -1,6 +1,8 @@
 // ARM (32-bit) instructions of the ARM7TDMI. buildArmTable() returns one
 // handler per decode index: bits 27-20 and 7-4 of the opcode.
 
+import { Flavor, multiplyCarry } from "./multiply-carry.js";
+
 /** 32-bit add, setting C and V on `cpu`. */
 export function addFlags(cpu, a, b, carry = 0) {
     const result = (a + b + carry) | 0;
@@ -215,14 +217,16 @@ export function buildArmTable(cpu) {
     function multiply(op) {
         const rd = (op >>> 16) & 0xf;
         const rs = r[(op >>> 8) & 0xf];
-        let result = Math.imul(r[op & 0xf], rs);
+        const rm = r[op & 0xf];
+        const accumulator = op & 0x00200000 ? r[(op >>> 12) & 0xf] : 0;
+        const result = (Math.imul(rm, rs) + accumulator) | 0;
         bus.idle(multiplyCycles(rs, true));
-        if (op & 0x00200000) {
-            result = (result + r[(op >>> 12) & 0xf]) | 0;
-            bus.idle(1);
+        if (op & 0x00200000) bus.idle(1);
+        if (op & 0x00100000) {
+            setNZ(cpu, result);
+            cpu.c = multiplyCarry(Flavor.SHORT, rm, rs, accumulator);
         }
         r[rd] = result;
-        if (op & 0x00100000) setNZ(cpu, result);
         // The opcode fetch after the multiplier's internal cycles is non-sequential.
         bus.nonseq = true;
     }
@@ -233,15 +237,17 @@ export function buildArmTable(cpu) {
         const a = r[op & 0xf];
         const b = r[(op >>> 8) & 0xf];
         const signed = (op & 0x00400000) !== 0;
+        const accLo = op & 0x00200000 ? r[loReg] : 0;
+        const accHi = op & 0x00200000 ? r[hiReg] : 0;
         let lo = umul64(a, b);
         let hi = mul64.hi;
         if (signed) hi = (hi - (a < 0 ? b : 0) - (b < 0 ? a : 0)) | 0;
         bus.idle(multiplyCycles(b, signed) + 1);
         bus.nonseq = true;
         if (op & 0x00200000) {
-            const sum = (lo >>> 0) + (r[loReg] >>> 0);
+            const sum = (lo >>> 0) + (accLo >>> 0);
             lo = sum | 0;
-            hi = (hi + r[hiReg] + (sum > 0xffffffff ? 1 : 0)) | 0;
+            hi = (hi + accHi + (sum > 0xffffffff ? 1 : 0)) | 0;
             bus.idle(1);
         }
         r[loReg] = lo;
@@ -249,6 +255,7 @@ export function buildArmTable(cpu) {
         if (op & 0x00100000) {
             cpu.n = (hi >>> 31) & 1;
             cpu.z = lo === 0 && hi === 0 ? 1 : 0;
+            cpu.c = multiplyCarry(signed ? Flavor.LONG_SIGNED : Flavor.LONG_UNSIGNED, a, b, accLo, accHi);
         }
     }
 

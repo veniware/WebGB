@@ -61,6 +61,7 @@ const FILES = [
     "src/core/gba/link.js",
     "src/core/gba/memory.js",
     "src/core/gba/multiboot.js",
+    "src/core/gba/multiply-carry.js",
     "src/core/gba/ppu.js",
     "src/core/gba/sio.js",
     "src/core/gba/thumb.js",

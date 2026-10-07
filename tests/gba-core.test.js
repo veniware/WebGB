@@ -443,6 +443,40 @@ test("idle loops: reading a timer is never skipped", () => {
     assert.equal(gba.idleLoops.skipped, 0);
 });
 
+// --- Multiply carry --------------------------------------------------------------------
+
+test("multiplies set the carry flag like the ARM7TDMI's Booth multiplier", async () => {
+    const { Flavor, multiplyCarry } = await import("../src/core/gba/multiply-carry.js");
+    // multiplicand, multiplier, accumulator low/high; then the carry of
+    // MULS, MLAS, UMULLS, UMLALS, SMULLS, SMLALS (from the original C code).
+    const cases = [
+        [4294967164, 4788469, 13365, 4294967230, 1, 1, 1, 1, 1, 1],
+        [4294967295, 4294967223, 4292094103, 4294967217, 0, 0, 1, 1, 0, 0],
+        [481637726, 3734052113, 14100660, 4294967216, 0, 0, 0, 0, 0, 0],
+        [7126788, 567320409, 1895931292, 2544403732, 0, 0, 0, 1, 0, 1],
+        [2007660408, 4294967295, 4294967250, 4293462845, 0, 1, 1, 1, 0, 1],
+        [3993104583, 1130860790, 2930825910, 4294967226, 0, 0, 0, 0, 1, 1],
+        [1162808428, 3118703620, 4294967165, 4191866, 1, 1, 0, 0, 1, 1],
+        [4294967040, 1718046902, 132, 25, 0, 0, 1, 1, 1, 1],
+        [1465367256, 2566168983, 1876448115, 1131447678, 1, 1, 0, 0, 1, 0],
+    ];
+    for (const [a, b, lo, hi, ...carry] of cases) {
+        assert.deepEqual([
+            multiplyCarry(Flavor.SHORT, a, b), multiplyCarry(Flavor.SHORT, a, b, lo),
+            multiplyCarry(Flavor.LONG_UNSIGNED, a, b), multiplyCarry(Flavor.LONG_UNSIGNED, a, b, lo, hi),
+            multiplyCarry(Flavor.LONG_SIGNED, a, b), multiplyCarry(Flavor.LONG_SIGNED, a, b, lo, hi),
+        ], carry, `${a} * ${b}`);
+    }
+    // UMULLS -1 * -1 sets C (mGBA's suite).
+    const gba = new Gba(cart([
+        0xe3e00000, // mvn r0, #0
+        0xe3e01000, // mvn r1, #0
+        0xe0932190, // umulls r2, r3, r0, r1
+    ]));
+    run(gba, 1);
+    assert.deepEqual([gba.cpu.r[2] >>> 0, gba.cpu.r[3] >>> 0, gba.cpu.n, gba.cpu.c], [1, 0xfffffffe, 1, 1]);
+});
+
 // --- Link cable ------------------------------------------------------------------------
 
 async function linkedPair() {

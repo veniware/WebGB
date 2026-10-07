@@ -131,4 +131,6 @@ See [AGENTS.md](AGENTS.md) for the architecture and conventions.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). `src/core/gba/multiply-carry.js` is adapted
+from zaydlang's [multiplication-algorithm](https://github.com/zaydlang/multiplication-algorithm)
+(zlib license, notice in the file).

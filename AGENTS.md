@@ -116,6 +116,9 @@ src/core/
     cpu.js              ARM7TDMI: registers, modes, exceptions, pipeline
     idle.js             Idle-loop skipping (exact: whole passes up to the next event)
     arm.js, thumb.js    Instruction decode tables and handlers
+    multiply-carry.js   The carry flag after multiplies, from the Booth
+                        multiplier's internals (after zaydlang's
+                        multiplication-algorithm, zlib license)
     bus.js              Memory map, wait states, prefetch buffer, open bus
     bios.js             HLE BIOS: built-in vectors/IRQ stub, SWIs in JS
     ppu.js              Line timing and a scanline renderer (all modes,
@@ -293,6 +296,8 @@ other versions are refused.
   ahead), so self-modifying code behaves (the Classic NES Series checks it).
   Each step's fetch stands for the hardware's prefetch two opcodes ahead; a
   jump refills (2S + 1N); after a data access the fetch is non-sequential.
+  Multiplies with S (and Thumb MUL) set C as the Booth multiplier leaves it
+  (`multiply-carry.js`, checked against the original C on 1.2M inputs).
 - **Idle loops** (`idle.js`): at each short backward branch (`cpu.onLoop`
   hook) the CPU is compared with the previous pass of the same loop. A pass
   with no writes (`bus.writes`), no reads of what changes on its own
@@ -471,8 +476,7 @@ so short taps are never lost.
 - mGBA's test suite isn't run by `npm test` (it has to be built from source
   with an ARM toolchain); current results: memory 1552/1552, I/O read
   130/130, timing 1794/2020, timer count-up 816/936, timer IRQ 73/90,
-  shifter, carry and BIOS math all, multiply long 52/72 (carry flag), DMA
-  1244/1244, SIO all, misc 4/12, video tests all but sub-line glitches.
+  shifter, carry, multiply long and BIOS math all, DMA 1244/1244, SIO all, misc 4/12, video tests all but sub-line glitches.
 - The ROMs are skipped until `npm run fetch-test-roms` has downloaded them
   (the c-sp/game-boy-test-roms release and jsmolka/gba-tests). `tests/known-failures.js` lists
   the ones that don't pass yet, with reasons (mostly timing within an

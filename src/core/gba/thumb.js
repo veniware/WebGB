@@ -2,6 +2,7 @@
 // handler per decode index: the top 10 bits of the opcode.
 
 import { addFlags, multiplyCycles, ror, setNZ, shift, shifter, subFlags } from "./arm.js";
+import { Flavor, multiplyCarry } from "./multiply-carry.js";
 
 export function buildThumbTable(cpu) {
     const r = cpu.r;
@@ -68,6 +69,7 @@ export function buildThumbTable(cpu) {
                 bus.idle(multiplyCycles(a, true));
                 bus.nonseq = true;
                 result = r[rd] = Math.imul(a, rs);
+                cpu.c = multiplyCarry(Flavor.SHORT, rs, a);
                 break;
             case 0xe: result = r[rd] = a & ~rs; break; // BIC
             default: result = r[rd] = ~rs; // MVN
