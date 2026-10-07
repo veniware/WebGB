@@ -15,6 +15,10 @@ const READ_MASKS = [
 ];
 // The output capacitor's charge factor per T-cycle, raised to the cycles per sample.
 const HIGH_PASS = 0.999958 ** (CLOCK_RATE / SAMPLE_RATE);
+// The wave channel runs at 2 MHz: the DMG's CPU reaches wave RAM only in the
+// same 2-cycle tick as a fetch, and a retrigger in the tick before one
+// corrupts it.
+const WAVE_TICK = 2;
 
 /** Length counter, volume envelope and DAC shared by the channels. */
 class Channel {
@@ -181,6 +185,8 @@ class WaveChannel extends Channel {
     this.position = 0;
     this.sample = 0;
     this.volumeShift = 4;
+    // Whether wave RAM has been read since the trigger.
+    this.fetched = false;
   }
 
   sync(s) {
@@ -188,6 +194,7 @@ class WaveChannel extends Channel {
     this.position = s.u8(this.position);
     this.sample = s.u8(this.sample);
     this.volumeShift = s.u8(this.volumeShift);
+    this.fetched = s.bool(this.fetched);
     s.bytes(this.ram);
   }
 
@@ -202,12 +209,14 @@ class WaveChannel extends Channel {
   step() {
     this.timer += this.period;
     this.position = (this.position + 1) & 31;
+    this.fetched = true;
     const byte = this.ram[this.position >> 1];
     this.sample = this.position & 1 ? byte & 0x0f : byte >> 4;
   }
 
   trigger() {
     this.position = 0;
+    this.fetched = false;
     // The first sample is fetched a little after the trigger.
     this.timer = this.period + 6;
   }
@@ -215,6 +224,25 @@ class WaveChannel extends Channel {
   /** While playing, the CPU sees the byte the channel is reading. */
   ramIndex(addr) {
     return this.enabled ? this.position >> 1 : addr & 0x0f;
+  }
+
+  /**
+   * The DMG's wave RAM is only reachable while playing in the cycle the
+   * channel reads it; otherwise reads give FF and writes are lost.
+   */
+  get justRead() {
+    return this.fetched && this.period - this.timer < WAVE_TICK;
+  }
+
+  /**
+   * DMG: retriggering just before the channel reads wave RAM corrupts its
+   * first bytes with the ones being read.
+   */
+  corruptOnTrigger() {
+    if (!this.enabled || this.timer > WAVE_TICK) return;
+    const offset = ((this.position + 1) >> 1) & 0x0f;
+    if (offset < 4) this.ram[0] = this.ram[offset];
+    else this.ram.copyWithin(0, offset & 0x0c, (offset & 0x0c) + 4);
   }
 }
 
@@ -474,7 +502,11 @@ export class Apu {
 
   read(addr) {
     this.catchUp();
-    if (addr >= 0xff30) return this.ch3.ram[this.ch3.ramIndex(addr)];
+    if (addr >= 0xff30) {
+      const ch3 = this.ch3;
+      if (ch3.enabled && !this.gb.cgb && !ch3.justRead) return 0xff;
+      return ch3.ram[ch3.ramIndex(addr)];
+    }
     const i = addr - 0xff10;
     if (addr === 0xff26) {
       return 0x70 | (this.power ? 0x80 : 0) | (this.ch1.enabled ? 1 : 0) | (this.ch2.enabled ? 2 : 0) |
@@ -486,7 +518,9 @@ export class Apu {
   write(addr, value) {
     this.catchUp();
     if (addr >= 0xff30) {
-      this.ch3.ram[this.ch3.ramIndex(addr)] = value;
+      const ch3 = this.ch3;
+      if (ch3.enabled && !this.gb.cgb && !ch3.justRead) return;
+      ch3.ram[ch3.ramIndex(addr)] = value;
       return;
     }
     if (addr === 0xff26) {
@@ -531,6 +565,7 @@ export class Apu {
       case 0xff1d: ch3.frequency = (ch3.frequency & 0x700) | value; break;
       case 0xff1e:
         ch3.frequency = (ch3.frequency & 0xff) | ((value & 7) << 8);
+        if (value & 0x80 && !this.gb.cgb) ch3.corruptOnTrigger();
         if (ch3.writeControl(value, lengthClockNext)) ch3.trigger();
         break;
       case 0xff20: ch4.length = 64 - (value & 0x3f); break;

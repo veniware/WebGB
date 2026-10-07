@@ -15,14 +15,6 @@ const available = existsSync(join(ROOT, 'blargg'));
 
 // Known failures, with the reason. Keep this list short and honest.
 const KNOWN_FAILURES = {
-  'blargg/dmg_sound/rom_singles/09-wave read while on.gb': 'DMG wave RAM access timing quirks',
-  'blargg/dmg_sound/rom_singles/10-wave trigger while on.gb': 'DMG wave RAM corruption on retrigger',
-  'blargg/dmg_sound/rom_singles/12-wave write while on.gb': 'DMG wave RAM access timing quirks',
-  'mooneye-test-suite/acceptance/boot_div-dmgABCmgb.gb': 'exact DIV phase after the boot ROM',
-  'mooneye-test-suite/acceptance/boot_hwio-dmgABCmgb.gb': 'exact I/O state after the boot ROM',
-  'mooneye-test-suite/acceptance/serial/boot_sclk_align-dmgABCmgb.gb': 'serial clock phase after the boot ROM',
-  'mooneye-test-suite/acceptance/timer/rapid_toggle.gb': 'sub-M-cycle timing of timer glitches',
-  'mooneye-test-suite/misc/bits/unused_hwio-C.gb': 'CGB unused I/O bits',
   'mealybug-tearoom-tests/ppu/m3_lcdc_bg_en_change.gb': 'off by a pixel at some transitions',
   'mealybug-tearoom-tests/ppu/m3_lcdc_obj_en_change.gb': 'sprite fetch aborted by disabling sprites',
   'mealybug-tearoom-tests/ppu/m3_lcdc_obj_en_change_variant.gb': 'sprite fetch aborted by disabling sprites',
@@ -69,6 +61,8 @@ const BLARGG = [
   ['blargg/mem_timing/mem_timing.gb', {}],
   ['blargg/mem_timing-2/mem_timing.gb', {}],
   ['blargg/halt_bug.gb', {}],
+  ['blargg/oam_bug/oam_bug.gb', {}],
+  ['blargg/dmg_sound/dmg_sound.gb', {}],
   ['blargg/interrupt_time/interrupt_time.gb', { cgb: true }],
   ['blargg/cgb_sound/cgb_sound.gb', { cgb: true }],
   ...(available ? readdirSync(join(ROOT, 'blargg/dmg_sound/rom_singles')).sort() : []).map((name) => [
@@ -81,12 +75,16 @@ for (const [path, options] of BLARGG) {
   romTest(path, () => assert.match(runBlargg(path, options), /Passed/));
 }
 
-/** Mooneye tests send 3 5 8 13 21 34 over serial on success (0x42 x 6 on failure). */
+/**
+ * Mooneye tests send 3 5 8 13 21 34 over serial on success (0x42 x 6 on
+ * failure), possibly after bytes of their own transfers.
+ */
 function runMooneye(path, cgb) {
   const gb = new GameBoy(load(path), { cgb });
-  const out = [];
-  gb.serial.onByte = (byte) => out.push(byte);
-  for (let frame = 0; frame < 120 * 60 && out.length < 6; frame++) gb.runFrame();
+  let out = [];
+  gb.serial.onByte = (byte) => (out = [...out, byte].slice(-6));
+  const done = () => out.length === 6 && (out[0] === 3 || out.every((byte) => byte === 0x42));
+  for (let frame = 0; frame < 120 * 60 && !done(); frame++) gb.runFrame();
   return out.join(' ');
 }
 
@@ -112,10 +110,10 @@ function mooneyeModel(path) {
   return null;
 }
 
-// The misc/boot_* tests expect the state the CGB boot ROM leaves for DMG
-// games, which isn't emulated (DMG games run as DMG).
+// The misc/boot_* and unused_hwio-C tests are DMG games on a CGB (its DMG
+// compatibility mode), which isn't emulated: DMG games run as DMG.
 const mooneye = [...listRoms('mooneye-test-suite/acceptance'), ...listRoms('mooneye-test-suite/emulator-only'),
-  ...listRoms('mooneye-test-suite/misc').filter((path) => !path.includes('/boot_'))].sort();
+  ...listRoms('mooneye-test-suite/misc').filter((path) => !/\/boot_|unused_hwio-C/.test(path))].sort();
 for (const path of mooneye) {
   const model = mooneyeModel(path);
   if (!model) continue;

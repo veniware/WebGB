@@ -53,13 +53,13 @@ export class Timer {
     }
     const old = this.counter;
     this.counter = (old + 4) & 0xffff;
-    this.#edges(old & ~this.counter);
+    this.#edges(old, this.counter);
   }
 
   writeDiv() {
     const old = this.counter;
     this.counter = 0;
-    this.#edges(old);
+    this.#edges(old, 0);
   }
 
   writeTima(value) {
@@ -74,21 +74,29 @@ export class Timer {
   }
 
   writeTac(value) {
-    const before = this.#signal();
+    // The enable bit is ANDed with the counter bit before edge detection, so
+    // turning the timer off (or switching bits) while the bit is high clocks
+    // TIMA. The write lands before the M-cycle's last counter increment,
+    // which tick() has already applied with the old TAC.
+    const now = this.counter;
+    const mid = (now - 1) & 0xffff;
+    const signal = (tac, counter) => (tac & 4) !== 0 && (counter & TAC_BITS[tac & 3]) !== 0;
+    const old = this.tac;
     this.tac = 0xf8 | value;
-    // The enable bit is ANDed with the counter bit before edge detection,
-    // so turning the timer off while the bit is high clocks TIMA.
-    if (before && !this.#signal()) this.#incrementTima();
+    const counted = signal(old, mid) && !signal(old, now) ? 1 : 0;
+    const due = (signal(old, mid) && !signal(this.tac, mid) ? 1 : 0) +
+      (signal(this.tac, mid) && !signal(this.tac, now) ? 1 : 0);
+    for (let i = counted; i < due; i++) this.#incrementTima();
   }
 
-  /** Called with the counter bits that just went from 1 to 0. */
-  #edges(fallen) {
+  /** Clocks what runs off falling edges of counter bits. */
+  #edges(old, now) {
+    const fallen = old & ~now;
     if (this.tac & 4 && fallen & TAC_BITS[this.tac & 3]) this.#incrementTima();
     if (fallen & (this.gb.doubleSpeed ? 0x2000 : 0x1000)) this.gb.apu.clockFrameSequencer();
-  }
-
-  #signal() {
-    return (this.tac & 4) !== 0 && (this.counter & TAC_BITS[this.tac & 3]) !== 0;
+    // The serial clock sees the counter one M-cycle ahead of DIV reads
+    // (boot_div and boot_sclk_align agree only this way).
+    if ((old + 4) & ~(now + 4) & this.gb.serial.mask) this.gb.serial.edge();
   }
 
   #incrementTima() {

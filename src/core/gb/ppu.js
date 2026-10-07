@@ -6,6 +6,11 @@ const LINE_DOTS = 456;
 const MAX_SPRITES_PER_LINE = 10;
 const WHITE = 0xffffffff;
 
+/** OAM bug write corruption of a row's first word. */
+function glitchWrite(a, b, c) {
+  return ((a ^ c) & (b ^ c)) ^ c;
+}
+
 // Events within a line, in order. Dots count from the start of the line,
 // when LY changes and the OAM-scan interrupt fires; STAT shows the new mode
 // and the LY=LYC flag 4 dots later.
@@ -37,12 +42,16 @@ const Phase = {
  * front buffer always holds a complete frame.
  */
 export class Ppu {
+  #oamWords;
+
   /** @param {import('./gameboy.js').GameBoy} gb */
   constructor(gb) {
     this.gb = gb;
     this.cgb = gb.cgb;
     this.vram = new Uint8Array(this.cgb ? 0x4000 : 0x2000);
     this.oam = new Uint8Array(0xa0);
+    // OAM as 16-bit words (little-endian hosts), for the OAM bug.
+    this.#oamWords = new Uint16Array(this.oam.buffer);
     this.bgPaletteRam = new Uint8Array(64);
     this.objPaletteRam = new Uint8Array(64);
     this.bgColors = new Uint32Array(32);
@@ -113,6 +122,8 @@ export class Ppu {
     this.coincidence = false;
     this.statSignal = false;
     this.spriteCount = 0;
+    // In OAM scan, the PPU reads one OAM row per M-cycle (see oamBugRow()).
+    this.oamScan = false;
     this.drawing = false;
     this.fifo.logLength = 0;
     this.frameDone = false;
@@ -135,7 +146,7 @@ export class Ppu {
     this.dot = s.u16(this.dot);
     this.nextEvent = s.u16(this.nextEvent);
     for (const flag of ['oamReadBlocked', 'oamWriteBlocked', 'vramReadBlocked', 'vramWriteBlocked', 'windowTriggered',
-      'coincidence', 'statSignal', 'frameDone', 'skipFrame', 'drawing']) {
+      'coincidence', 'statSignal', 'frameDone', 'skipFrame', 'drawing', 'oamScan']) {
       this[flag] = s.bool(this[flag]);
     }
     s.bytes(this.lineSprites);
@@ -199,6 +210,7 @@ export class Ppu {
         this.#next(Phase.DRAWING, 84);
         break;
       case Phase.DRAWING:
+        this.oamScan = false;
         this.#scanOam();
         this.drawing = true;
         this.fifo.logLength = 0;
@@ -246,6 +258,7 @@ export class Ppu {
         } else {
           this.irqMode = 2;
           this.oamReadBlocked = true;
+          this.oamScan = !this.cgb;
           this.#updateStat();
           this.#next(Phase.OAM_SCAN, 4);
         }
@@ -279,6 +292,7 @@ export class Ppu {
           this.windowLine = 0;
           this.windowTriggered = false;
           this.oamReadBlocked = true;
+          this.oamScan = !this.cgb;
           this.#next(Phase.OAM_SCAN, 4);
         } else {
           this.ly++;
@@ -524,6 +538,57 @@ export class Ppu {
     if (!this.oamWriteBlocked) this.oam[addr - 0xfe00] = value;
   }
 
+  /**
+   * DMG OAM bug: the OAM row (byte offset) the scan reads in this M-cycle,
+   * or -1. Rows 1-19 can be corrupted; the scan reads one every 4 dots.
+   */
+  oamBugRow() {
+    if (!this.oamScan) return -1;
+    const row = this.dot >> 2;
+    return row >= 1 && row < 20 ? row * 8 : -1;
+  }
+
+  /** CPU write (or 16-bit increment) on OAM's address range during OAM scan. */
+  oamBugWrite() {
+    const r = this.oamBugRow();
+    if (r < 0) return;
+    const w = this.#oamWords;
+    w[r >> 1] = glitchWrite(w[r >> 1], w[(r - 8) >> 1], w[(r - 4) >> 1]);
+    this.oam.copyWithin(r + 2, r - 6, r);
+  }
+
+  /**
+   * CPU read on OAM's address range during OAM scan. The patterns depend on
+   * the row; these are a DMG-B's (from SameBoy).
+   */
+  oamBugRead() {
+    const r = this.oamBugRow();
+    if (r < 0) return;
+    const oam = this.oam;
+    const w = this.#oamWords;
+    const at = (offset) => w[(r + offset) >> 1];
+    if ((r & 0x18) === 0x10) {
+      w[(r - 8) >> 1] = (at(-8) & (at(-16) | at(0) | at(-4))) | (at(-16) & at(0) & at(-4));
+      oam.copyWithin(r - 16, r - 8, r);
+    } else if ((r & 0x18) === 0) {
+      if (r === 0x40) {
+        const [b, c, d, e, f, g, h] = [at(0), at(-4), at(-6), at(-8), at(-14), at(-16), at(-32)];
+        w[(r - 8) >> 1] = (e & (h | g | (~d & f) | c | b)) | (c & g & h);
+      } else {
+        const [a, b, c, d, e] = [at(0), at(-4), at(-8), at(-16), at(-32)];
+        w[(r - 8) >> 1] = r === 0x20 ? (c & (a | b | d | e)) | (a & b & d & e)
+          : r === 0x60 ? (c & (a | b | d | e)) | (b & d & e)
+          : c | (a & b & d & e);
+      }
+      oam.copyWithin(r - 16, r - 8, r);
+      oam.copyWithin(r - 32, r - 8, r);
+    } else {
+      w[(r - 8) >> 1] = w[r >> 1] = at(-8) | (at(0) & at(-4));
+    }
+    oam.copyWithin(r, r - 8, r);
+    if (r === 0x80) oam.copyWithin(0, 0x80, 0x88);
+  }
+
   readRegister(addr) {
     switch (addr) {
       case 0xff40: return this.lcdc;
@@ -597,9 +662,24 @@ export class Ppu {
     return index & 0x80 ? (index & 0x80) | ((i + 1) & 0x3f) : index;
   }
 
+  /**
+   * The DMG boot ROM hands over during line 153, LY already reading 0, `dot`
+   * dots into the line.
+   */
+  startAfterBoot(dot) {
+    this.lcdc = 0x91;
+    this.ly = 0;
+    this.mode = 1;
+    this.irqMode = 1;
+    this.dot = dot;
+    this.coincidence = this.lyc === 0;
+    this.#next(Phase.VBLANK_END, LINE_DOTS);
+  }
+
   #writeLcdc(value) {
     const wasOn = this.lcdc & 0x80;
     this.lcdc = value;
+    this.oamScan = false;
     if (wasOn && !(value & 0x80)) {
       this.ly = 0;
       this.mode = 0;

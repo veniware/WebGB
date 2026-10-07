@@ -1,10 +1,13 @@
 import { Interrupt } from './constants.js';
 
 /**
- * Serial port (SB/SC). With nothing connected, a transfer on the internal
- * clock completes after 8 bits and reads 0xFF, and one on the external clock
- * never completes; with a link (another Game Boy), the bytes are swapped. Bytes are passed to `onByte` when a transfer starts;
- * test ROMs report their results this way.
+ * Serial port (SB/SC). The internal clock comes from the system counter
+ * (bit 7, or bit 2 with the CGB's fast clock), so transfers line up with
+ * DIV as on hardware. With nothing connected, bits shift in as 1s and a
+ * transfer on the external clock never completes; with a link (another
+ * Game Boy), the bytes are swapped when the transfer completes. Bytes are
+ * passed to `onByte` when a transfer starts; test ROMs report their
+ * results this way.
  */
 export class Serial {
   /** @type {((byte: number) => void) | null} */
@@ -21,14 +24,21 @@ export class Serial {
   reset() {
     this.sb = 0;
     this.sc = 0;
-    // CPU T-cycles until the transfer completes; 0 when idle.
-    this.cycles = 0;
+    // Bits shifted in the current transfer and the byte being sent.
+    this.bits = 0;
+    this.sending = 0;
+    // The serial clock: toggled by each falling edge of `mask` in the counter.
+    this.clock = false;
+    this.mask = 0x80;
   }
 
   sync(s) {
     this.sb = s.u8(this.sb);
     this.sc = s.u8(this.sc);
-    this.cycles = s.u32(this.cycles);
+    this.bits = s.u8(this.bits);
+    this.sending = s.u8(this.sending);
+    this.clock = s.bool(this.clock);
+    this.mask = s.u16(this.mask);
   }
 
   readSc() {
@@ -36,33 +46,35 @@ export class Serial {
   }
 
   writeSc(value) {
+    // Reported as written: test ROMs don't always wait for the last transfer.
+    const written = this.sb;
+    this.bits = 0;
+    if (this.clock) this.edge();
     this.sc = value & (this.gb.cgb ? 0x83 : 0x81);
+    this.mask = this.sc & 2 ? 0x04 : 0x80;
     if ((this.sc & 0x81) === 0x81) {
-      this.onByte?.(this.sb);
-      // 8 bits at 8192 Hz, or 262144 Hz with the CGB fast clock.
-      this.cycles = this.sc & 2 ? 8 * 16 : 8 * 512;
-    } else {
-      this.cycles = 0;
+      this.sending = this.sb;
+      this.onByte?.(written);
     }
   }
 
   /**
-   * Advances one M-cycle while a transfer is running. When it completes, a
-   * linked Game Boy waiting on the external clock exchanges its byte.
+   * A falling edge of the clocking counter bit. A bit is shifted every
+   * second edge; after 8, a linked Game Boy waiting on the external clock
+   * exchanges its byte.
    */
-  tick() {
-    this.cycles -= 4;
-    if (this.cycles > 0) return;
-    this.cycles = 0;
+  edge() {
+    this.clock = !this.clock;
+    if (this.clock || (this.sc & 0x81) !== 0x81) return;
+    this.sb = ((this.sb << 1) | 1) & 0xff;
+    if (++this.bits < 8) return;
+    this.bits = 0;
     const peer = this.link;
     if (peer && (peer.sc & 0x81) === 0x80) {
-      const received = peer.sb;
-      peer.sb = this.sb;
+      this.sb = peer.sb;
+      peer.sb = this.sending;
       peer.sc &= 0x7f;
       peer.gb.if |= Interrupt.SERIAL;
-      this.sb = received;
-    } else {
-      this.sb = 0xff;
     }
     this.sc &= 0x7f;
     this.gb.if |= Interrupt.SERIAL;

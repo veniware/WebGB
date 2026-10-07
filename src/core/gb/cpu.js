@@ -89,6 +89,7 @@ export class Cpu {
     this.ime = false;
     gb.tick();
     gb.tick();
+    gb.oamBug(this.sp);
     this.sp = (this.sp - 1) & 0xffff;
     this.#write(this.sp, this.pc >> 8);
     // Pushing the high byte can overwrite IE (SP = 0x0000), which changes or
@@ -134,6 +135,7 @@ export class Cpu {
 
   #push(value) {
     this.gb.tick();
+    this.gb.oamBug(this.sp);
     this.sp = (this.sp - 1) & 0xffff;
     this.#write(this.sp, value >> 8);
     this.sp = (this.sp - 1) & 0xffff;
@@ -366,6 +368,7 @@ export class Cpu {
     const e = this.#fetch();
     if (taken) {
       this.gb.tick();
+      this.gb.oamBug(this.pc);
       this.pc = (this.pc + ((e << 24) >> 24)) & 0xffff;
     }
   }
@@ -418,14 +421,20 @@ export class Cpu {
         this.hl = (hl - 1) & 0xffff;
         break;
       }
-      case 0x03: case 0x13: case 0x23: case 0x33: // INC rr
+      case 0x03: case 0x13: case 0x23: case 0x33: { // INC rr
+        const value = this.#getRp(op >> 4);
         this.gb.tick();
-        this.#setRp(op >> 4, (this.#getRp(op >> 4) + 1) & 0xffff);
+        this.gb.oamBug(value);
+        this.#setRp(op >> 4, (value + 1) & 0xffff);
         break;
-      case 0x0b: case 0x1b: case 0x2b: case 0x3b: // DEC rr
+      }
+      case 0x0b: case 0x1b: case 0x2b: case 0x3b: { // DEC rr
+        const value = this.#getRp(op >> 4);
         this.gb.tick();
-        this.#setRp(op >> 4, (this.#getRp(op >> 4) - 1) & 0xffff);
+        this.gb.oamBug(value);
+        this.#setRp(op >> 4, (value - 1) & 0xffff);
         break;
+      }
       case 0x04: case 0x0c: case 0x14: case 0x1c: case 0x24: case 0x2c: case 0x34: case 0x3c: // INC r
         this.#setR(op >> 3, this.#inc(this.#getR(op >> 3)));
         break;
@@ -566,6 +575,7 @@ export class Cpu {
       }
       case 0xf9: // LD SP,HL
         this.gb.tick();
+        this.gb.oamBug(this.hl);
         this.sp = this.hl;
         break;
       case 0xf3: // DI

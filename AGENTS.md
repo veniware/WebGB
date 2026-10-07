@@ -185,9 +185,14 @@ other versions are refused.
   picture (LCDC, SCX/SCY, palettes, WX) are logged with their dot; lines with
   such writes are re-rendered dot by dot by `fifo.js`, the rest use the fast
   line renderer. Tuned against the Mealybug tests.
-- **Boot:** no boot ROM is run (copyright); registers, I/O and the DMG's VRAM
-  logo are set to their post-boot values. DMG games on a CGB get the boot
-  ROM's compatibility palette (or a user preset) from `palettes.js`.
+- **Boot:** no boot ROM is run (copyright); registers, I/O, DIV, the PPU
+  position (DMG: line 153) and the DMG's VRAM logo are set to their
+  post-boot values. DMG games on a CGB get the boot ROM's compatibility
+  palette (or a user preset) from `palettes.js`.
+- **DMG quirks:** the OAM corruption bug (`oamBug*` in `ppu.js`, triggered
+  by OAM accesses and 16-bit inc/dec in mode 2), wave RAM access while
+  channel 3 plays, the serial clock running off the system counter, TIMA
+  glitches from TAC writes.
 - **Peripherals:** optional Core members `getRumble()`, `wantsTilt`/`setTilt`,
   `wantsCamera`/`setCameraImage` are fed by the host from `src/input/`.
   HuC3 and TAMA5 clocks follow the wall clock like MBC3.
@@ -195,8 +200,9 @@ other versions are refused.
   swaps serial bytes and infrared light between them; screens side by side
   (stacked in portrait), sound mixed, player 2's buttons in bits 16+.
   Snapshots are disabled while linked. Player 2's saved game is written too.
-- **Not emulated:** the DMG's OAM corruption bug and wave-RAM access quirks,
-  Super Game Boy.
+- **Not emulated:** Super Game Boy; a CGB running DMG games (its
+  compatibility mode); some mid-line window/sprite effects (see
+  `KNOWN_FAILURES`).
 
 ### Library, saved games and snapshots
 

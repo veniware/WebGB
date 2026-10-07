@@ -9,6 +9,8 @@ import { DMG_PALETTES, GBC_PRESETS, gbcCombination, gbcCombinationFor } from './
 import { Joypad } from './joypad.js';
 import { Ppu } from './ppu.js';
 import { Serial } from './serial.js';
+// Where the DMG boot ROM leaves the PPU: line 153, this many dots in (as in Gambatte).
+const BOOT_DOT = 396;
 import { Timer } from './timer.js';
 
 const STATE_MAGIC = 0x53424757; // "WGBS"
@@ -26,7 +28,7 @@ const SPEED_SWITCH_CYCLES = 2050;
  */
 export class GameBoy {
   id = 'gb';
-  version = 1;
+  version = 2;
   width = SCREEN_WIDTH;
   height = SCREEN_HEIGHT;
   fps = CLOCK_RATE / FRAME_DOTS;
@@ -124,7 +126,7 @@ export class GameBoy {
     }
     cpu.sp = 0xfffe;
     cpu.pc = 0x0100;
-    this.timer.reset(this.cgb ? 0x1ea0 : 0xabcc);
+    this.timer.reset(this.cgb ? 0x1ea0 : 0xabc8);
     this.joypad.select = 0;
     this.if = 0x01;
 
@@ -136,11 +138,17 @@ export class GameBoy {
       [0xff23, 0x3f], [0xff24, 0x77], [0xff25, 0xf3],
     ];
     for (const [addr, value] of sound) this.apu.write(addr, value);
+    // The chime's channel is still on, faded out.
+    this.apu.ch1.enabled = true;
     this.apu.settle();
 
-    if (!this.cgb) this.#bootLogo();
     this.ppu.writeRegister(0xff47, 0xfc);
-    this.ppu.writeRegister(0xff40, 0x91);
+    if (this.cgb) {
+      this.ppu.writeRegister(0xff40, 0x91);
+    } else {
+      this.#bootLogo();
+      this.ppu.startAfterBoot(BOOT_DOT);
+    }
   }
 
   /**
@@ -331,7 +339,6 @@ export class GameBoy {
     const dots = this.doubleSpeed ? 2 : 4;
     this.ppu.tick(dots);
     this.apu.pending += dots;
-    if (this.serial.cycles) this.serial.tick();
     if (this.cart.ticking) this.cart.tick(4);
     if (this.dmaDelay || this.dmaActive) this.#dmaTick();
     this.frameBudget -= dots;
@@ -367,11 +374,25 @@ export class GameBoy {
     if (addr < 0xa000) return this.ppu.readVram(addr);
     if (addr < 0xc000) return this.cart.readRam(addr);
     if (addr < 0xfe00) return this.#readWram(addr);
-    if (addr < 0xfea0) return this.dmaActive ? 0xff : this.ppu.readOam(addr);
-    if (addr < 0xff00) return 0;
+    if (addr < 0xff00) {
+      if (!this.cgb && this.ppu.oamWriteBlocked) {
+        this.ppu.oamBugRead();
+        return 0xff;
+      }
+      if (addr >= 0xfea0) return this.ppu.oamReadBlocked ? 0xff : 0;
+      return this.dmaActive ? 0xff : this.ppu.readOam(addr);
+    }
     if (addr < 0xff80) return this.#readIo(addr);
     if (addr < 0xffff) return this.hram[addr - 0xff80];
     return this.ie;
+  }
+
+  /**
+   * The CPU's 16-bit increment/decrement unit drives the address bus: with a
+   * value in FE00-FEFF it disturbs OAM on a DMG like a write would.
+   */
+  oamBug(addr) {
+    if (addr >= 0xfe00 && addr < 0xff00 && !this.cgb) this.ppu.oamBugWrite();
   }
 
   write(addr, value) {
@@ -382,10 +403,9 @@ export class GameBoy {
     else if (addr < 0xa000) this.ppu.writeVram(addr, value);
     else if (addr < 0xc000) this.cart.writeRam(addr, value);
     else if (addr < 0xfe00) this.#writeWram(addr, value);
-    else if (addr < 0xfea0) {
-      if (!this.dmaActive) this.ppu.writeOam(addr, value);
-    } else if (addr < 0xff00) {
-      // Unusable area.
+    else if (addr < 0xff00) {
+      if (!this.cgb && this.ppu.oamWriteBlocked) this.ppu.oamBugWrite();
+      else if (addr < 0xfea0 && !this.dmaActive) this.ppu.writeOam(addr, value);
     } else if (addr < 0xff80) this.#writeIo(addr, value);
     else if (addr < 0xffff) this.hram[addr - 0xff80] = value;
     else this.ie = value;
