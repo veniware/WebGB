@@ -11,6 +11,8 @@ export class Joypad {
   constructor(gb) {
     this.gb = gb;
     this.buttons = 0;
+    // Super Game Boy multiplayer: the second controller.
+    this.buttons2 = 0;
     this.reset();
   }
 
@@ -24,15 +26,22 @@ export class Joypad {
   }
 
   read() {
+    const sgb = this.gb.sgb;
+    // With nothing selected, a Super Game Boy in multiplayer mode reads the controller's ID.
+    if (sgb && sgb.players > 1 && this.select === 0x30) return 0xf0 | sgb.joypadId;
     return 0xc0 | this.select | this.#lines();
   }
 
   write(value) {
+    this.gb.sgb?.writeP1(value, this.select);
     this.#update(() => (this.select = value & 0x30));
   }
 
   setButtons(buttons) {
-    this.#update(() => (this.buttons = buttons & 0xff));
+    this.#update(() => {
+      this.buttons = buttons & 0xff;
+      this.buttons2 = (buttons >>> 16) & 0xff;
+    });
   }
 
   pressed() {
@@ -41,9 +50,11 @@ export class Joypad {
 
   /** Input lines, active low. */
   #lines() {
+    const player = this.gb.sgb?.player ?? 0;
+    const buttons = player === 0 ? this.buttons : player === 1 ? this.buttons2 : 0;
     let lines = 0x0f;
-    if (!(this.select & 0x10)) lines &= ~(this.buttons >> 4);
-    if (!(this.select & 0x20)) lines &= ~this.buttons;
+    if (!(this.select & 0x10)) lines &= ~(buttons >> 4);
+    if (!(this.select & 0x20)) lines &= ~buttons;
     return lines & 0x0f;
   }
 

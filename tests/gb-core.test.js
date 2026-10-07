@@ -390,3 +390,94 @@ test('a link cable swaps bytes between two Game Boys', async () => {
   const state = link.saveState();
   link.loadState(state);
 });
+
+// --- Super Game Boy --------------------------------------------------------------
+
+function sgbRom() {
+  const rom = makeGbRom({ title: 'SGBTEST', code: [0x18, 0xfe] }); // JR -2
+  rom[0x146] = 0x03;
+  rom[0x14b] = 0x33;
+  return rom;
+}
+
+/** Sends SGB packets through P1, as games do. */
+function sendSgb(gb, bytes) {
+  const packets = Math.ceil(bytes.length / 16);
+  const data = new Uint8Array(packets * 16);
+  data.set(bytes);
+  for (let p = 0; p < packets; p++) {
+    gb.write(0xff00, 0x30);
+    gb.write(0xff00, 0x00);
+    gb.write(0xff00, 0x30);
+    for (let i = 0; i < 128; i++) {
+      const bit = (data[p * 16 + (i >> 3)] >> (i & 7)) & 1;
+      gb.write(0xff00, bit ? 0x10 : 0x20);
+      gb.write(0xff00, 0x30);
+    }
+    gb.write(0xff00, 0x20); // stop bit
+    gb.write(0xff00, 0x30);
+  }
+}
+
+test('Super Game Boy games get a border, SGB timing and their palettes', async () => {
+  const { createCore } = await import('../src/core/gb/index.js');
+  const info = { system: 'gb' };
+  const gb = createCore(sgbRom(), info, {});
+  assert.ok(gb.sgb);
+  assert.deepEqual([gb.width, gb.height], [256, 224]);
+  assert.ok(gb.fps > 61 && gb.fps < 61.3);
+  gb.configure({ sgbBorder: false });
+  assert.deepEqual([gb.width, gb.height], [160, 144]);
+  assert.equal(createCore(sgbRom(), info, { sgb: false }).sgb, null);
+  assert.equal(createCore(makeGbRom(), info, {}).sgb, null);
+
+  // PAL01: color 0 red, palette 0 colors 1-3, palette 1 colors 1-3.
+  const colors = [0x001f, 0x03e0, 0x7c00, 0x7fff, 0x0010, 0x0200, 0x4000];
+  sendSgb(gb, [0x01, ...colors.flatMap((c) => [c & 0xff, c >> 8])]);
+  // ATTR_DIV: the right half (x >= 10, the division line included) uses palette 1.
+  sendSgb(gb, [(0x06 << 3) | 1, 0b00_01_00_01, 10]);
+  gb.runFrame();
+  const screen = new Uint32Array(gb.getScreenBuffer().buffer);
+  // The LCD shows shade 0 (BGP $FC, empty tiles): color 0, shared by all palettes.
+  assert.equal(screen[0] & 0xffffff, 0x0000ff);
+  assert.equal(screen[159] & 0xffffff, 0x0000ff);
+  assert.equal(gb.sgb.palettes[5], 0x0010);
+  assert.equal(gb.sgb.attributes[9], 0);
+  assert.equal(gb.sgb.attributes[10], 1);
+});
+
+test('Super Game Boy multiplayer: MLT_REQ and the joypad ID', () => {
+  const gb = new GameBoy(sgbRom(), { sgb: true });
+  assert.equal(gb.players, 1);
+  sendSgb(gb, [(0x11 << 3) | 1, 0x01]);
+  assert.equal(gb.players, 2);
+  gb.write(0xff00, 0x30);
+  assert.equal(gb.read(0xff00) & 0x0f, 0x0f);
+  // P15 low then high selects the next controller.
+  gb.write(0xff00, 0x10);
+  gb.write(0xff00, 0x30);
+  assert.equal(gb.read(0xff00) & 0x0f, 0x0e);
+  gb.setInput(Button.A << 16);
+  gb.write(0xff00, 0x10);
+  assert.equal(gb.read(0xff00) & 0x0f, 0x0e, 'player 2 presses A');
+});
+
+test('Super Game Boy reads border tiles off the screen (CHR_TRN)', () => {
+  const gb = new GameBoy(sgbRom(), { sgb: true });
+  sendSgb(gb, [(0x13 << 3) | 1, 0x00]);
+  // Shade 3 everywhere: every bitplane byte reads FF.
+  const shades = new Uint32Array(160 * 144).fill(3);
+  for (let i = 0; i < 3; i++) gb.sgb.render(shades);
+  assert.ok(gb.sgb.borderTiles.subarray(0, 4096).every((b) => b === 0xff));
+  assert.ok(gb.sgb.borderTiles.subarray(4096).every((b) => b === 0));
+});
+
+test('Super Game Boy state survives snapshots', () => {
+  const gb = new GameBoy(sgbRom(), { sgb: true });
+  sendSgb(gb, [(0x17 << 3) | 1, 0x02]); // MASK_EN black
+  const state = gb.saveState();
+  const other = new GameBoy(sgbRom(), { sgb: true });
+  other.loadState(state);
+  assert.equal(other.sgb.mask, 2);
+  assert.throws(() => new GameBoy(sgbRom()).loadState(state));
+});

@@ -3,15 +3,17 @@ import { Apu, SAMPLE_RATE } from './apu.js';
 import { createCartridge } from './cartridge.js';
 import { Camera, SENSOR_HEIGHT, SENSOR_WIDTH } from './mappers/camera.js';
 import { Mbc7 } from './mappers/mbc7.js';
-import { CLOCK_RATE, FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH } from './constants.js';
+import { CLOCK_RATE, FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH, SGB_CLOCK_RATE } from './constants.js';
 import { Cpu } from './cpu.js';
-import { DMG_PALETTES, GBC_PRESETS, gbcCombination, gbcCombinationFor } from './palettes.js';
+import { DMG_PALETTES, GBC_PRESETS, gbcCombination, gbcCombinationFor, SGB_PALETTES } from './palettes.js';
 import { Joypad } from './joypad.js';
 import { Ppu } from './ppu.js';
 import { Serial } from './serial.js';
+import { Sgb } from './sgb.js';
+import { Timer } from './timer.js';
+
 // Where the DMG boot ROM leaves the PPU: line 153, this many dots in (as in Gambatte).
 const BOOT_DOT = 396;
-import { Timer } from './timer.js';
 
 const STATE_MAGIC = 0x53424757; // "WGBS"
 // M-cycles the CPU is held while switching speed.
@@ -29,8 +31,6 @@ const SPEED_SWITCH_CYCLES = 2050;
 export class GameBoy {
   id = 'gb';
   version = 2;
-  width = SCREEN_WIDTH;
-  height = SCREEN_HEIGHT;
   fps = CLOCK_RATE / FRAME_DOTS;
   sampleRate = SAMPLE_RATE;
   // Cartridge RAM writes so far (see getSaveWrites()); not part of the state.
@@ -41,8 +41,18 @@ export class GameBoy {
    * @param {{ cgb?: boolean, now?: () => number }} [options]
    *   cgb: run as a Game Boy Color; now: wall clock for the cartridge RTC.
    */
-  constructor(rom, { cgb = false, now } = {}) {
+  /**
+   * @param {Uint8Array} rom
+   * @param {{ cgb?: boolean, sgb?: boolean, now?: () => number }} [options]
+   *   cgb: run as a Game Boy Color; sgb: as a Super Game Boy (DMG games).
+   */
+  constructor(rom, { cgb = false, sgb = false, now } = {}) {
     this.cgb = cgb;
+    this.sgb = sgb && !cgb ? new Sgb() : null;
+    if (this.sgb) {
+      this.fps = SGB_CLOCK_RATE / FRAME_DOTS;
+      this.sampleRate = (SAMPLE_RATE * SGB_CLOCK_RATE) / CLOCK_RATE;
+    }
     this.rom = rom;
     this.cart = createCartridge(rom, { now });
     this.wram = new Uint8Array(cgb ? 0x8000 : 0x2000);
@@ -55,22 +65,53 @@ export class GameBoy {
     this.apu = new Apu(this);
     this.joypad = new Joypad(this);
     this.serial = new Serial(this);
+    if (this.sgb) this.ppu.outputShades();
     this.reset();
+  }
+
+  get width() {
+    return this.sgb?.width ?? SCREEN_WIDTH;
+  }
+
+  get height() {
+    return this.sgb?.height ?? SCREEN_HEIGHT;
+  }
+
+  get model() {
+    return this.cgb ? 'Game Boy Color' : this.sgb ? 'Super Game Boy' : 'Game Boy';
+  }
+
+  /** Controllers read: 2 when a Super Game Boy game asks for multiplayer. */
+  get players() {
+    return this.sgb && this.sgb.players > 1 ? 2 : 1;
   }
 
   /**
    * Display options; can change while running.
-   * @param {{ gbPalette?: string, colorCorrection?: boolean }} options
+   * @param {{ gbPalette?: string, colorCorrection?: boolean, sgbBorder?: boolean }} options
    *   gbPalette (DMG games): 'auto' (Game Boy Color colors for the games it
    *   knows, else green), 'gbc' (always the Game Boy Color's choice), a
-   *   DMG_PALETTES name or a GBC_PRESETS name. colorCorrection: mimic the
-   *   Game Boy Color's LCD instead of raw colors.
+   *   DMG_PALETTES name, a GBC_PRESETS name or 'sgb-' and an SGB_PALETTES
+   *   name. colorCorrection: mimic the Game Boy Color's LCD instead of raw
+   *   colors. sgbBorder: show the Super Game Boy's border (changes the size).
    */
-  configure({ gbPalette = 'auto', colorCorrection = false } = {}) {
+  configure({ gbPalette = 'auto', colorCorrection = false, sgbBorder = true } = {}) {
+    if (this.sgb) {
+      // The game picks its colors.
+      if (this.sgb.showBorder !== sgbBorder) {
+        this.sgb.showBorder = sgbBorder;
+        this.sgb.render(this.ppu.front);
+      }
+      return;
+    }
     this.ppu.setColorCorrection(colorCorrection);
     if (this.cgb) return;
     const known = gbcCombinationFor(this.rom);
+    const sgbPalette = SGB_PALETTES[gbPalette.replace(/^sgb-/, '')];
     if (gbPalette in DMG_PALETTES) this.ppu.setDmgPalette(DMG_PALETTES[gbPalette]);
+    else if (gbPalette.startsWith('sgb-') && sgbPalette) {
+      this.ppu.setCompatPalette({ bg: sgbPalette, obj0: sgbPalette, obj1: sgbPalette }, false);
+    }
     else if (gbPalette in GBC_PRESETS) this.ppu.setCompatPalette(gbcCombination(GBC_PRESETS[gbPalette]));
     else if (gbPalette === 'gbc' || known >= 0) this.ppu.setCompatPalette(gbcCombination(Math.max(known, 0)));
     else this.ppu.setDmgPalette(DMG_PALETTES.green);
@@ -115,6 +156,7 @@ export class GameBoy {
     this.apu.reset();
     this.joypad.reset();
     this.serial.reset();
+    this.sgb?.reset();
     this.#boot();
   }
 
@@ -123,6 +165,8 @@ export class GameBoy {
     const cpu = this.cpu;
     if (this.cgb) {
       [cpu.a, cpu.f, cpu.b, cpu.c, cpu.d, cpu.e, cpu.h, cpu.l] = [0x11, 0x80, 0x00, 0x00, 0xff, 0x56, 0x00, 0x0d];
+    } else if (this.sgb) {
+      [cpu.a, cpu.f, cpu.b, cpu.c, cpu.d, cpu.e, cpu.h, cpu.l] = [0x01, 0x00, 0x00, 0x14, 0x00, 0x00, 0xc0, 0x60];
     } else {
       [cpu.a, cpu.f, cpu.b, cpu.c, cpu.d, cpu.e, cpu.h, cpu.l] = [0x01, 0xb0, 0x00, 0x13, 0x00, 0xd8, 0x01, 0x4d];
     }
@@ -140,15 +184,15 @@ export class GameBoy {
       [0xff23, 0x3f], [0xff24, 0x77], [0xff25, 0xf3],
     ];
     for (const [addr, value] of sound) this.apu.write(addr, value);
-    // The chime's channel is still on, faded out.
-    this.apu.ch1.enabled = true;
+    // The chime's channel is still on, faded out (the SGB plays no chime).
+    this.apu.ch1.enabled = !this.sgb;
     this.apu.settle();
 
     this.ppu.writeRegister(0xff47, 0xfc);
     if (this.cgb) {
       this.ppu.writeRegister(0xff40, 0x91);
     } else {
-      this.#bootLogo();
+      if (!this.sgb) this.#bootLogo();
       this.ppu.startAfterBoot(BOOT_DOT);
     }
   }
@@ -188,6 +232,7 @@ export class GameBoy {
     this.joypad.sync(s);
     this.serial.sync(s);
     this.cart.sync(s);
+    this.sgb?.sync(s);
     s.bytes(this.wram);
     s.bytes(this.hram);
     s.bytes(this.extraRegs);
@@ -239,6 +284,7 @@ export class GameBoy {
     const elapsed = this.frameStart - this.frameBudget;
     if (alignToVBlank && this.ppu.frameDone) this.frameBudget = 0;
     this.apu.catchUp();
+    this.sgb?.render(this.ppu.front);
     if (this.rumbleOn) this.rumbleDots += elapsed - this.rumbleSince;
     this.rumbleLevel = elapsed > 0 ? Math.min(1, this.rumbleDots / elapsed) : 0;
     this.rumbleDots = 0;
@@ -288,7 +334,13 @@ export class GameBoy {
   }
 
   getFrameBuffer() {
+    if (this.sgb) return this.sgb.showBorder ? this.sgb.frameBytes : this.sgb.screenBytes;
     return this.ppu.frontBytes;
+  }
+
+  /** The 160x144 screen, without a Super Game Boy border. */
+  getScreenBuffer() {
+    return this.sgb ? this.sgb.screenBytes : this.ppu.frontBytes;
   }
 
   getAudioSamples() {
@@ -300,7 +352,7 @@ export class GameBoy {
   }
 
   screenshot() {
-    return { pixels: this.getFrameBuffer().slice(), width: this.width, height: this.height };
+    return { pixels: this.getScreenBuffer().slice(), width: SCREEN_WIDTH, height: SCREEN_HEIGHT };
   }
 
   getSaveData() {
@@ -336,9 +388,10 @@ export class GameBoy {
   /** Writes or checks the state header (format, system, ROM size). */
   #header(s) {
     const magic = s.u32(STATE_MAGIC);
-    const cgb = s.bool(this.cgb);
+    const modelId = this.cgb ? 1 : this.sgb ? 2 : 0;
+    const model = s.u8(modelId);
     const romSize = s.u32(this.cart.rom.length);
-    return magic === STATE_MAGIC && cgb === this.cgb && romSize === this.cart.rom.length;
+    return magic === STATE_MAGIC && model === modelId && romSize === this.cart.rom.length;
   }
 
   // --- Timing ----------------------------------------------------------------------

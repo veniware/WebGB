@@ -10,6 +10,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // Game Boy: palette for DMG games (see GameBoy.configure) and GBC color correction.
   gbPalette: 'auto',
   colorCorrection: true,
+  // Super Game Boy features for the games that have them (from the next start), and its border.
+  sgb: true,
+  sgbBorder: true,
 });
 
 export function loadSettings() {

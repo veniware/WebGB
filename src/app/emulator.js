@@ -93,7 +93,15 @@ export class Emulator extends Emitter {
   /** User options for cores (palettes etc.): applied now and to cores created later. */
   configure(options) {
     this.#coreOptions = options;
-    this.core?.configure?.(options);
+    const { core } = this;
+    if (!core?.configure) return;
+    const [width, height] = [core.width, core.height];
+    core.configure(options);
+    // Some options change the picture's size (e.g. the Super Game Boy border).
+    if (core.width !== width || core.height !== height) {
+      this.#display.setSourceSize(core.width, core.height);
+      this.#display.draw(core.getFrameBuffer());
+    }
   }
 
   /**

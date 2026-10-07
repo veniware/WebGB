@@ -86,6 +86,8 @@ src/core/
     joypad.js
     serial.js           Serial port; `link` points at the other machine's port
     link.js             LinkedGameBoys: two machines on one cable, one Core
+    sgb.js              Super Game Boy: P1 packets, palettes/attributes, VRAM
+                        transfers, border, multiplayer (after SameBoy, MIT)
     palettes.js         DMG shades, CGB boot ROM compatibility palettes for DMG
                         games, button-combo presets, CGB color (correction)
     constants.js        Clock rate, frame size, interrupt bits
@@ -201,9 +203,14 @@ other versions are refused.
   swaps serial bytes and infrared light between them; screens side by side
   (stacked in portrait), sound mixed, player 2's buttons in bits 16+.
   Snapshots are disabled while linked. Player 2's saved game is written too.
-- **Not emulated:** Super Game Boy; a CGB running DMG games (its
-  compatibility mode); some mid-line window/sprite effects (see
-  `KNOWN_FAILURES`).
+- **Super Game Boy:** DMG games whose header asks for it run as an SGB
+  (setting `sgb`, read at start): SGB clock (fps ~61.17), the PPU outputs
+  shades 0-3 (`Ppu.outputShades`) and `Sgb.render()` colors them by the
+  attribute map and draws the border (256x224; setting `sgbBorder`, live).
+  `getScreenBuffer()` is always the bare 160x144 screen (link cable,
+  thumbnails). No SGB BIOS: no default border, sound or SNES code commands.
+- **Not emulated:** a CGB running DMG games (its compatibility mode); some
+  mid-line window/sprite effects (see `KNOWN_FAILURES`).
 
 ### Library, saved games and snapshots
 

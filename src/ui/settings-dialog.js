@@ -25,6 +25,8 @@ const CHOICES = {
       ['gbc-dark-green', 'Dark green'],
       ['gbc-inverted', 'Inverted'],
     ]],
+    ['Super Game Boy palettes', ['1', '2', '3', '4'].flatMap((group) =>
+      [...'ABCDEFGH'].map((letter) => [`sgb-${group}-${letter}`, `${group}-${letter}`]))],
   ],
 };
 

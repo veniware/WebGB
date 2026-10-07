@@ -35,6 +35,8 @@
  * @property {boolean} [wantsTilt]  Has a tilt sensor; the host then calls setTilt(x, y) (in g).
  * @property {boolean} [wantsCamera]  Has a camera; the host then calls setCameraImage(pixels)
  *   with 8-bit grayscale frames of cameraSize ({ width, height }).
+ * @property {string} [model]  Name of the emulated hardware when it depends on the game
+ *   (e.g. 'Super Game Boy').
  * @property {(options: object) => void} [configure]
  *   Optional: applies user options (e.g. palettes) while running. The host
  *   passes the same options to createCore() and again whenever they change.

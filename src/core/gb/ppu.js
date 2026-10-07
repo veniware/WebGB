@@ -161,6 +161,14 @@ export class Ppu {
   }
 
   /** Sets the four DMG shades, lightest first, as 0xRRGGBB. */
+  /** Super Game Boy: frames hold shades 0-3 instead of colors, for the SGB to color. */
+  outputShades() {
+    for (const colors of [this.dmgBg, this.dmgObj0, this.dmgObj1]) colors.set([0, 1, 2, 3]);
+    this.#refreshColors();
+    this.front.fill(0);
+    this.back.fill(0);
+  }
+
   setDmgPalette(colors) {
     const pixels = colors.map(rgbToPixel);
     this.dmgBg.set(pixels);
@@ -169,9 +177,12 @@ export class Ppu {
     this.#refreshColors();
   }
 
-  /** Colors a DMG game like a Game Boy Color: separate 15-bit palettes for BG and sprites. */
-  setCompatPalette({ bg, obj0, obj1 }) {
-    const pixel = (color) => cgbToPixel(color, this.colorCorrection);
+  /**
+   * Colors a DMG game like a Game Boy Color: separate 15-bit palettes for BG
+   * and sprites. `corrected`: mimic the GBC's LCD (not for SGB colors on a TV).
+   */
+  setCompatPalette({ bg, obj0, obj1 }, corrected = this.colorCorrection) {
+    const pixel = (color) => cgbToPixel(color, corrected);
     this.dmgBg.set(bg.map(pixel));
     this.dmgObj0.set(obj0.map(pixel));
     this.dmgObj1.set(obj1.map(pixel));

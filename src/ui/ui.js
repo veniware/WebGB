@@ -86,7 +86,12 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     onLink: () => linkDialog.open().catch(reportError),
   });
   // Settings the cores read (see Emulator.configure).
-  const coreOptions = () => ({ gbPalette: settings.gbPalette, colorCorrection: settings.colorCorrection });
+  const coreOptions = () => ({
+    gbPalette: settings.gbPalette,
+    colorCorrection: settings.colorCorrection,
+    sgb: settings.sgb,
+    sgbBorder: settings.sgbBorder,
+  });
   emulator.configure(coreOptions());
   const settingsDialog = createSettingsDialog({
     dialog: $('settings'),
@@ -265,7 +270,7 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     el.stage.classList.remove('empty');
     gameControls.forEach((control) => (control.disabled = false));
     const title = rom.info.title || baseName(rom.name);
-    romStatus = `${SYSTEM_NAMES[rom.info.system]} · ${title} · ${formatSize(rom.size)}`;
+    romStatus = `${emulator.core?.model ?? SYSTEM_NAMES[rom.info.system]} · ${title} · ${formatSize(rom.size)}`;
     if (fallback) romStatus += ' · no emulator core for this system yet, running the test core';
     showRomStatus();
   });

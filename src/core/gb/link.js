@@ -75,7 +75,7 @@ export class LinkedGameBoys {
   #compose() {
     const { pixels, vertical, width } = this;
     this.machines.forEach((gb, player) => {
-      const source = new Uint32Array(gb.getFrameBuffer().buffer);
+      const source = new Uint32Array(gb.getScreenBuffer().buffer);
       for (let y = 0; y < SCREEN_HEIGHT; y++) {
         const row = source.subarray(y * SCREEN_WIDTH, (y + 1) * SCREEN_WIDTH);
         const offset = vertical ? (player * SCREEN_HEIGHT + y) * width : y * width + player * SCREEN_WIDTH;

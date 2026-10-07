@@ -33,10 +33,20 @@ Suite, dmg-acid2, cgb-acid2) when they have been downloaded to `tests/roms/`.
 ## Features
 
 - **Game Boy and Game Boy Color:** CPU, timer, DMA and interrupts accurate
-  to the M-cycle, line-based graphics, all four sound channels, MBC1, MBC2,
-  MBC3 (with its real-time clock), MBC5 and HuC1 cartridges, CGB double speed
-  and HDMA. Passes Blargg's CPU, timing and sound tests, dmg-acid2, cgb-acid2
-  and most of the Mooneye Test Suite.
+  to the M-cycle, graphics with mid-line effects, all four sound channels,
+  CGB double speed and HDMA, and the original hardware's quirks (OAM bug,
+  wave RAM). Passes Blargg's tests, dmg-acid2, cgb-acid2, the applicable
+  Mooneye Test Suite and most of the Mealybug Tearoom tests.
+- **Cartridges:** MBC1, MBC2, MBC3 (real-time clock), MBC5 (rumble), MBC6,
+  MBC7 (tilt sensor: device tilt or I/J/K/L keys), MMM01, HuC1 and HuC3
+  (infrared, clock), TAMA5 and the Pocket Camera (uses your webcam).
+- **Colors:** Game Boy games can use the Game Boy Color's palettes (chosen
+  per game as the GBC does, or any of its presets), the Super Game Boy's
+  palettes or original-screen shades; optional GBC LCD color correction.
+- **Super Game Boy:** games made for it get their colors, borders and
+  multiplayer (player 2 on the keyboard or a second gamepad).
+- **Link cable:** play two games linked side by side (stacked in portrait),
+  e.g. to trade or battle; player 2 uses the keyboard or a second gamepad.
 - **ROM library:** ROMs you open or drop onto the page (`.gb`, `.gbc`,
   `.gba`, plain or zipped) are kept in the browser. Browse, play, export and
   delete them from the Library.
@@ -45,7 +55,8 @@ Suite, dmg-acid2, cgb-acid2) when they have been downloaded to `tests/roms/`.
   to continue (or start a new game). Saved games can be imported and exported
   as `.sav` files, compatible with other emulators (including the MBC3
   clock); dropping a `.sav` onto the page imports it for the running game.
-- **Snapshots:** save states with thumbnails that you can return to later.
+- **Snapshots:** save states that you can return to later. Saved games and
+  snapshots show a screenshot from when they were made.
 - **Video:** WebGL2 renderer with filters (Sharp, Nearest, Smooth, Scale2x)
   and an optional de-dither pass, zoom (Fit or 1×–6×) and fullscreen. Falls
   back to a 2D canvas without WebGL2.
@@ -71,6 +82,8 @@ care about.
 | Fullscreen    | F              |                           |
 | Take snapshot | F2             |                           |
 | Load latest snapshot | F4      |                           |
+| Player 2 (link cable, SGB multiplayer) | W/A/S/D, H (A), G (B), Y (Start), T (Select) | Second gamepad |
+| Tilt (MBC7 games) | I / J / K / L | Right stick          |
 
 On touch screens the on-screen controls appear automatically.
 
