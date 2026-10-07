@@ -483,6 +483,28 @@ test("an immediate DMA starts shortly after it is enabled, before the CPU's next
     assert.equal(gba.bus.iwram32[0x40], 0x42);
 });
 
+test("an open-bus read right after a DMA sees the DMA's last value", () => {
+    const gba = new Gba(cart([
+        0xe3a00301, // mov r0, #0x04000000
+        0xe28000d4, // add r0, r0, #0xd4 (DMA3SAD)
+        0xe3a01403, // mov r1, #0x03000000
+        0xe3a02042, // mov r2, #0x42
+        0xe5812000, // str r2, [r1]
+        0xe5801000, // str r1, [r0] (source)
+        0xe2813c01, // add r3, r1, #0x100
+        0xe5803004, // str r3, [r0, #4] (destination)
+        0xe3a06201, // mov r6, #0x10000000 (unmapped)
+        0xe3a04484, // mov r4, #0x84000000 (enable, 32-bit)
+        0xe3844001, // orr r4, r4, #1 (one word)
+        0xe5804008, // str r4, [r0, #8]
+        0xe5965000, // ldr r5, [r6]
+        0xe5967000, // ldr r7, [r6]
+    ]));
+    run(gba, 1);
+    assert.equal(gba.cpu.r[5], 0x42, "the DMA ran between the load's fetch and its read");
+    assert.notEqual(gba.cpu.r[7], 0x42, "then the opcodes again");
+});
+
 // --- Multiply carry --------------------------------------------------------------------
 
 test("multiplies set the carry flag like the ARM7TDMI's Booth multiplier", async () => {

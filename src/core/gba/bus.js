@@ -58,6 +58,8 @@ export class Bus {
         // An immediate DMA starting then takes the bus before the next access (dma.js).
         this.dmaDue = Infinity;
         this.onDmaDue = null;
+        // The last value a DMA moved, while still on the bus (null after an opcode fetch).
+        this.dmaValue = null;
         this.reset();
     }
 
@@ -228,6 +230,7 @@ export class Bus {
 
     fetch16(address) {
         if (this.cycles >= this.dmaDue) this.onDmaDue();
+        this.dmaValue = null;
         const region = (address >>> 24) & 0xf;
         if (region >= Region.ROM0 && region <= Region.ROM2_HI) {
             this.#romFetchCycles(address, region, this.n16[region], this.s16[region], 2);
@@ -247,6 +250,7 @@ export class Bus {
 
     fetch32(address) {
         if (this.cycles >= this.dmaDue) this.onDmaDue();
+        this.dmaValue = null;
         const region = (address >>> 24) & 0xf;
         if (region >= Region.ROM0 && region <= Region.ROM2_HI) {
             this.#romFetchCycles(address, region, this.n32[region], this.s32[region], 4);
@@ -429,6 +433,7 @@ export class Bus {
      * the 32-bit bus depend on the memory the code runs from (GBATEK).
      */
     #openBus() {
+        if (this.dmaValue !== null) return this.dmaValue;
         const cpu = this.cpu;
         if (!cpu) return 0;
         const next = cpu.r[15] >>> 0;

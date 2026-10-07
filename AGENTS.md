@@ -315,7 +315,8 @@ other versions are refused.
 - **DMA:** a transfer runs in one go (the CPU waits). An immediate one
   starts 2 cycles after the enabling write: the CPU runs on until its next
   bus access (`bus.dmaDue`) or the next event. From the cartridge to the
-  cartridge, the first write is sequential.
+  cartridge, the first write is sequential. A transfer's last value stays
+  on the bus (open-bus reads) until the CPU's next opcode fetch.
 - **Interrupts** reach the CPU a few cycles after the request
   (`IRQ_DELAY`, `UNMASK_DELAY`); timer reads lag a little (`READ_DELAY`);
   HBlank starts at cycle 1008. These were tuned against mGBA's test suite.

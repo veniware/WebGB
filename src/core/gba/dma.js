@@ -82,14 +82,16 @@ export class Dma {
         this.src[i] = this.sad[i] & SRC_MASK[i];
         this.dst[i] = this.dad[i] & DST_MASK[i];
         this.remaining[i] = (this.count[i] & COUNT_MASK[i]) || COUNT_MASK[i] + 1;
-        if (((value >>> 12) & 3) === Timing.IMMEDIATE) {
-            this.pending |= 1 << i;
-            const time = this.bus.cycles + START_DELAY;
-            if (time < this.nextEvent) {
-                this.nextEvent = time;
-                this.bus.dmaDue = time;
-                this.hooks.onSchedule?.(time);
-            }
+        if (((value >>> 12) & 3) === Timing.IMMEDIATE) this.#start(i, this.bus.cycles + START_DELAY);
+    }
+
+    /** Channel i starts at `time`, at the CPU's next bus access or event from then. */
+    #start(i, time) {
+        this.pending |= 1 << i;
+        if (time < this.nextEvent) {
+            this.nextEvent = time;
+            this.bus.dmaDue = time;
+            this.hooks.onSchedule?.(time);
         }
     }
 
@@ -172,6 +174,8 @@ export class Dma {
         }
         this.src[i] = src;
         this.dst[i] = dst;
+        // Its last value stays on the bus until the CPU's next opcode fetch.
+        bus.dmaValue = latch[i];
         if (control & 0x4000) this.hooks.requestIrq(8 + i);
         const timing = (control >>> 12) & 3;
         if (control & 0x0200 && timing !== Timing.IMMEDIATE) {
