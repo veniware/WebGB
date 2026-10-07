@@ -474,6 +474,8 @@ so short taps are never lost.
 - Comments explain *why*, not *what*.
 - Never commit ROMs (see `.gitignore`), test ROMs included: they are
   downloaded into `tests/roms/`.
+- Commit messages have no trailers (no Co-Authored-By or Claude-Session
+  lines).
 
 ## Roadmap
 
