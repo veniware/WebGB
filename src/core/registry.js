@@ -7,7 +7,7 @@ import { createTestCore } from './test/test-core.js';
  */
 const cores = [
   { id: 'gb', name: 'Game Boy', systems: ['gb', 'gbc'], link: true, load: () => import('./gb/index.js') },
-  { id: 'gba', name: 'Game Boy Advance', systems: ['gba'], load: () => import('./gba/index.js') },
+  { id: 'gba', name: 'Game Boy Advance', systems: ['gba'], link: true, load: () => import('./gba/index.js') },
 ];
 
 export function registerCore(descriptor) {
@@ -34,14 +34,15 @@ export async function createCore(rom, info, options = {}) {
   return { core: module.createCore(rom, info, options), fallback: false };
 }
 
-/** Whether a running core can be linked with another game (link cable). */
+/** Whether a running core can be linked with another game (link cable): same core, one that links. */
 export function canLink(core, info) {
-  return Boolean(core && (core.players ?? 1) === 1 && findCore(info.system)?.link);
+  const descriptor = findCore(info.system);
+  return Boolean(core && (core.players ?? 1) === 1 && descriptor?.link && descriptor.id === core.id);
 }
 
 /**
- * Links a second game to a running core; resolves to a two-player core
- * (see src/core/gb/link.js).
+ * Links a second game of the same system family to a running core; resolves
+ * to a two-player core (see src/core/gb/link.js, src/core/gba/link.js).
  */
 export async function createLinkedCore(core, rom, info, options, layout) {
   const descriptor = findCore(info.system);

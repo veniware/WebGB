@@ -280,7 +280,9 @@ export class Emulator extends Emitter {
   async link(key, { saveId = null, vertical = false } = {}) {
     const [rom, data] = await Promise.all([getRom(key), getRomData(key)]);
     if (!rom || !data) throw new Error('This ROM is no longer in the library.');
-    if (!this.canLink(rom.info)) throw new Error('Only Game Boy and Game Boy Color games can be linked.');
+    if (!this.canLink(rom.info)) {
+      throw new Error('Only Game Boy / Game Boy Color games can be linked with each other, and GBA games with each other.');
+    }
     const save = saveId !== null ? await getSave(saveId) : null;
     const single = this.core;
     const linked = await createLinkedCore(single, data, rom.info, this.#coreOptions, { vertical });

@@ -442,3 +442,96 @@ test('idle loops: reading a timer is never skipped', () => {
   ]), 2);
   assert.equal(gba.idleLoops.skipped, 0);
 });
+
+// --- Link cable ------------------------------------------------------------------------
+
+async function linkedPair() {
+  const { createLinkedCore } = await import('../src/core/gba/index.js');
+  const first = new Gba(cart());
+  run(first, 3); // already running, so the clocks differ
+  const linked = createLinkedCore(first, cart(), { system: 'gba' }, {});
+  return { linked, a: linked.machines[0], b: linked.machines[1] };
+}
+
+test('GBA games link with GBA games only', async () => {
+  const { canLink } = await import('../src/core/registry.js');
+  const gba = new Gba(cart());
+  assert.equal(canLink(gba, { system: 'gba' }), true);
+  assert.equal(canLink(gba, { system: 'gb' }), false);
+  const { linked } = await linkedPair();
+  assert.equal(canLink(linked, { system: 'gba' }), false, 'not a third one');
+  assert.equal(linked.width, 480);
+  linked.runFrame();
+  assert.ok(linked.getAudioSamples().length > 0);
+  assert.equal(linked.screenshot(1).width, 240);
+});
+
+test('link cable: a multiplayer transfer swaps both words and interrupts both', async () => {
+  const { linked, a, b } = await linkedPair();
+  for (const [gba, word] of [[a, 0x1234], [b, 0xabcd]]) {
+    gba.write16(0x134, 0); // RCNT: SIO
+    gba.write16(0x128, 0x6003); // multiplayer, 115200 bps, IRQ
+    gba.write16(0x12a, word);
+    gba.write16(0x200, 0x80); // IE: serial
+  }
+  assert.equal(a.read16(0x128) & 0x0c, 0x08, 'parent: SI low, SD high');
+  assert.equal(b.read16(0x128) & 0x0c, 0x0c, 'child: SI high, SD high');
+  b.write16(0x128, 0x6083);
+  assert.equal(b.read16(0x128) & 0x80, 0, 'only the parent starts');
+  a.write16(0x128, 0x6083);
+  assert.equal(b.read16(0x128) & 0x80, 0x80, 'both busy');
+  linked.runFrame();
+  for (const [gba, id] of [[a, 0], [b, 1]]) {
+    assert.deepEqual([0x120, 0x122, 0x124, 0x126].map((r) => gba.read16(r)), [0x1234, 0xabcd, 0xffff, 0xffff]);
+    assert.equal(gba.read16(0x128) & 0xf0, id << 4, 'done, with its ID');
+    assert.equal(gba.irq.if & 0x80, 0x80, 'serial interrupt');
+  }
+});
+
+test('link cable: a Normal-mode transfer swaps words with a slave that waits', async () => {
+  const { linked, a, b } = await linkedPair();
+  const setWord = (gba, word) => {
+    gba.write16(0x120, word & 0xffff);
+    gba.write16(0x122, word >>> 16);
+  };
+  const word = (gba) => (gba.read16(0x120) | (gba.read16(0x122) << 16)) >>> 0;
+  for (const gba of [a, b]) gba.write16(0x128, 0x1000); // Normal 32-bit
+  setWord(a, 0x12345678);
+  setWord(b, 0xcafebabe);
+  b.write16(0x128, 0x5080); // external clock, started, IRQ
+  assert.equal(a.read16(0x128) & 4, 0, "master's SI: the slave is ready");
+  a.write16(0x128, 0x5083); // internal clock, 2 MHz, start
+  linked.runFrame();
+  assert.equal(word(a), 0xcafebabe);
+  assert.equal(word(b), 0x12345678);
+  assert.equal((a.read16(0x128) | b.read16(0x128)) & 0x80, 0, 'both done');
+  // Without a waiting slave, the master reads the line's idle level.
+  a.write16(0x128, 0x5083);
+  linked.runFrame();
+  assert.equal(word(a), 0xffffffff);
+  assert.equal(word(b), 0x12345678, 'the slave took no part');
+});
+
+test('link cable: UART sends bytes at the baud rate, through the FIFOs', async () => {
+  const { linked, a, b } = await linkedPair();
+  for (const gba of [a, b]) {
+    gba.write16(0x134, 0); // RCNT: SIO
+    gba.write16(0x128, 0x7f83); // UART, 115200 bps, 8 bits, FIFO, send + receive, IRQ
+    gba.write16(0x200, 0x80);
+  }
+  assert.equal(b.read16(0x128) & 0x30, 0x20, 'nothing received yet');
+  for (const byte of [0x48, 0x69, 0x21, 0x0a]) a.write16(0x12a, byte);
+  assert.equal(a.read16(0x128) & 0x10, 0x10, 'send FIFO full');
+  a.write16(0x12a, 0x99); // dropped
+  linked.runFrame();
+  assert.equal(a.read16(0x128) & 0x10, 0, 'all sent');
+  const received = [];
+  while (!(b.read16(0x128) & 0x20)) received.push(b.read16(0x12a) & 0xff);
+  assert.deepEqual(received, [0x48, 0x69, 0x21, 0x0a]);
+  assert.equal(b.irq.if & 0x80, 0x80, 'receive interrupt');
+  // Without a link nothing changes: writes are ignored, the receiver stays empty.
+  linked.unlink();
+  a.write16(0x128, 0x7f83);
+  a.write16(0x12a, 0x55);
+  assert.equal(a.read16(0x128) & 0x30, 0x20);
+});

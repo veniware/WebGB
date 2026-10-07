@@ -123,7 +123,9 @@ src/core/
     dma.js              Four channels; HBlank/VBlank/sound FIFO/immediate
     timers.js           Lazy counters, overflow events, cascade
     apu.js              Game Boy channels (from gb/apu.js) + DMA sound FIFOs
-    sio.js              Serial port with nothing connected
+    sio.js              Serial port: unlinked as measured; linked multiplayer,
+                        Normal (8/32-bit) and UART transfers with the partner
+    link.js             LinkedGbas: two GBAs on one cable, one Core
     backup.js           SRAM / Flash / EEPROM, detected from ID strings
     gpio.js             Cartridge GPIO: Seiko RTC (Pokémon, Boktai), solar
                         sensor (Boktai), gyro and rumble (WarioWare Twisted,
@@ -330,8 +332,24 @@ other versions are refused.
   motion sensor); the rumble motor's share of on-time feeds `getRumble()`.
   Their state is only in the snapshots of those games (the format of other
   games' snapshots didn't change). The accelerometer's scale is a guess.
-- **Not emulated:** link cable and multiboot, the BIOS sound driver calls,
-  mid-line register changes.
+- **Link cable** (`link.js`, `sio.js`): `LinkedGbas` runs both machines
+  in turn, 256 cycles at a time (`Gba.beginFrame`/`runUntil`/`endFrame`),
+  each on its own clock; `sio.offset` converts times between them. Player 1
+  is the parent. Multiplayer: the parent's start runs the transfer on both
+  (2-player times from mGBA), SIOMULTI0-3 get both words and 0xFFFF, IDs
+  are set. Normal: the internal-clock side swaps words with a partner that
+  waits (external clock, started); SI shows the partner's SO. UART: bytes
+  at the baud rate into the partner's receive buffer (FIFO 4 or 1). A side
+  that is behind finishes its old transfer before a new one and doesn't
+  look ready meanwhile. The unlinked port behaves exactly as before (the
+  mGBA suite's SIO tests). Linked machines' states have extra SIO fields
+  (only while linked; the host keeps no linked states). Tested with
+  register-level unit tests and a two-GBA test program built with
+  devkitARM's crt0 + libgba (100 multiplayer and 100 Normal-mode transfers
+  each way, IRQ-driven, back to back).
+- **Not emulated:** multiboot (sending a game to a GBA without a
+  cartridge), JOY Bus, the BIOS sound driver calls, mid-line register
+  changes.
 
 ### Library, saved games and snapshots
 
@@ -465,13 +483,13 @@ performance stats, the renderer setting, the PWA, video effects and scalers
 (ghosting, sharpen, outlines, xBR, LCD grid, CRT), sound effects (pitch,
 low/high pass, bass, echo, mono), the memory viewer/editor with cheat search
 (Settings → Tools), rewind, library backup/restore, video recording, a
-WebGPU renderer and GBA idle-loop skipping.
+WebGPU renderer, GBA idle-loop skipping and the GBA link cable.
 
 Not done yet:
 
-1. **GBA link cable**: two GBA cores run in lockstep (like `LinkedGameBoys`)
-   with the SIO multiplayer, normal and UART modes between them, and the
-   link dialog offering GBA games. Multiboot (a game sent over the cable)
-   would follow. Deferred: large, and few games need it.
+1. **GBA multiboot**: a player 2 without a cartridge, booted over the
+   cable by the parent's game (single-cartridge multiplayer). Needs the
+   BIOS's receiving side (and SWI 0x25 MultiBoot) in the HLE BIOS, or a
+   BIOS file on both machines.
 2. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
    effects (`AudioOutput.setEffects`).

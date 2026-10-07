@@ -1,4 +1,5 @@
 import { Gba } from './gba.js';
+import { LinkedGbas } from './link.js';
 
 /**
  * @param {Uint8Array} rom
@@ -10,4 +11,13 @@ export function createCore(rom, info, options = {}) {
   const core = new Gba(rom, { bios: options.gbaBios ?? null, biosIntro: options.gbaBiosIntro ?? false });
   core.configure(options);
   return core;
+}
+
+/**
+ * Connects a second game to `first` with a link cable (see link.js).
+ * @param {import('./gba.js').Gba} first
+ * @param {{ vertical?: boolean }} [layout]
+ */
+export function createLinkedCore(first, rom, info, options, layout) {
+  return new LinkedGbas(first, createCore(rom, info, options), layout);
 }

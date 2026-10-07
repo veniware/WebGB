@@ -314,13 +314,32 @@ export class Gba {
 
   /** Runs until the next VBlank (one frame). */
   runFrame() {
-    const { cpu, bus, ppu } = this;
-    ppu.frameDone = false;
+    this.beginFrame();
+    this.#run(this.bus.cycles + FRAME_CYCLES * 2, true);
+    this.endFrame();
+  }
+
+  /** Linked machines run their frames in slices: beginFrame(), runUntil()..., endFrame(). */
+  beginFrame() {
+    this.ppu.frameDone = false;
     this.apu.beginFrame();
-    const limit = bus.cycles + FRAME_CYCLES * 2;
-    while (!ppu.frameDone && bus.cycles < limit) {
+  }
+
+  endFrame() {
+    this.apu.endFrame();
+  }
+
+  /** Runs until the clock reaches `time`, past VBlank if need be. */
+  runUntil(time) {
+    this.#run(time, false);
+  }
+
+  /** Runs until the clock reaches `stop`, or (with `untilVblank`) the frame is done. */
+  #run(stop, untilVblank) {
+    const { cpu, bus, ppu } = this;
+    while (bus.cycles < stop && !(untilVblank && ppu.frameDone)) {
       this.eventCount++;
-      this.eventTime = Math.min(ppu.nextEvent, this.timers.nextEvent, this.apu.nextEvent, this.sio.nextEvent);
+      this.eventTime = Math.min(ppu.nextEvent, this.timers.nextEvent, this.apu.nextEvent, this.sio.nextEvent, stop);
       // Interrupts are taken between instructions once due; until then they
       // bring the next stop forward (as do HALT and newly scheduled events).
       if (this.irqLine && !cpu.irqDisable) {
@@ -339,7 +358,6 @@ export class Gba {
       if (this.apu.nextEvent <= now) this.apu.event(now);
       if (this.sio.nextEvent <= now) this.sio.event(now);
     }
-    this.apu.endFrame();
   }
 
   getFrameBuffer() {
