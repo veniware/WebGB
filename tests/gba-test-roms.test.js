@@ -33,3 +33,17 @@ test('gba-tests save/sram.gba writes a save that survives a reload', { skip }, (
   again.loadSaveData(save);
   assert.deepEqual(again.getSaveData(), save);
 });
+
+test('idle-loop skipping leaves gba-tests runs exactly as they were', { skip }, () => {
+  for (const path of ['nes/nes.gba', 'ppu/shades.gba', 'save/flash128.gba']) {
+    const rom = new Uint8Array(readFileSync(join(ROOT, path)));
+    const [on, off] = [true, false].map((enabled) => {
+      const gba = new Gba(rom);
+      gba.idleLoops.enabled = enabled;
+      for (let i = 0; i < 120; i++) gba.runFrame();
+      return gba;
+    });
+    assert.ok(on.idleLoops.skipped > 0, `${path}: something skipped`);
+    assert.deepEqual(on.saveState(), off.saveState(), path);
+  }
+});

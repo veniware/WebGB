@@ -1,4 +1,5 @@
 import { buildArmTable } from './arm.js';
+import { IdleLoops } from './idle.js';
 import { buildThumbTable } from './thumb.js';
 
 /** Processor modes (CPSR bits 0-4). */
@@ -38,8 +39,10 @@ for (let cond = 0; cond < 16; cond++) {
 export class Arm7 {
   /**
    * @param {import('./bus.js').Bus} bus
-   * @param {{ swi?: (cpu: Arm7, comment: number) => boolean }} [hooks]
-   *   swi: high-level BIOS; returns true when it handled the call.
+   * @param {{ swi?: (cpu: Arm7, comment: number) => boolean, onIrqEnable?: () => void,
+   *   onLoop?: (cpu: Arm7, target: number) => void }} [hooks]
+   *   swi: high-level BIOS; returns true when it handled the call. onLoop: a
+   *   short backward branch is about to be taken (see idle.js).
    */
   constructor(bus, hooks = {}) {
     this.bus = bus;
@@ -174,7 +177,9 @@ export class Arm7 {
 
   /** Jumps; the pipeline refills (an extra non-sequential fetch). */
   branch(address) {
-    this.pc = (this.thumb ? address & ~1 : address & ~3) | 0;
+    const target = (this.thumb ? address & ~1 : address & ~3) | 0;
+    if (IdleLoops.isLoop(this.pc, target)) this.hooks.onLoop?.(this, target);
+    this.pc = target;
     this.bus.branched = true;
     this.refill = true;
   }

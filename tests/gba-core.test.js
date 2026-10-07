@@ -399,3 +399,46 @@ test('Yoshi Topsy-Turvy accelerometer: sampled by writes in the save area', () =
   again.loadState(gba.saveState());
   assert.equal(again.bus.read8(0x0e008200), x & 0xff);
 });
+
+// --- Idle loops ---------------------------------------------------------------------
+
+/** Runs `rom` with idle-loop skipping on and off; both must end in the same state. */
+function compareIdle(rom, frames) {
+  const runs = [true, false].map((enabled) => {
+    const gba = new Gba(rom);
+    gba.idleLoops.enabled = enabled;
+    run(gba, frames);
+    return gba;
+  });
+  assert.deepEqual(runs[0].saveState(), runs[1].saveState(), 'same state with and without skipping');
+  return runs[0];
+}
+
+test('idle loops: a jump to itself is skipped up to each event', () => {
+  const gba = compareIdle(cart(), 10);
+  assert.ok(gba.idleLoops.skipped > gba.bus.cycles * 0.9, `${gba.idleLoops.skipped} of ${gba.bus.cycles}`);
+});
+
+test('idle loops: polling VCOUNT keeps its exact timing', () => {
+  const gba = compareIdle(cart([
+    0xe3a00301, // mov r0, #0x04000000
+    0xe1d010b6, // loop: ldrh r1, [r0, #6] (VCOUNT)
+    0xe3510064, // cmp r1, #100
+    0x1afffffc, // bne loop
+    0xe2822001, // add r2, r2, #1 (counts passes while on line 100)
+    0xeafffffa, // b loop
+  ]), 5);
+  assert.ok(gba.cpu.r[2] > 0, 'reached line 100');
+  assert.ok(gba.idleLoops.skipped > gba.bus.cycles * 0.5, 'most of the waiting skipped');
+});
+
+test('idle loops: reading a timer is never skipped', () => {
+  const gba = compareIdle(cart([
+    0xe3a00301, // mov r0, #0x04000000
+    0xe2800c01, // add r0, r0, #0x100
+    0xe1d010b0, // loop: ldrh r1, [r0] (TM0CNT_L)
+    0xe3510001, // cmp r1, #1
+    0x1afffffc, // bne loop
+  ]), 2);
+  assert.equal(gba.idleLoops.skipped, 0);
+});

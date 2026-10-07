@@ -47,7 +47,10 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
   EEPROM, detected automatically; the cartridge clock of the Pokémon games
   and Boktai, Boktai's solar sensor (sunlight level in the settings), the
   gyro and rumble of WarioWare: Twisted!, Drill Dozer's rumble and the tilt
-  sensor of Yoshi Topsy-Turvy (keyboard, right stick or the phone's motion). Passes jsmolka's gba-tests and most of mGBA's test suite.
+  sensor of Yoshi Topsy-Turvy (keyboard, right stick or the phone's motion).
+  Loops where a game just waits are skipped (with exact timing), which
+  saves a lot of work on slow phones. Passes jsmolka's gba-tests and most
+  of mGBA's test suite.
 - **Cartridges:** MBC1, MBC2, MBC3 (real-time clock), MBC5 (rumble), MBC6,
   MBC7 (tilt sensor: device tilt or I/J/K/L keys), MMM01, HuC1 and HuC3
   (infrared, clock), TAMA5 and the Pocket Camera (uses your webcam).

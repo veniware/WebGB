@@ -6,6 +6,7 @@ import { Bus } from './bus.js';
 import { Arm7 } from './cpu.js';
 import { Dma, Timing } from './dma.js';
 import { Gpio } from './gpio.js';
+import { IdleLoops } from './idle.js';
 import { TILT_GAMES, TiltSensor } from './tilt.js';
 import { memoryRegions } from './memory.js';
 import { LINE_CYCLES, Ppu, SCREEN_HEIGHT, SCREEN_WIDTH } from './ppu.js';
@@ -117,11 +118,14 @@ export class Gba {
       if (this.irqLine && this.irqReadyAt < this.bus.cycles) this.irqReadyAt = this.bus.cycles + UNMASK_DELAY;
       if (this.irqLine) this.#schedule(Math.max(this.bus.cycles, this.irqReadyAt));
     };
-    this.cpu = new Arm7(this.bus, bios ? { onIrqEnable } : { swi: createHleBios(this), onIrqEnable });
+    // When the next event is due, and how many stops for events there were (idle.js).
+    this.eventTime = 0;
+    this.eventCount = 0;
+    this.idleLoops = new IdleLoops(this.bus, this);
+    const onLoop = (cpu, target) => this.idleLoops.onLoop(cpu, target);
+    this.cpu = new Arm7(this.bus, bios ? { onIrqEnable, onLoop } : { swi: createHleBios(this), onIrqEnable, onLoop });
     this.bus.cpu = this.cpu;
     this.buttons = 0;
-    // When the next event (of the PPU, timers or APU) is due.
-    this.eventTime = 0;
     this.reset();
   }
 
@@ -315,6 +319,7 @@ export class Gba {
     this.apu.beginFrame();
     const limit = bus.cycles + FRAME_CYCLES * 2;
     while (!ppu.frameDone && bus.cycles < limit) {
+      this.eventCount++;
       this.eventTime = Math.min(ppu.nextEvent, this.timers.nextEvent, this.apu.nextEvent, this.sio.nextEvent);
       // Interrupts are taken between instructions once due; until then they
       // bring the next stop forward (as do HALT and newly scheduled events).

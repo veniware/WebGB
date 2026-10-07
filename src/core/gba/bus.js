@@ -51,6 +51,10 @@ export class Bus {
     this.s16 = new Uint8Array(16);
     this.n32 = new Uint8Array(16);
     this.s32 = new Uint8Array(16);
+    // For idle-loop detection (idle.js): counts of writes, and of reads of
+    // what changes without the CPU or an event (timers, sound, EEPROM).
+    this.writes = 0;
+    this.volatileReads = 0;
     this.reset();
   }
 
@@ -116,6 +120,14 @@ export class Bus {
 
   /** Internal CPU cycles. */
   idle(cycles) {
+    this.cycles += cycles;
+  }
+
+  /**
+   * Moves time forward without bus activity (skipped idle-loop passes, from
+   * a jump: the prefetch buffer starts over after it anyway).
+   */
+  skip(cycles) {
     this.cycles += cycles;
   }
 
@@ -340,6 +352,7 @@ export class Bus {
     const region = (address >>> 24) & 0xf;
     if (region < Region.ROM0) return (this.#openBus() >>> ((address & 2) * 8)) & 0xffff;
     if (region === Region.ROM2_HI && this.backup.eeprom && this.backup.isEeprom(address, this.romSize)) {
+      this.volatileReads++;
       return this.backup.readEeprom();
     }
     const offset = address & 0x1fffffe;
@@ -352,6 +365,7 @@ export class Bus {
   /** I/O registers; write-only and unused ones read as open bus (-1 from `io`). */
   #readIo16(address) {
     const offset = address & 0xfffffe;
+    if ((offset >= 0x60 && offset < 0xb0) || (offset >= 0x100 && offset < 0x110)) this.volatileReads++;
     const value = offset < 0x400 ? this.io.read16(offset) : offset >= 0xfff600 ? this.#readDebug(address) : -1;
     return value >= 0 ? value : (this.#openBus() >>> ((address & 2) * 8)) & 0xffff;
   }
@@ -416,6 +430,7 @@ export class Bus {
   }
 
   write8(address, value) {
+    this.writes++;
     const region = (address >>> 24) & 0xf;
     this.#access(address, region, this.n16[region], 0, false);
     value &= 0xff;
@@ -447,6 +462,7 @@ export class Bus {
   }
 
   write16(address, value, sequential = false) {
+    this.writes++;
     const region = (address >>> 24) & 0xf;
     this.#access(address, region, this.n16[region], this.s16[region], sequential);
     // SRAM gets the byte of the value that lines up with the address.
@@ -455,6 +471,7 @@ export class Bus {
   }
 
   write32(address, value, sequential = false) {
+    this.writes++;
     const region = (address >>> 24) & 0xf;
     this.#access(address, region, this.n32[region], this.s32[region], sequential);
     if (region >= Region.SRAM) {
@@ -524,10 +541,12 @@ export class Bus {
   }
 
   dmaWrite16(address, value) {
+    this.writes++;
     this.#write16(address & ~1, value & 0xffff);
   }
 
   dmaWrite32(address, value) {
+    this.writes++;
     address &= ~3;
     this.#write16(address, value & 0xffff);
     this.#write16(address + 2, (value >>> 16) & 0xffff);

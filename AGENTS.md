@@ -114,6 +114,7 @@ src/core/
     gba.js              System: I/O registers, interrupts, keypad, the event
                         loop (runFrame), saves, save states; implements Core
     cpu.js              ARM7TDMI: registers, modes, exceptions, pipeline
+    idle.js             Idle-loop skipping (exact: whole passes up to the next event)
     arm.js, thumb.js    Instruction decode tables and handlers
     bus.js              Memory map, wait states, prefetch buffer, open bus
     bios.js             HLE BIOS: built-in vectors/IRQ stub, SWIs in JS
@@ -287,6 +288,16 @@ other versions are refused.
   ahead), so self-modifying code behaves (the Classic NES Series checks it).
   Each step's fetch stands for the hardware's prefetch two opcodes ahead; a
   jump refills (2S + 1N); after a data access the fetch is non-sequential.
+- **Idle loops** (`idle.js`): at each short backward branch (`cpu.onLoop`
+  hook) the CPU is compared with the previous pass of the same loop. A pass
+  with no writes (`bus.writes`), no reads of what changes on its own
+  (`bus.volatileReads`: timers, sound registers, EEPROM), no event in
+  between (`gba.eventCount`) and the same registers and flags leaves the
+  machine as it found it, so whole passes are skipped up to the next event
+  (`bus.skip`). The timing stays exact: states are byte-identical with
+  skipping on and off (tested), and mGBA's suite gives the same results.
+  Typically 70-97% of cycles are skipped while games wait. Anything new
+  that changes without an event must count as a volatile read.
 - **Bus timing:** WAITCNT wait states, forced non-sequential accesses at
   128 KB ROM boundaries, and a prefetch buffer worked out lazily from the
   time since the last fetch (ROM data accesses stop it).
@@ -453,20 +464,14 @@ Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core
 performance stats, the renderer setting, the PWA, video effects and scalers
 (ghosting, sharpen, outlines, xBR, LCD grid, CRT), sound effects (pitch,
 low/high pass, bass, echo, mono), the memory viewer/editor with cheat search
-(Settings → Tools), rewind, library backup/restore, video recording and a
-WebGPU renderer.
+(Settings → Tools), rewind, library backup/restore, video recording, a
+WebGPU renderer and GBA idle-loop skipping.
 
 Not done yet:
 
-1. **GBA idle-loop detection** (speed on slow phones): spot loops that only
-   poll memory or I/O (no writes, same registers each pass) and skip ahead
-   to the next event. Deferred because skipping can break timing: values
-   that change without an event (timer counters) must not be skipped over,
-   and mGBA's timing tests must keep passing. Most games already wait with
-   `VBlankIntrWait`, which halts.
-2. **GBA link cable**: two GBA cores run in lockstep (like `LinkedGameBoys`)
+1. **GBA link cable**: two GBA cores run in lockstep (like `LinkedGameBoys`)
    with the SIO multiplayer, normal and UART modes between them, and the
    link dialog offering GBA games. Multiboot (a game sent over the cable)
    would follow. Deferred: large, and few games need it.
-3. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
+2. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
    effects (`AudioOutput.setEffects`).

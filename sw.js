@@ -56,6 +56,7 @@ const FILES = [
   'src/core/gba/dma.js',
   'src/core/gba/gba.js',
   'src/core/gba/gpio.js',
+  'src/core/gba/idle.js',
   'src/core/gba/index.js',
   'src/core/gba/memory.js',
   'src/core/gba/ppu.js',
