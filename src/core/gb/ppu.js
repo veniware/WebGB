@@ -14,6 +14,9 @@ function glitchWrite(a, b, c) {
 // Events within a line, in order. Dots count from the start of the line,
 // when LY changes and the OAM-scan interrupt fires; STAT shows the new mode
 // and the LY=LYC flag 4 dots later.
+// irqMode while no mode is an interrupt source (after the OAM-scan pulse).
+const NO_MODE_IRQ = 4;
+
 const Phase = {
     OAM_SCAN: 0, // dot 4: STAT mode 2, LY=LYC compare
     VRAM_LOCK: 1, // dot 80: VRAM reads blocked; OAM writes briefly allowed
@@ -213,6 +216,10 @@ export class Ppu {
                 this.oamWriteBlocked = true;
                 this.#checkWindowY();
                 this.#compareLy();
+                // The OAM-scan interrupt source is a pulse as the mode starts,
+                // not a level (so STAT writes in mode 2 don't fire it).
+                this.irqMode = NO_MODE_IRQ;
+                this.#updateStat();
                 this.#next(Phase.VRAM_LOCK, 80);
                 break;
             case Phase.VRAM_LOCK:
