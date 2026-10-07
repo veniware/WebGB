@@ -536,3 +536,11 @@ Not done yet:
 
 1. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
    effects (`AudioOutput.setEffects`).
+2. Game Boy timing below the M-cycle: most of `tests/known-failures.js`
+   (gbmicrotest, AGE, wilbertpol's Mooneye; PPU/STAT/interrupt timing, the
+   speed switch). The tests disagree at a finer grain than the M-cycle
+   model: shifting the LCD-on timing by 4 dots fixes 58 and breaks 111. It
+   needs a T-cycle CPU/PPU like SameBoy's.
+3. GBA edge timing (mGBA's suite): back-to-back interrupts (timer
+   count-up), the prefetch buffer meeting DMA (1-cycle cases), HBlank DMA
+   phase and the Halt/IRQ path (misc edge cases).
