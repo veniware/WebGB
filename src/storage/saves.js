@@ -11,6 +11,7 @@ import { requestPersistence, transaction } from './db.js';
  * @property {Uint8Array} data
  * @property {number} created     Timestamp in ms.
  * @property {number} updated     Timestamp in ms.
+ * @property {Blob | null} [thumbnail]  The screen when the game last saved.
  */
 
 /** @returns {Promise<SavedGame[]>} Most recently updated first. */
@@ -34,16 +35,17 @@ export function getSave(id) {
  * @param {string} romKey
  * @param {Uint8Array} data
  * @param {string} [name]  Defaults to the next free "Save N".
+ * @param {Blob | null} [thumbnail]
  * @returns {Promise<number>} The new saved game's id.
  */
-export async function createSave(romKey, data, name) {
+export async function createSave(romKey, data, name, thumbnail = null) {
   const id = await transaction('saves', 'readwrite', (tx) => {
     const store = tx.objectStore('saves');
     const existing = store.index('romKey').getAll(romKey);
     let request;
     existing.onsuccess = () => {
       const now = Date.now();
-      request = store.add({ romKey, name: name ?? nextName(existing.result), data, created: now, updated: now });
+      request = store.add({ romKey, name: name ?? nextName(existing.result), data, thumbnail, created: now, updated: now });
     };
     return () => request.result;
   });
@@ -51,8 +53,11 @@ export async function createSave(romKey, data, name) {
   return id;
 }
 
-/** @returns {Promise<boolean>} False when the saved game no longer exists. */
-export function updateSave(id, data) {
+/**
+ * @param {Blob | null} [thumbnail]  Keeps the previous one when null.
+ * @returns {Promise<boolean>} False when the saved game no longer exists.
+ */
+export function updateSave(id, data, thumbnail = null) {
   return transaction('saves', 'readwrite', (tx) => {
     const store = tx.objectStore('saves');
     const request = store.get(id);
@@ -60,7 +65,8 @@ export function updateSave(id, data) {
     request.onsuccess = () => {
       if (!request.result) return;
       found = true;
-      store.put({ ...request.result, data, updated: Date.now() });
+      const previous = request.result.thumbnail ?? null;
+      store.put({ ...request.result, data, thumbnail: thumbnail ?? previous, updated: Date.now() });
     };
     return () => found;
   });

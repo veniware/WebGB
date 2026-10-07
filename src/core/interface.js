@@ -26,7 +26,11 @@
  * @property {() => Uint8Array} saveState
  * @property {(state: Uint8Array) => void} loadState
  * @property {number} [players]  2 for linked games: player 2's buttons are in bits 16+
- *   and getSaveData/loadSaveData take the player (0 or 1).
+ *   and getSaveData/loadSaveData/getSaveWrites/screenshot take the player (0 or 1).
+ * @property {(player?: number) => number} [getSaveWrites]  A count that changes when the
+ *   game writes battery-backed memory; the host screenshots the moment a save starts.
+ * @property {(player?: number) => { pixels: Uint8ClampedArray, width: number, height: number }} [screenshot]
+ *   A copy of a player's screen (defaults to the whole frame).
  * @property {() => number} [getRumble]  Rumble motor strength over the last frame, 0-1.
  * @property {boolean} [wantsTilt]  Has a tilt sensor; the host then calls setTilt(x, y) (in g).
  * @property {boolean} [wantsCamera]  Has a camera; the host then calls setCameraImage(pixels)

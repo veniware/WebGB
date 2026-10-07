@@ -104,6 +104,14 @@ export class LinkedGameBoys {
     return this.machines[player].getSaveData();
   }
 
+  getSaveWrites(player = 0) {
+    return this.machines[player].getSaveWrites();
+  }
+
+  screenshot(player = 0) {
+    return this.machines[player].screenshot();
+  }
+
   loadSaveData(data, player = 0) {
     this.machines[player].loadSaveData(data);
   }

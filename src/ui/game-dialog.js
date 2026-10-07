@@ -51,10 +51,9 @@ export function createGameDialog({ dialog, modals, emulator, onError, onStatus, 
       ? `Linked with ${partner.rom.info.title || baseName(partner.rom.name)} (player 2).`
       : 'Play with a second game, e.g. to trade or battle.';
 
+    releaseThumbnails();
     savesList.replaceChildren(...saves.map(saveRow));
     savesEmpty.hidden = saves.length > 0;
-
-    releaseThumbnails();
     snapshotsList.replaceChildren(...snapshots.map(snapshotRow));
     snapshotsEmpty.hidden = snapshots.length > 0;
   }
@@ -64,6 +63,7 @@ export function createGameDialog({ dialog, modals, emulator, onError, onStatus, 
     return h(
       'li',
       {},
+      thumbnail(save.thumbnail),
       h(
         'div',
         { className: 'grow' },
@@ -84,16 +84,21 @@ export function createGameDialog({ dialog, modals, emulator, onError, onStatus, 
     );
   }
 
-  function snapshotRow(snapshot) {
-    const thumb = h('img', { alt: '' });
-    if (snapshot.thumbnail) {
-      thumb.src = URL.createObjectURL(snapshot.thumbnail);
-      thumbnailUrls.push(thumb.src);
+  /** The screen as it was when saved; blank for imported saved games. */
+  function thumbnail(blob) {
+    const img = h('img', { alt: '' });
+    if (blob) {
+      img.src = URL.createObjectURL(blob);
+      thumbnailUrls.push(img.src);
     }
+    return img;
+  }
+
+  function snapshotRow(snapshot) {
     return h(
       'li',
       {},
-      thumb,
+      thumbnail(snapshot.thumbnail),
       h('div', { className: 'grow' }, h('small', { textContent: formatDate(snapshot.created) })),
       h(
         'div',

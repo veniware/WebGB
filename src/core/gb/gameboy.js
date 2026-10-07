@@ -33,6 +33,8 @@ export class GameBoy {
   height = SCREEN_HEIGHT;
   fps = CLOCK_RATE / FRAME_DOTS;
   sampleRate = SAMPLE_RATE;
+  // Cartridge RAM writes so far (see getSaveWrites()); not part of the state.
+  saveWrites = 0;
 
   /**
    * @param {Uint8Array} rom
@@ -293,6 +295,14 @@ export class GameBoy {
     return this.apu.samples;
   }
 
+  getSaveWrites() {
+    return this.saveWrites;
+  }
+
+  screenshot() {
+    return { pixels: this.getFrameBuffer().slice(), width: this.width, height: this.height };
+  }
+
   getSaveData() {
     return this.cart.getSaveData();
   }
@@ -401,7 +411,10 @@ export class GameBoy {
       if (this.cart.rumbling !== this.rumbleOn) this.#rumbleChanged();
     }
     else if (addr < 0xa000) this.ppu.writeVram(addr, value);
-    else if (addr < 0xc000) this.cart.writeRam(addr, value);
+    else if (addr < 0xc000) {
+      this.cart.writeRam(addr, value);
+      this.saveWrites++;
+    }
     else if (addr < 0xfe00) this.#writeWram(addr, value);
     else if (addr < 0xff00) {
       if (!this.cgb && this.ppu.oamWriteBlocked) this.ppu.oamBugWrite();

@@ -150,7 +150,8 @@ Defined in `src/core/interface.js`. A core exposes `width`, `height`, `fps`,
 `sampleRate`, `id`, `version` and `reset`, `setInput(buttons)`, `runFrame()`,
 `getFrameBuffer()` (RGBA `Uint8ClampedArray`), `getAudioSamples()`
 (interleaved stereo `Float32Array`), `getSaveData`/`loadSaveData` and
-`saveState`/`loadState`.
+`saveState`/`loadState`; optional members (peripherals, link, save
+screenshots) are documented in the file.
 
 To add a core: create `src/core/<name>/index.js` exporting
 `createCore(rom, info)`, then register it in `src/core/registry.js`. Bump the
@@ -218,6 +219,10 @@ other versions are refused.
   a new one. Writes are serialized through a queue in `Emulator.flushSave()`.
 - A **snapshot** records the `saveId` in use; resuming it switches back to
   that saved game (or to a new one if it was deleted or never existed).
+- Both keep a **thumbnail** (PNG): snapshots the screen when taken, saved
+  games the screen when the game started writing the save (cores report
+  writes with `getSaveWrites()`; the host screenshots the first frame after
+  one, `Emulator.#watchSaves`).
 - Deleting a ROM deletes its saved games and snapshots.
 - Exported saved games are raw `.sav` files, compatible with other emulators.
 

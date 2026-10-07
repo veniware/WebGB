@@ -56,6 +56,10 @@ export class Emulator extends Emitter {
   // The single-player core while linked; it keeps running after unlinking.
   #single = null;
   #saveQueue = Promise.resolve();
+  // Per player: the screen when the game started writing its save, and the
+  // core's save-write count last seen.
+  #saveShots = [null, null];
+  #saveWrites = [0, 0];
   #fpsFrames = 0;
   #fpsSince = 0;
 
@@ -129,6 +133,7 @@ export class Emulator extends Emitter {
     this.rom = { key: rom.key, name: rom.name, info: rom.info, size: rom.size };
     this.saveId = save?.id ?? null;
     this.#lastSave = core.getSaveData()?.slice() ?? null;
+    this.#watchSaves(core, true);
     this.#frameDebt = 0;
     this.#display.setSourceSize(core.width, core.height);
     this.#display.draw(core.getFrameBuffer());
@@ -202,14 +207,18 @@ export class Emulator extends Emitter {
     const slot = player ? this.player2 : this;
     const data = core?.getSaveData(player);
     const last = player ? this.#lastSave2 : this.#lastSave;
+    // A screenshot taken at writes that didn't change the save is stale.
+    const shot = this.#saveShots[player];
+    this.#saveShots[player] = null;
     if (!data || !slot || sameBytes(data, last)) return;
     const copy = data.slice();
     if (player) this.#lastSave2 = copy;
     else this.#lastSave = copy;
     try {
+      const thumbnail = await screenshotBlob(shot ?? screenshot(core, player));
       // The saved game may have been deleted while in use: start a new one.
-      if (slot.saveId === null || !(await updateSave(slot.saveId, copy))) {
-        const id = await createSave(slot.rom.key, copy);
+      if (slot.saveId === null || !(await updateSave(slot.saveId, copy, thumbnail))) {
+        const id = await createSave(slot.rom.key, copy, undefined, thumbnail);
         if (this.core === core) slot.saveId = id;
         this.emit('status', { text: player ? 'Started a new saved game for player 2.' : 'Started a new saved game.' });
       }
@@ -242,6 +251,7 @@ export class Emulator extends Emitter {
     this.core = linked;
     this.player2 = { rom: { key: rom.key, name: rom.name, info: rom.info, size: rom.size }, saveId: save?.id ?? null };
     this.#lastSave2 = linked.getSaveData(1)?.slice() ?? null;
+    this.#watchSaves(linked, true);
     this.#display.setSourceSize(linked.width, linked.height);
     this.#audio.clear();
     this.emit('linked', this.player2.rom);
@@ -256,6 +266,7 @@ export class Emulator extends Emitter {
     this.#single = null;
     this.player2 = null;
     this.#lastSave2 = null;
+    this.#watchSaves(this.core, true);
     this.#display.setSourceSize(this.core.width, this.core.height);
     this.#display.draw(this.core.getFrameBuffer());
     this.#audio.clear();
@@ -266,9 +277,11 @@ export class Emulator extends Emitter {
     const { core, rom } = this;
     if (!core) return;
     if (this.player2) throw new Error('Snapshots are not available while two games are linked.');
-    await this.flushSave();
+    // The state and screen of this moment, before anything async.
     const state = core.saveState();
-    const thumbnail = await frameToBlob(core.getFrameBuffer(), core.width, core.height);
+    const shot = screenshot(core);
+    await this.flushSave();
+    const thumbnail = await screenshotBlob(shot);
     await addSnapshot({
       romKey: rom.key,
       coreId: core.id,
@@ -294,6 +307,7 @@ export class Emulator extends Emitter {
     core.loadState(snapshot.state);
     this.saveId = save?.id ?? null;
     this.#lastSave = core.getSaveData()?.slice() ?? null;
+    this.#watchSaves(core, true);
     this.#audio.clear();
     this.#display.draw(core.getFrameBuffer());
     this.emit('status', { text: 'Snapshot loaded.' });
@@ -304,6 +318,23 @@ export class Emulator extends Emitter {
     const [latest] = await listSnapshots(this.rom.key);
     if (!latest) throw new Error('No snapshots for this game yet.');
     await this.loadSnapshot(latest.id);
+  }
+
+  /**
+   * Screenshots the first frame in which the game writes its save memory
+   * (the save screen), for the saved game's thumbnail. `reset` starts over
+   * with a new core or state.
+   */
+  #watchSaves(core, reset = false) {
+    if (!core.getSaveWrites) return;
+    for (let player = 0; player < (core.players ?? 1); player++) {
+      const writes = core.getSaveWrites(player);
+      if (reset) this.#saveShots[player] = null;
+      else if (writes !== this.#saveWrites[player] && !this.#saveShots[player]) {
+        this.#saveShots[player] = screenshot(core, player);
+      }
+      this.#saveWrites[player] = writes;
+    }
   }
 
   #tick = (now) => {
@@ -345,6 +376,7 @@ export class Emulator extends Emitter {
     }
     this.#audio.flush();
     if (frames) {
+      this.#watchSaves(core);
       this.#display.draw(core.getFrameBuffer());
       this.#rumble?.set(core.getRumble?.() ?? 0, now);
     }
@@ -362,6 +394,20 @@ function checkSnapshot(snapshot, romKey, core) {
   if (!snapshot || snapshot.romKey !== romKey) throw new Error('Snapshot not found for this game.');
   if (snapshot.coreId !== core.id || snapshot.coreVersion !== core.version) {
     throw new Error('This snapshot was made with a different emulator core version.');
+  }
+}
+
+/** A copy of a player's screen. */
+function screenshot(core, player = 0) {
+  return core.screenshot?.(player) ?? { pixels: core.getFrameBuffer().slice(), width: core.width, height: core.height };
+}
+
+/** @returns {Promise<Blob | null>} */
+async function screenshotBlob(shot) {
+  try {
+    return await frameToBlob(shot.pixels, shot.width, shot.height);
+  } catch {
+    return null;
   }
 }
 
