@@ -11,7 +11,7 @@ export const CONDITIONS = {
 };
 
 export class MemorySearch {
-    /** @param {import('../core/interface.js').MemoryRegion} region */
+    /** @param {import("../core/interface.js").MemoryRegion} region */
     constructor(region) {
         this.region = region;
         // Candidate offsets, and their values at the last search.

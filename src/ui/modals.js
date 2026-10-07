@@ -3,7 +3,7 @@
  * game input is off; it resumes when the last one closes, unless it was
  * paused before or the game changed in the meantime.
  *
- * @param {{ emulator: import('../app/emulator.js').Emulator, inputs: Array<{ enabled: boolean }> }} deps
+ * @param {{ emulator: import("../app/emulator.js").Emulator, inputs: Array<{ enabled: boolean }> }} deps
  */
 export function createModals({ emulator, inputs }) {
     let openCount = 0;

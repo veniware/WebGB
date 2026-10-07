@@ -3,7 +3,7 @@ import { LinkedGbas } from "./link.js";
 
 /**
  * @param {Uint8Array} rom
- * @param {import('../../rom/detect.js').RomInfo} info
+ * @param {import("../../rom/detect.js").RomInfo} info
  * @param {object} [options] See Gba.configure(); gbaBios: a BIOS dump to run
  *     instead of the built-in one, gbaBiosIntro: start with its boot animation.
  */
@@ -15,7 +15,7 @@ export function createCore(rom, info, options = {}) {
 
 /**
  * Connects a second game to `first` with a link cable (see link.js).
- * @param {import('./gba.js').Gba} first
+ * @param {import("./gba.js").Gba} first
  * @param {{ vertical?: boolean }} [layout]
  */
 export function createLinkedCore(first, rom, info, options, layout) {

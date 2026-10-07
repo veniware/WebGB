@@ -9,7 +9,7 @@ const MAX_SIZE = 64 * 1024 * 1024;
  * @typedef {object} LoadedRom
  * @property {string} name         File name of the ROM (inside the zip, if zipped).
  * @property {Uint8Array} data
- * @property {import('./detect.js').RomInfo} info
+ * @property {import("./detect.js").RomInfo} info
  * @property {number} size
  * @property {string} key            Stable identity used to store saves and snapshots.
  */

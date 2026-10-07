@@ -5,8 +5,8 @@ import { bytesRegion } from "../memory.js";
  * bus. Video memory is edited directly (the PPU reads it every line); I/O
  * writes go through the registers.
  *
- * @param {import('./gba.js').Gba} gba
- * @returns {import('../interface.js').MemoryRegion[]}
+ * @param {import("./gba.js").Gba} gba
+ * @returns {import("../interface.js").MemoryRegion[]}
  */
 export function memoryRegions(gba) {
     const { bus, ppu, backup } = gba;

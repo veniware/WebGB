@@ -7,8 +7,8 @@ import { baseName, h, SYSTEM_SHORT } from "./dom.js";
  *
  * @param {{
  *     dialog: HTMLDialogElement,
- *     modals: ReturnType<typeof import('./modals.js').createModals>,
- *     emulator: import('../app/emulator.js').Emulator,
+ *     modals: ReturnType<typeof import("./modals.js").createModals>,
+ *     emulator: import("../app/emulator.js").Emulator,
  *     onError: (err: Error) => void,
  * }} deps
  */

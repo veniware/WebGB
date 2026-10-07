@@ -30,15 +30,15 @@ const REWIND_STEPS_PER_SECOND = 30;
  * 'linked' (player 2's rom), 'unlinked', 'rewinding' (boolean).
  */
 export class Emulator extends Emitter {
-    /** @type {import('../core/interface.js').Core | null} */
+    /** @type {import("../core/interface.js").Core | null} */
     core = null;
-    /** @type {{ key: string, name: string, info: import('../rom/detect.js').RomInfo, size: number } | null} */
+    /** @type {{ key: string, name: string, info: import("../rom/detect.js").RomInfo, size: number } | null} */
     rom = null;
     /** @type {number | null} Saved game that in-game saves are written to. */
     saveId = null;
     /**
      * Player 2's game when two games are linked by cable.
-     * @type {{ rom: { key: string, name: string, info: import('../rom/detect.js').RomInfo, size: number }, saveId: number | null } | null}
+     * @type {{ rom: { key: string, name: string, info: import("../rom/detect.js").RomInfo, size: number }, saveId: number | null } | null}
      */
     player2 = null;
     paused = false;
@@ -78,12 +78,12 @@ export class Emulator extends Emitter {
 
     /**
      * @param {{
-     *     display: import('../video/display.js').Display,
-     *     audio: import('../audio/audio-output.js').AudioOutput,
-     *     input: import('../input/input-manager.js').InputManager,
-     *     motion?: import('../input/motion.js').MotionInput,
-     *     camera?: import('../input/camera.js').CameraInput,
-     *     rumble?: import('../input/rumble.js').Rumble,
+     *     display: import("../video/display.js").Display,
+     *     audio: import("../audio/audio-output.js").AudioOutput,
+     *     input: import("../input/input-manager.js").InputManager,
+     *     motion?: import("../input/motion.js").MotionInput,
+     *     camera?: import("../input/camera.js").CameraInput,
+     *     rumble?: import("../input/rumble.js").Rumble,
      * }} deps    motion/camera/rumble serve cartridges with a tilt sensor, camera or motor.
      */
     constructor({ display, audio, input, motion, camera, rumble }) {
@@ -132,7 +132,7 @@ export class Emulator extends Emitter {
      * Starts a ROM. Boots with the given saved game (none = new game), or
      * resumes a snapshot, which brings back the saved game it was taken with.
      *
-     * @param {{ key: string, name: string, info: import('../rom/detect.js').RomInfo, size: number }} rom
+     * @param {{ key: string, name: string, info: import("../rom/detect.js").RomInfo, size: number }} rom
      * @param {Uint8Array} data
      * @param {{ saveId?: number | null, snapshotId?: number | null }} [options]
      */

@@ -38,7 +38,7 @@ for (let cond = 0; cond < 16; cond++) {
  */
 export class Arm7 {
     /**
-     * @param {import('./bus.js').Bus} bus
+     * @param {import("./bus.js").Bus} bus
      * @param {{ swi?: (cpu: Arm7, comment: number) => boolean, onIrqEnable?: () => void,
      *     onLoop?: (cpu: Arm7, target: number) => void }} [hooks]
      *     swi: high-level BIOS; returns true when it handled the call. onLoop: a

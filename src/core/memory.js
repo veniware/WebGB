@@ -6,7 +6,7 @@
  * @param {number} base    Address of the first byte.
  * @param {Uint8Array} data
  * @param {(() => void) | null} [changed]    Called after each write; null: read-only.
- * @returns {import('./interface.js').MemoryRegion}
+ * @returns {import("./interface.js").MemoryRegion}
  */
 export function bytesRegion(name, base, data, changed) {
     return {

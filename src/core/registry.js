@@ -3,7 +3,7 @@ import { createTestCore } from "./test/test-core.js";
 /**
  * Available cores. Add an entry here when a core is implemented.
  *
- * @type {import('./interface.js').CoreDescriptor[]}
+ * @type {import("./interface.js").CoreDescriptor[]}
  */
 const cores = [
     { id: "gb", name: "Game Boy", systems: ["gb", "gbc"], link: true, load: () => import("./gb/index.js") },
@@ -23,9 +23,9 @@ export function findCore(system) {
  * test core runs instead so the frontend can still be exercised.
  *
  * @param {Uint8Array} rom
- * @param {import('../rom/detect.js').RomInfo} info
+ * @param {import("../rom/detect.js").RomInfo} info
  * @param {object} [options] Core options (see Core.configure)
- * @returns {Promise<{ core: import('./interface.js').Core, fallback: boolean }>}
+ * @returns {Promise<{ core: import("./interface.js").Core, fallback: boolean }>}
  */
 export async function createCore(rom, info, options = {}) {
     const descriptor = findCore(info.system);

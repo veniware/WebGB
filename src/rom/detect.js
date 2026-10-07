@@ -1,6 +1,6 @@
 /**
  * @typedef {object} RomInfo
- * @property {'gb' | 'gbc' | 'gba'} system
+ * @property {"gb" | "gbc" | "gba"} system
  * @property {string} title             Title from the cartridge header (may be empty).
  * @property {string} [code]            GBA game code.
  * @property {number} [cartType]    GB cartridge type byte (0x147).

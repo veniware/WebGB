@@ -246,7 +246,7 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
 
     /**
      * Adds ROM files to the library.
-     * @returns {Promise<{ added: import('../rom/loader.js').LoadedRom[], unstored: import('../rom/loader.js').LoadedRom[], errors: string[] }>}
+     * @returns {Promise<{ added: import("../rom/loader.js").LoadedRom[], unstored: import("../rom/loader.js").LoadedRom[], errors: string[] }>}
      */
     async function addRoms(files) {
         const result = { added: [], unstored: [], errors: [] };

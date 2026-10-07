@@ -16,7 +16,7 @@ const C = 0x10;
  * 0 B, 1 C, 2 D, 3 E, 4 H, 5 L, 6 (HL), 7 A.
  */
 export class Cpu {
-    /** @param {import('./gameboy.js').GameBoy} gb */
+    /** @param {import("./gameboy.js").GameBoy} gb */
     constructor(gb) {
         this.gb = gb;
         this.reset();

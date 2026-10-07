@@ -15,7 +15,7 @@ export class Serial {
     /** @type {Serial | null} The other Game Boy, when linked. */
     link = null;
 
-    /** @param {import('./gameboy.js').GameBoy} gb */
+    /** @param {import("./gameboy.js").GameBoy} gb */
     constructor(gb) {
         this.gb = gb;
         this.reset();

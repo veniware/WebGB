@@ -86,7 +86,7 @@ export class AudioOutput extends Emitter {
 
     /**
      * @param {{ pitch?: number, highpass?: number, lowpass?: number, bass?: number,
-     *     echo?: 'off' | 'room' | 'hall', mono?: boolean }} effects
+     *     echo?: "off" | "room" | "hall", mono?: boolean }} effects
      *     pitch in semitones; filter cutoffs in Hz (0: off); bass boost in dB.
      */
     setEffects(effects) {

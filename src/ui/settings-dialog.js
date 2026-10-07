@@ -54,7 +54,7 @@ const CHOICES = {
  *
  * @param {{
  *     dialog: HTMLDialogElement,
- *     modals: ReturnType<typeof import('./modals.js').createModals>,
+ *     modals: ReturnType<typeof import("./modals.js").createModals>,
  *     settings: object,
  *     onChange: (key: string, value: unknown) => void,
  * }} deps

@@ -24,7 +24,7 @@ export class Mbc6 extends Cartridge {
         this.flashWriteEnabled = false;
         // Flash command state machine.
         this.unlock = 0; // progress through the AA/55 unlock sequence
-        this.flashMode = "read"; // 'read' | 'id' | 'program' | 'status' | 'erase-setup'
+        this.flashMode = "read"; // "read" | "id" | "program" | "status" | "erase-setup"
         this.status = 0x80;
     }
 

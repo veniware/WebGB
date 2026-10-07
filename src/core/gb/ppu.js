@@ -44,7 +44,7 @@ const Phase = {
 export class Ppu {
     #oamWords;
 
-    /** @param {import('./gameboy.js').GameBoy} gb */
+    /** @param {import("./gameboy.js").GameBoy} gb */
     constructor(gb) {
         this.gb = gb;
         this.cgb = gb.cgb;

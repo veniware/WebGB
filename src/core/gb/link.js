@@ -20,8 +20,8 @@ export class LinkedGameBoys {
     players = 2;
 
     /**
-     * @param {import('./gameboy.js').GameBoy} first Usually the game already running.
-     * @param {import('./gameboy.js').GameBoy} second
+     * @param {import("./gameboy.js").GameBoy} first Usually the game already running.
+     * @param {import("./gameboy.js").GameBoy} second
      * @param {{ vertical?: boolean }} [options] Stack the screens instead of side by side.
      */
     constructor(first, second, { vertical = false } = {}) {

@@ -44,7 +44,7 @@ export class Bus {
         this.debugEnabled = false;
         /** @type {((text: string) => void) | null} */
         this.onDebug = null;
-        /** @type {import('./cpu.js').Arm7 | null} */
+        /** @type {import("./cpu.js").Arm7 | null} */
         this.cpu = null;
         // Cycles of 16-bit and 32-bit accesses per region, non-sequential and sequential.
         this.n16 = new Uint8Array(16);

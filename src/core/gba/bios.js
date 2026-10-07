@@ -39,7 +39,7 @@ const SINE = Int16Array.from({ length: 256 }, (_, i) => Math.round(Math.sin((i *
 
 /**
  * BIOS calls in JavaScript (high-level emulation), after GBATEK and mGBA.
- * @param {import('./gba.js').Gba} gba
+ * @param {import("./gba.js").Gba} gba
  */
 export function createHleBios(gba) {
     const { bus } = gba;

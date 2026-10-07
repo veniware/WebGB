@@ -11,7 +11,7 @@ export class Display {
      * @param {HTMLCanvasElement} canvas
      * @param {HTMLElement} stage    Element the canvas is centered in.
      * @param {HTMLElement} [fullscreenTarget]    Element made fullscreen (defaults to the stage).
-     * @param {'auto' | 'webgpu' | 'webgl' | 'canvas'} [renderer]    'auto': WebGL, or the 2D canvas without it.
+     * @param {"auto" | "webgpu" | "webgl" | "canvas"} [renderer]    "auto": WebGL, or the 2D canvas without it.
      */
     constructor(canvas, stage, fullscreenTarget = stage, renderer = "auto") {
         this.canvas = canvas;
@@ -46,7 +46,7 @@ export class Display {
      * Switches renderer. A canvas keeps the kind of context it was first given,
      * so a fresh one takes its place. WebGPU starts asynchronously; until it is
      * ready, and if it isn't available, the current renderer keeps drawing.
-     * @param {'auto' | 'webgpu' | 'webgl' | 'canvas'} kind
+     * @param {"auto" | "webgpu" | "webgl" | "canvas"} kind
      * @returns {Promise<boolean>} false when WebGPU was asked for but isn't available.
      */
     async setRenderer(kind) {
@@ -101,7 +101,7 @@ export class Display {
         this.layout();
     }
 
-    /** @param {'fit' | number} zoom */
+    /** @param {"fit" | number} zoom */
     setZoom(zoom) {
         this.zoom = zoom;
         this.layout();

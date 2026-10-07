@@ -10,7 +10,7 @@ const TAC_BITS = [1 << 9, 1 << 3, 1 << 5, 1 << 7];
  * DIV or changing TAC can clock them early, as on hardware.
  */
 export class Timer {
-    /** @param {import('./gameboy.js').GameBoy} gb */
+    /** @param {import("./gameboy.js").GameBoy} gb */
     constructor(gb) {
         this.gb = gb;
         this.reset(0);

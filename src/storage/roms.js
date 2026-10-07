@@ -6,7 +6,7 @@ import { requestPersistence, transaction } from "./db.js";
  * @typedef {object} RomEntry
  * @property {string} key                    See loader.js; also keys saves and snapshots.
  * @property {string} name                 Original file name.
- * @property {import('../rom/detect.js').RomInfo} info
+ * @property {import("../rom/detect.js").RomInfo} info
  * @property {number} size
  * @property {number} added                Timestamp in ms.
  * @property {number | null} lastPlayed

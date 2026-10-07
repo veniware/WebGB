@@ -61,9 +61,9 @@
  * @typedef {object} CoreDescriptor
  * @property {string} id
  * @property {string} name
- * @property {Array<'gb' | 'gbc' | 'gba'>} systems
+ * @property {Array<"gb" | "gbc" | "gba">} systems
  * @property {boolean} [link]    Supports link cables (the module exports createLinkedCore).
- * @property {() => Promise<{ createCore: (rom: Uint8Array, info: import('../rom/detect.js').RomInfo, options: object) => Core }>} load
+ * @property {() => Promise<{ createCore: (rom: Uint8Array, info: import("../rom/detect.js").RomInfo, options: object) => Core }>} load
  */
 
 export {};

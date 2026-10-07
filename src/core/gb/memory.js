@@ -5,8 +5,8 @@ import { bytesRegion } from "../memory.js";
  * go through the bus, so they reach the mapper and the I/O registers), then
  * the banked memories in full.
  *
- * @param {import('./gameboy.js').GameBoy} gb
- * @returns {import('../interface.js').MemoryRegion[]}
+ * @param {import("./gameboy.js").GameBoy} gb
+ * @returns {import("../interface.js").MemoryRegion[]}
  */
 export function memoryRegions(gb) {
     const { ppu, cart } = gb;

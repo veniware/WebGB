@@ -4,7 +4,7 @@ import { supportsSgb } from "./sgb.js";
 
 /**
  * @param {Uint8Array} rom
- * @param {import('../../rom/detect.js').RomInfo} info
+ * @param {import("../../rom/detect.js").RomInfo} info
  * @param {object} [options] See GameBoy.configure().
  */
 export function createCore(rom, info, options = {}) {

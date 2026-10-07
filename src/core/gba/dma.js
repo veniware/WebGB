@@ -12,7 +12,7 @@ const COUNT_MASK = [0x3fff, 0x3fff, 0x3fff, 0xffff];
  */
 export class Dma {
     /**
-     * @param {import('./bus.js').Bus} bus
+     * @param {import("./bus.js").Bus} bus
      * @param {{ requestIrq: (bit: number) => void, eepromTransfer?: (count: number) => void }} hooks
      */
     constructor(bus, hooks) {

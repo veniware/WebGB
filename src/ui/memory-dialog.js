@@ -14,8 +14,8 @@ const WIDE = 600;
  *
  * @param {{
  *     dialog: HTMLDialogElement,
- *     modals: ReturnType<typeof import('./modals.js').createModals>,
- *     emulator: import('../app/emulator.js').Emulator,
+ *     modals: ReturnType<typeof import("./modals.js").createModals>,
+ *     emulator: import("../app/emulator.js").Emulator,
  * }} deps
  */
 export function createMemoryDialog({ dialog, modals, emulator }) {
@@ -23,7 +23,7 @@ export function createMemoryDialog({ dialog, modals, emulator }) {
     const address = dialog.querySelector("[data-address]");
     const grid = dialog.querySelector("[data-grid]");
     const range = dialog.querySelector("[data-range]");
-    /** @type {import('../core/interface.js').MemoryRegion[]} */
+    /** @type {import("../core/interface.js").MemoryRegion[]} */
     let regions = [];
     let region = null;
     // Offset of the page's first byte.

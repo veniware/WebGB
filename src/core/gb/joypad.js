@@ -7,7 +7,7 @@ import { Interrupt } from "./constants.js";
  * the two button groups.
  */
 export class Joypad {
-    /** @param {import('./gameboy.js').GameBoy} gb */
+    /** @param {import("./gameboy.js").GameBoy} gb */
     constructor(gb) {
         this.gb = gb;
         this.buttons = 0;

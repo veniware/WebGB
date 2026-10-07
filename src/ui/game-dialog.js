@@ -10,8 +10,8 @@ import { MAX_SAVE_SIZE, SAVE_ACCEPT } from "./files.js";
  *
  * @param {{
  *     dialog: HTMLDialogElement,
- *     modals: ReturnType<typeof import('./modals.js').createModals>,
- *     emulator: import('../app/emulator.js').Emulator,
+ *     modals: ReturnType<typeof import("./modals.js").createModals>,
+ *     emulator: import("../app/emulator.js").Emulator,
  *     onError: (err: Error) => void,
  *     onStatus: (text: string) => void,
  *     onLink: () => void,

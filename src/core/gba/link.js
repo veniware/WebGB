@@ -26,8 +26,8 @@ export class LinkedGbas {
     players = 2;
 
     /**
-     * @param {import('./gba.js').Gba} first Usually the game already running.
-     * @param {import('./gba.js').Gba} second
+     * @param {import("./gba.js").Gba} first Usually the game already running.
+     * @param {import("./gba.js").Gba} second
      * @param {{ vertical?: boolean }} [options] Stack the screens instead of side by side.
      */
     constructor(first, second, { vertical = false } = {}) {

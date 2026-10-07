@@ -12,7 +12,7 @@ const PAD_WAIT = 10_000;
  *
  * @param {{
  *     dialog: HTMLDialogElement,
- *     modals: ReturnType<typeof import('./modals.js').createModals>,
+ *     modals: ReturnType<typeof import("./modals.js").createModals>,
  *     settings: { keyBindings: object | null, padBindings: object | null },
  *     onChange: (keyBindings: object | null, padBindings: object | null) => void,
  * }} deps    onChange gets null for bindings back at their defaults.

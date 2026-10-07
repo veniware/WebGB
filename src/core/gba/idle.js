@@ -26,7 +26,7 @@ export class IdleLoops {
     #regs = new Int32Array(15);
 
     /**
-     * @param {import('./bus.js').Bus} bus
+     * @param {import("./bus.js").Bus} bus
      * @param {{ eventTime: number, eventCount: number }} machine    When the next event is due; events so far.
      */
     constructor(bus, machine) {

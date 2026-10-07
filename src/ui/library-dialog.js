@@ -11,8 +11,8 @@ import { BACKUP_ACCEPT, ROM_ACCEPT } from "./files.js";
  *
  * @param {{
  *     dialog: HTMLDialogElement,
- *     modals: ReturnType<typeof import('./modals.js').createModals>,
- *     emulator: import('../app/emulator.js').Emulator,
+ *     modals: ReturnType<typeof import("./modals.js").createModals>,
+ *     emulator: import("../app/emulator.js").Emulator,
  *     onPlay: (key: string) => void,
  *     onAdd: (files: File[]) => Promise<void>,
  *     onError: (err: Error) => void,

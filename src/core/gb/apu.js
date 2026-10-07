@@ -318,7 +318,7 @@ export class NoiseChannel extends Channel {
  * through a high-pass filter that models the output capacitor removing DC.
  */
 export class Apu {
-    /** @param {import('./gameboy.js').GameBoy} gb */
+    /** @param {import("./gameboy.js").GameBoy} gb */
     constructor(gb) {
         this.gb = gb;
         this.ch1 = new SquareChannel(true);
