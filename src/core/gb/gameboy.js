@@ -32,7 +32,7 @@ const SPEED_SWITCH_CYCLES = 0x20008 / 4 - 2;
  */
 export class GameBoy {
   id = 'gb';
-  version = 3;
+  version = 4;
   fps = CLOCK_RATE / FRAME_DOTS;
   sampleRate = SAMPLE_RATE;
   // Cartridge RAM writes so far (see getSaveWrites()); not part of the state.

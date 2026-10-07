@@ -196,10 +196,16 @@ other versions are refused.
   position (DMG: line 153) and the DMG's VRAM logo are set to their
   post-boot values. DMG games on a CGB get the boot ROM's compatibility
   palette (or a user preset) from `palettes.js`.
-- **DMG quirks:** the OAM corruption bug (`oamBug*` in `ppu.js`, triggered
-  by OAM accesses and 16-bit inc/dec in mode 2), wave RAM access while
-  channel 3 plays, the serial clock running off the system counter, TIMA
-  glitches from TAC writes.
+- **Quirks emulated:** the DMG's OAM corruption bug (`oamBug*` in `ppu.js`,
+  triggered by OAM accesses and 16-bit inc/dec in mode 2), DMG wave RAM
+  access while channel 3 plays, APU "zombie mode" (NRx2 writes while
+  playing), the serial clock running off the system counter, TIMA glitches
+  from TAC writes, OAM DMA bus conflicts, power-on RAM noise (fixed seed),
+  HALT sampling interrupts mid-M-cycle (the PPU ticks in two halves for
+  this), the CGB speed switch pausing the CPU ~0x20008 cycles while DIV
+  runs on.
+- **MBC3 clock:** separate counters with the chip's rollover rules; follows
+  the wall clock in the app, emulated time in rtc3test.
 - **Peripherals:** optional Core members `getRumble()`, `wantsTilt`/`setTilt`,
   `wantsCamera`/`setCameraImage` are fed by the host from `src/input/`.
   HuC3 and TAMA5 clocks follow the wall clock like MBC3.

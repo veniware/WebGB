@@ -39,10 +39,12 @@ class Channel {
     this.envelopeUp = false;
     this.envelopePeriod = 0;
     this.envelopeTimer = 0;
+    // The envelope reached 0 or 15 and stopped.
+    this.envelopeDone = false;
   }
 
   sync(s) {
-    for (const flag of ['enabled', 'dacOn', 'lengthEnabled', 'envelopeUp']) this[flag] = s.bool(this[flag]);
+    for (const flag of ['enabled', 'dacOn', 'lengthEnabled', 'envelopeUp', 'envelopeDone']) this[flag] = s.bool(this[flag]);
     for (const field of ['length', 'frequency', 'volume', 'envelopeInitial', 'envelopePeriod', 'envelopeTimer']) {
       this[field] = s.u16(this[field]);
     }
@@ -58,10 +60,19 @@ class Channel {
     this.envelopeTimer = this.envelopePeriod;
     if (this.envelopeUp && this.volume < 15) this.volume++;
     else if (!this.envelopeUp && this.volume > 0) this.volume--;
+    else this.envelopeDone = true;
   }
 
   /** NRx2: volume envelope; the top 5 bits all zero turn the DAC off. */
   writeEnvelope(value) {
+    if (this.enabled) {
+      // "Zombie mode": writing while playing changes the volume (as on the
+      // CGB-02/04, the most consistent models). Games use $08 to add 1.
+      if (this.envelopePeriod === 0 && !this.envelopeDone) this.volume++;
+      else if (!this.envelopeUp) this.volume += 2;
+      if (this.envelopeUp !== ((value & 0x08) !== 0)) this.volume = 16 - this.volume;
+      this.volume &= 15;
+    }
     this.envelopeInitial = value >> 4;
     this.envelopeUp = (value & 0x08) !== 0;
     this.envelopePeriod = value & 7;
@@ -87,6 +98,7 @@ class Channel {
     this.enabled = this.dacOn;
     this.volume = this.envelopeInitial;
     this.envelopeTimer = this.envelopePeriod;
+    this.envelopeDone = false;
     return true;
   }
 }
