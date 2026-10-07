@@ -72,10 +72,15 @@ export class Mbc3 extends Cartridge {
   writeRom(addr, value) {
     switch (addr >> 13) {
       case 0: this.ramEnabled = (value & 0x0f) === 0x0a; break;
-      case 1: this.romOffset1 = ((value & 0x7f || 1) & this.romMask) * 0x4000; break;
+      case 1: {
+        // 7-bit bank numbers; the MBC30 (4 MB ROMs) has 8.
+        const bank = value & (this.romMask > 0x7f ? 0xff : 0x7f);
+        this.romOffset1 = ((bank || 1) & this.romMask) * 0x4000;
+        break;
+      }
       case 2:
         this.ramBank = value & 0x0f;
-        this.ramOffset = (this.ramBank & 3) * 0x2000;
+        this.ramOffset = (this.ramBank & 7) * 0x2000;
         break;
       default:
         if (this.latchValue === 0 && value === 1) this.rtc?.latch();
@@ -85,14 +90,14 @@ export class Mbc3 extends Cartridge {
 
   readRam(addr) {
     if (!this.ramEnabled) return 0xff;
-    if (this.ramBank < 4) return super.readRam(addr);
+    if (this.ramBank < 8) return super.readRam(addr);
     if (this.rtc && this.ramBank >= 8 && this.ramBank <= 0x0c) return this.rtc.read(this.ramBank);
     return 0xff;
   }
 
   writeRam(addr, value) {
     if (!this.ramEnabled) return;
-    if (this.ramBank < 4) super.writeRam(addr, value);
+    if (this.ramBank < 8) super.writeRam(addr, value);
     else if (this.rtc && this.ramBank >= 8 && this.ramBank <= 0x0c) this.rtc.write(this.ramBank, value);
   }
 

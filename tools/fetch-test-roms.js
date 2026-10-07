@@ -2,7 +2,7 @@
 // Downloads the open-source test ROMs used by tests/gb-test-roms.test.js into
 // tests/roms/ (ignored by git). They come from the game-boy-test-roms
 // collection by c-sp, which bundles Blargg's tests, the Mooneye Test Suite,
-// dmg-acid2 and cgb-acid2 (each under its own license).
+// the acid2 tests, SameSuite and others (each under its own license).
 //
 //   node tools/fetch-test-roms.js              download the release zip
 //   node tools/fetch-test-roms.js file.zip     use a zip downloaded before
@@ -13,7 +13,11 @@ import { extractZipEntry, listZip } from '../src/rom/zip.js';
 
 const VERSION = 'v7.0';
 const RELEASE = `https://github.com/c-sp/game-boy-test-roms/releases/download/${VERSION}/game-boy-test-roms-${VERSION}.zip`;
-const SUITES = /(?:^|\/)((?:blargg|mooneye-test-suite|dmg-acid2|cgb-acid2|mealybug-tearoom-tests)\/.+)$/;
+const SUITES = new RegExp(`(?:^|/)((?:${[
+  'age-test-roms', 'blargg', 'bully', 'cgb-acid-hell', 'cgb-acid2', 'dmg-acid2', 'gbmicrotest', 'little-things-gb',
+  'mbc3-tester', 'mealybug-tearoom-tests', 'mooneye-test-suite', 'mooneye-test-suite-wilbertpol', 'rtc3test',
+  'same-suite', 'scribbltests', 'strikethrough', 'turtle-tests',
+].join('|')})/.+)$`);
 const target = new URL('../tests/roms/', import.meta.url).pathname;
 
 const file = process.argv[2];

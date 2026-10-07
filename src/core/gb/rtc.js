@@ -1,6 +1,4 @@
 const DAY = 86400;
-// The day counter has 9 bits; past that it wraps and sets the carry flag.
-const MAX_SECONDS = 512 * DAY;
 // Size of the clock data appended to saved games (VBA-M/BGB/mGBA format).
 export const RTC_SAVE_SIZE = 48;
 
@@ -9,38 +7,42 @@ export const RTC_SAVE_SIZE = 48;
  *
  * Like the cartridge's own battery-powered crystal, it follows the wall
  * clock: it keeps running while the game is paused or closed, and fast
- * forward doesn't speed it up. The time is stored as the wall-clock moment
- * the counter was zero (`base`), so it doesn't change while running.
+ * forward doesn't speed it up. The registers are separate counters, as on
+ * the chip: out-of-range values (e.g. 63 seconds) count on and wrap without
+ * carrying. They are kept as the values they had at `base` (a wall-clock
+ * moment that starts a second), so the stored state doesn't change while
+ * the clock runs; the current time is worked out when it is read.
  */
 export class Rtc {
   /** @param {() => number} now Wall clock in milliseconds. */
   constructor(now = Date.now) {
     this.now = now;
+    // Seconds, minutes, hours, days (9 bits) at `base`, and the day carry flag.
+    this.regs = new Uint16Array(4);
+    this.carry = false;
     this.base = now();
     this.halted = false;
-    // Counter value (seconds) while halted.
-    this.haltedSeconds = 0;
-    this.carry = false;
+    // While halted: milliseconds into the second when the clock stopped.
+    this.haltedMs = 0;
     this.latched = new Uint8Array(5);
+    // Cache of the last time worked out: [ticks since base, s, m, h, d, carry].
+    this.cache = [-1, 0, 0, 0, 0, 0];
   }
 
   sync(s) {
+    s.bytes(this.regs);
+    this.carry = s.bool(this.carry);
     this.base = s.f64(this.base);
     this.halted = s.bool(this.halted);
-    this.haltedSeconds = s.f64(this.haltedSeconds);
-    this.carry = s.bool(this.carry);
+    this.haltedMs = s.u16(this.haltedMs);
     s.bytes(this.latched);
+    this.cache[0] = -1;
   }
 
-  /** Copies the counter into the readable registers (game writes 0 then 1 to 6000-7FFF). */
+  /** Copies the counters into the readable registers (game writes 0 then 1 to 6000-7FFF). */
   latch() {
-    const t = this.#seconds();
-    const days = Math.floor(t / DAY);
-    this.latched[0] = t % 60;
-    this.latched[1] = Math.floor(t / 60) % 60;
-    this.latched[2] = Math.floor(t / 3600) % 24;
-    this.latched[3] = days & 0xff;
-    this.latched[4] = (days >> 8) | (this.halted ? 0x40 : 0) | (this.carry ? 0x80 : 0);
+    const [s, m, h, d, carry] = this.#current();
+    this.latched.set([s, m, h, d & 0xff, (d >> 8) | (this.halted ? 0x40 : 0) | (carry ? 0x80 : 0)]);
   }
 
   /** @param {number} register 0x08-0x0C */
@@ -50,48 +52,47 @@ export class Rtc {
 
   write(register, value) {
     const now = this.now();
-    let t = this.#seconds();
-    let seconds = t % 60;
-    let minutes = Math.floor(t / 60) % 60;
-    let hours = Math.floor(t / 3600) % 24;
-    let days = Math.floor(t / DAY);
-    // Writing the seconds also resets the sub-second divider.
-    let fraction = register === 8 || this.halted ? 0 : (now - this.base) % 1000;
+    // Bring the counters up to now, keeping the time into the current second.
+    const [s, m, h, d, carry] = this.#current();
+    if (!this.halted) this.base += Math.floor((now - this.base) / 1000) * 1000;
+    this.regs.set([s, m, h, d]);
+    this.carry = carry;
     switch (register) {
-      case 8: seconds = value & 0x3f; break;
-      case 9: minutes = value & 0x3f; break;
-      case 10: hours = value & 0x1f; break;
-      case 11: days = (days & 0x100) | value; break;
-      default:
-        days = (days & 0xff) | ((value & 1) << 8);
+      case 8:
+        this.regs[0] = value & 0x3f;
+        // Writing the seconds restarts the sub-second divider.
+        this.base = now;
+        this.haltedMs = 0;
+        break;
+      case 9: this.regs[1] = value & 0x3f; break;
+      case 10: this.regs[2] = value & 0x1f; break;
+      case 11: this.regs[3] = (this.regs[3] & 0x100) | value; break;
+      default: {
+        this.regs[3] = (this.regs[3] & 0xff) | ((value & 1) << 8);
         this.carry = (value & 0x80) !== 0;
-        this.halted = (value & 0x40) !== 0;
-        fraction = 0;
+        const halt = (value & 0x40) !== 0;
+        // Stopping and restarting keeps the time into the current second.
+        if (halt && !this.halted) this.haltedMs = now - this.base;
+        else if (!halt && this.halted) this.base = now - this.haltedMs;
+        this.halted = halt;
+      }
     }
-    t = seconds + minutes * 60 + hours * 3600 + days * DAY;
-    this.haltedSeconds = t;
-    this.base = now - t * 1000 - fraction;
-    this.latched[register - 8] = value;
+    this.cache[0] = -1;
+    this.latched[register - 8] = value & [0x3f, 0x3f, 0x1f, 0xff, 0xc1][register - 8];
   }
 
-  /** Clock data for the saved game: the counter at time `base`, i.e. zero, and that time. */
+  /**
+   * Clock data for the saved game: the counters at `base` and that time
+   * (Unix seconds); 0 while halted.
+   */
   toSave() {
     const data = new Uint8Array(RTC_SAVE_SIZE);
     const view = new DataView(data.buffer);
-    this.#seconds();
-    let t = 0;
-    let timestamp = Math.floor(this.base / 1000);
-    if (this.halted) {
-      t = this.haltedSeconds;
-      timestamp = 0;
-    }
-    const days = Math.floor(t / DAY);
-    const regs = [t % 60, Math.floor(t / 60) % 60, Math.floor(t / 3600) % 24, days & 0xff,
-      (days >> 8) | (this.halted ? 0x40 : 0) | (this.carry ? 0x80 : 0)];
-    regs.forEach((value, i) => {
-      view.setUint32(i * 4, value, true);
-      view.setUint32(20 + i * 4, value, true);
-    });
+    const [s, m, h, d] = this.regs;
+    const control = (d >> 8) | (this.halted ? 0x40 : 0) | (this.carry ? 0x80 : 0);
+    [s, m, h, d & 0xff, control].forEach((value, i) => view.setUint32(i * 4, value, true));
+    this.latched.forEach((value, i) => view.setUint32(20 + i * 4, value, true));
+    const timestamp = this.halted ? 0 : Math.floor(this.base / 1000);
     view.setUint32(40, timestamp >>> 0, true);
     view.setUint32(44, Math.floor(timestamp / 2 ** 32), true);
     return data;
@@ -101,35 +102,65 @@ export class Rtc {
   fromSave(data) {
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     const reg = (i) => view.getUint32(i * 4, true) & 0xff;
-    const dh = reg(4);
-    const t = (reg(0) & 0x3f) + (reg(1) & 0x3f) * 60 + (reg(2) & 0x1f) * 3600 + (reg(3) | ((dh & 1) << 8)) * DAY;
+    const control = reg(4);
+    this.regs.set([reg(0) & 0x3f, reg(1) & 0x3f, reg(2) & 0x1f, reg(3) | ((control & 1) << 8)]);
+    this.halted = (control & 0x40) !== 0;
+    this.carry = (control & 0x80) !== 0;
+    this.haltedMs = 0;
     let timestamp = view.getUint32(40, true);
     if (data.length >= 48) timestamp += view.getUint32(44, true) * 2 ** 32;
-    this.halted = (dh & 0x40) !== 0;
-    this.carry = (dh & 0x80) !== 0;
-    this.haltedSeconds = t;
-    this.base = (timestamp - t) * 1000;
-    // A timestamp in the future (clock changed) shouldn't run the counter backwards.
-    if (this.base > this.now() - t * 1000) this.base = this.now() - t * 1000;
+    // A timestamp in the future (clock changed) shouldn't run the clock backwards.
+    this.base = Math.min(timestamp * 1000, this.now());
     for (let i = 0; i < 5; i++) this.latched[i] = reg(5 + i);
+    this.cache[0] = -1;
   }
 
-  /** Current counter in seconds; wraps the day counter into the carry flag. */
-  #seconds() {
-    if (this.halted) {
-      if (this.haltedSeconds >= MAX_SECONDS) {
-        this.haltedSeconds %= MAX_SECONDS;
-        this.carry = true;
-      }
-      return this.haltedSeconds;
+  /** The counters now: [seconds, minutes, hours, days, carry]. */
+  #current() {
+    const ticks = this.halted ? 0 : Math.max(0, Math.floor((this.now() - this.base) / 1000));
+    const cache = this.cache;
+    if (cache[0] !== ticks) {
+      const [s, m, h, d, carry] = advance(this.regs, this.carry, ticks);
+      cache[0] = ticks;
+      cache[1] = s;
+      cache[2] = m;
+      cache[3] = h;
+      cache[4] = d;
+      cache[5] = carry ? 1 : 0;
     }
-    let t = Math.floor((this.now() - this.base) / 1000);
-    if (t >= MAX_SECONDS) {
-      const wraps = Math.floor(t / MAX_SECONDS);
-      this.base += wraps * MAX_SECONDS * 1000;
-      t -= wraps * MAX_SECONDS;
-      this.carry = true;
-    }
-    return Math.max(0, t);
+    return [cache[1], cache[2], cache[3], cache[4], cache[5] === 1];
   }
+}
+
+/** The counters `ticks` seconds later. */
+function advance([s, m, h, d], carry, ticks) {
+  // Out-of-range values count one second at a time until they wrap (without carrying).
+  while (ticks > 0 && (s >= 60 || m >= 60 || h >= 24)) {
+    ticks--;
+    s = (s + 1) & 0x3f;
+    if (s !== 60) continue;
+    s = 0;
+    m = (m + 1) & 0x3f;
+    if (m !== 60) continue;
+    m = 0;
+    h = (h + 1) & 0x1f;
+    if (h !== 24) continue;
+    h = 0;
+    if (++d > 0x1ff) {
+      d = 0;
+      carry = true;
+    }
+  }
+  if (ticks > 0) {
+    const total = s + m * 60 + h * 3600 + d * DAY + ticks;
+    s = total % 60;
+    m = Math.floor(total / 60) % 60;
+    h = Math.floor(total / 3600) % 24;
+    d = Math.floor(total / DAY);
+    if (d > 0x1ff) {
+      d %= 0x200;
+      carry = true;
+    }
+  }
+  return [s, m, h, d, carry];
 }

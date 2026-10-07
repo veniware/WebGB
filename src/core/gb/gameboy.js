@@ -30,7 +30,7 @@ const SPEED_SWITCH_CYCLES = 2050;
  */
 export class GameBoy {
   id = 'gb';
-  version = 2;
+  version = 3;
   fps = CLOCK_RATE / FRAME_DOTS;
   sampleRate = SAMPLE_RATE;
   // Cartridge RAM writes so far (see getSaveWrites()); not part of the state.
@@ -119,11 +119,13 @@ export class GameBoy {
 
   /** Power cycle. Battery-backed RAM and the RTC are kept. */
   reset() {
-    this.wram.fill(0);
-    this.hram.fill(0);
+    // RAM powers up holding noise; some games seed their random numbers with it.
+    fillNoise(this.wram);
+    fillNoise(this.hram);
     this.extraRegs.fill(0);
     this.ie = 0;
     this.if = 0;
+    this.ifMid = 0;
     this.svbk = 0;
     this.wramBank = 1;
     this.doubleSpeed = false;
@@ -400,7 +402,10 @@ export class GameBoy {
   tick() {
     this.timer.tick();
     const dots = this.doubleSpeed ? 2 : 4;
-    this.ppu.tick(dots);
+    // In two halves: what's pending halfway through decides a HALT (see Cpu).
+    this.ppu.tick(dots >> 1);
+    this.ifMid = this.if;
+    this.ppu.tick(dots >> 1);
     this.apu.pending += dots;
     if (this.cart.ticking) this.cart.tick(4);
     if (this.dmaDelay || this.dmaActive) this.#dmaTick();
@@ -433,6 +438,10 @@ export class GameBoy {
   // --- Memory map ------------------------------------------------------------------
 
   read(addr) {
+    if (this.dmaActive && addr < 0xfe00) {
+      const value = this.#dmaConflict(addr);
+      if (value >= 0) return value;
+    }
     if (addr < 0x8000) return this.cart.readRom(addr);
     if (addr < 0xa000) return this.ppu.readVram(addr);
     if (addr < 0xc000) return this.cart.readRam(addr);
@@ -459,6 +468,7 @@ export class GameBoy {
   }
 
   write(addr, value) {
+    if (this.dmaActive && addr < 0xfe00 && this.#dmaWriteConflict(addr, value)) return;
     if (addr < 0x8000) {
       this.cart.writeRom(addr, value);
       if (this.cart.rumbling !== this.rumbleOn) this.#rumbleChanged();
@@ -595,6 +605,55 @@ export class GameBoy {
     this.dmaIndex++;
   }
 
+  /**
+   * OAM DMA occupies the bus it copies from: the CPU accessing that bus
+   * meets the DMA's address instead. The CGB has a separate bus for work
+   * RAM, with odder rules (these follow SameBoy).
+   */
+  #dmaBusy(addr) {
+    const next = this.dmaSource + this.dmaIndex;
+    if (addr === next || (next >= 0xe000 && (next & ~0x2000) === addr)) return false;
+    if (!this.cgb) return dmgBus(addr) === dmgBus(next);
+    if (addr >= 0xc000) return cgbBus(next) !== Bus.VRAM;
+    if (next >= 0xe000) return cgbBus(addr) !== Bus.VRAM;
+    return cgbBus(addr) === cgbBus(next);
+  }
+
+  /** A read during OAM DMA: the byte being copied, or -1 when the bus is free. */
+  #dmaConflict(addr) {
+    if (!this.#dmaBusy(addr)) return -1;
+    const last = this.dmaSource + this.dmaIndex - 1;
+    if (this.cgb && addr >= 0xc000 && (cgbBus(last + 1) !== Bus.RAM || last + 1 >= 0xe000)) {
+      return this.#readWram((last & 0x1000) | (addr & 0xfff) | 0xc000);
+    }
+    if (this.cgb && cgbBus(addr) === Bus.MAIN && last + 1 >= 0xe000) return 0xff;
+    return this.#dmaRead(last);
+  }
+
+  /** A write during OAM DMA; returns false when the bus is free. */
+  #dmaWriteConflict(addr, value) {
+    if (!this.#dmaBusy(addr)) return false;
+    const next = this.dmaSource + this.dmaIndex;
+    const last = next - 1;
+    if (this.cgb) {
+      if (cgbBus(addr) === Bus.MAIN && next >= 0xe000) return true;
+      if (addr >= 0xc000 && (next < 0xc000 || next >= 0xe000)) {
+        this.#writeWram((last & 0x1000) | (addr & 0xfff) | 0xc000, value);
+        return true;
+      }
+      if (last >= 0xa000) return true;
+      this.ppu.oam[this.dmaIndex - 1] = 0;
+    } else if (last >= 0xa000) {
+      // The DMA's source wins; the byte being copied picks up the write's 0 bits.
+      this.ppu.oam[this.dmaIndex - 1] &= value;
+      return true;
+    }
+    // The write lands on the DMA's address instead (on a ROM source: the mapper).
+    if (last < 0x8000) this.cart.writeRom(last, value);
+    else this.ppu.writeVram(last, value);
+    return true;
+  }
+
   /** Reads for DMA, which bypasses the PPU's access restrictions. */
   #dmaRead(addr) {
     if (addr < 0x8000) return this.cart.readRom(addr);
@@ -628,5 +687,28 @@ export class GameBoy {
       this.hdmaSource = (this.hdmaSource + 1) & 0xffff;
       this.hdmaDest = (this.hdmaDest + 1) & 0x1fff;
     }
+  }
+}
+
+// Buses: the cartridge (and, on the DMG, work RAM), video RAM, CGB work RAM.
+const Bus = { MAIN: 0, VRAM: 1, RAM: 2 };
+
+function dmgBus(addr) {
+  return addr >= 0x8000 && addr < 0xa000 ? Bus.VRAM : Bus.MAIN;
+}
+
+function cgbBus(addr) {
+  if (addr >= 0xc000) return Bus.RAM;
+  return addr >= 0x8000 && addr < 0xa000 ? Bus.VRAM : Bus.MAIN;
+}
+
+/** Fills with the same pseudo-random bytes every time (xorshift32). */
+function fillNoise(array) {
+  let x = 0x2545f491;
+  for (let i = 0; i < array.length; i++) {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    array[i] = x;
   }
 }

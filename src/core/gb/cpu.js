@@ -45,6 +45,7 @@ export class Cpu {
     this.locked = false;
     // M-cycles the CPU is held for (HDMA, speed switch).
     this.stall = 0;
+    this.ifAtFetch = 0;
   }
 
   sync(s) {
@@ -122,6 +123,8 @@ export class Cpu {
 
   #fetch() {
     this.gb.tick();
+    // HALT looks at the interrupts pending halfway through its opcode fetch.
+    this.ifAtFetch = this.gb.ifMid;
     const value = this.gb.read(this.pc);
     if (this.haltBug) this.haltBug = false;
     else this.pc = (this.pc + 1) & 0xffff;
@@ -511,8 +514,15 @@ export class Cpu {
         this.f = (this.f & (Z | C)) ^ C;
         break;
       case 0x76: // HALT
-        if (!this.ime && this.gb.ie & this.gb.if & 0x1f) this.haltBug = true;
-        else this.halted = true;
+        if (this.gb.ie & this.ifAtFetch & 0x1f) {
+          // An interrupt is already pending. With IME just set (EI; HALT) it is
+          // taken right away and returns to the HALT; with IME off, the HALT
+          // bug: the next byte is read twice.
+          if (this.ime) this.pc = (this.pc - 1) & 0xffff;
+          else this.haltBug = true;
+        } else {
+          this.halted = true;
+        }
         break;
 
       case 0xc0: case 0xc8: case 0xd0: case 0xd8: // RET cc
