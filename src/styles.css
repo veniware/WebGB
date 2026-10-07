@@ -232,6 +232,37 @@ body.dragging .drop-overlay {
   }
 }
 
+.bindings {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  /* Columns share the width; long key names are cut short. */
+  table-layout: fixed;
+}
+
+.bindings thead th:first-child {
+  width: 30%;
+}
+
+.bindings th {
+  padding: 4px 8px 4px 0;
+  text-align: left;
+  font-weight: normal;
+  color: var(--muted);
+}
+
+.bindings td {
+  padding: 2px 0 2px 8px;
+}
+
+.bindings .binding {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rows {
   display: grid;
   gap: 4px;

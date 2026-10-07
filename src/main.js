@@ -16,6 +16,7 @@ const display = new Display(
   document.getElementById('screen'),
   document.getElementById('stage'),
   document.getElementById('play-area'),
+  settings.renderer,
 );
 const audio = new AudioOutput();
 
@@ -34,8 +35,11 @@ const emulator = new Emulator({
   camera: new CameraInput(),
   rumble: new Rumble({ gamepad }),
 });
-ui = setupUI({ emulator, display, audio, inputs: [keyboard, touch], settings });
+ui = setupUI({ emulator, display, audio, inputs: [keyboard, touch], keyboard, gamepad, settings });
 emulator.start();
+
+// Installable and usable offline (see sw.js).
+navigator.serviceWorker?.register('./sw.js').catch((err) => console.warn('Service worker:', err));
 
 // Debugging handle for the browser console and automated browser tests.
 window.webgb = { emulator, display, audio, inputs: [keyboard, touch] };

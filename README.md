@@ -69,7 +69,12 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
   and an optional de-dither pass, zoom (Fit or 1×–6×) and fullscreen. Falls
   back to a 2D canvas without WebGL2.
 - **Audio:** AudioWorklet output with dynamic rate control to avoid crackles.
-- **Input:** keyboard, gamepads (Gamepad API) and on-screen touch controls.
+- **Input:** keyboard, gamepads (Gamepad API) and on-screen touch controls;
+  keys and gamepad buttons can be changed in Settings → Controls.
+- **Install / offline:** WebGB is a PWA: add it to the home screen (or
+  install it from the browser) and it also works without a connection.
+- **Performance stats** (Settings): emulated frame rate, speed and time per
+  frame; the renderer (WebGL or 2D canvas) can be chosen too.
 - **Speed:** 1×–8×, plus hold-to-fast-forward.
 
 ROMs, saved games and snapshots live in the browser's IndexedDB; settings use
@@ -93,7 +98,8 @@ care about.
 | Player 2 (link cable, SGB multiplayer) | W/A/S/D, H (A), G (B), Y (Start), T (Select) | Second gamepad |
 | Tilt (MBC7 games) | I / J / K / L | Right stick          |
 
-On touch screens the on-screen controls appear automatically.
+On touch screens the on-screen controls appear automatically. Keyboard keys
+and gamepad buttons can be changed in Settings → Controls.
 
 ## Project layout
 

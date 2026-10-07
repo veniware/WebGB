@@ -48,7 +48,8 @@ class SpriteLine {
  */
 export class Ppu {
   /**
-   * @param {{ requestIrq: (bit: number, time: number) => void, onHblank: () => void, onVblank: () => void }} hooks
+   * @param {{ requestIrq: (bit: number, time: number) => void, onHblank: () => void, onVblank: () => void,
+   *   onCaptureLine: (line: number) => void }} hooks
    */
   constructor(hooks) {
     this.hooks = hooks;
@@ -287,6 +288,7 @@ export class Ppu {
         this.#renderLine(this.vcount);
         this.hooks.onHblank();
       }
+      if (this.vcount >= 2 && this.vcount <= SCREEN_HEIGHT + 2) this.hooks.onCaptureLine(this.vcount);
       // The sprite unit works a line ahead.
       const next = this.vcount + 1 === LINES ? 0 : this.vcount + 1;
       if (next < SCREEN_HEIGHT) this.#sprites(next);

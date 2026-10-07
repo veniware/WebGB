@@ -10,12 +10,18 @@ export class Display {
    * @param {HTMLCanvasElement} canvas
    * @param {HTMLElement} stage  Element the canvas is centered in.
    * @param {HTMLElement} [fullscreenTarget]  Element made fullscreen (defaults to the stage).
+   * @param {'auto' | 'webgl' | 'canvas'} [renderer]
    */
-  constructor(canvas, stage, fullscreenTarget = stage) {
+  constructor(canvas, stage, fullscreenTarget = stage, renderer = 'auto') {
     this.canvas = canvas;
     this.stage = stage;
     this.fullscreenTarget = fullscreenTarget;
-    this.renderer = WebGLRenderer.create(canvas) ?? new CanvasRenderer(canvas);
+    this.rendererKind = renderer;
+    this.renderer = createRenderer(canvas, renderer);
+    this.filter = undefined;
+    this.dedither = false;
+    // The last frame drawn, for redrawing with another renderer.
+    this.frame = null;
     this.zoom = 'fit';
     this.width = 0;
     this.height = 0;
@@ -25,6 +31,29 @@ export class Display {
 
   get supportsShaders() {
     return this.renderer.supportsShaders;
+  }
+
+  get rendererName() {
+    return this.renderer.supportsShaders ? 'WebGL' : 'Canvas 2D';
+  }
+
+  /**
+   * Switches renderer. A canvas keeps the kind of context it was first given,
+   * so a fresh one takes its place.
+   * @param {'auto' | 'webgl' | 'canvas'} kind
+   */
+  setRenderer(kind) {
+    if (kind === this.rendererKind) return;
+    this.rendererKind = kind;
+    const canvas = this.canvas.cloneNode(false);
+    this.canvas.replaceWith(canvas);
+    this.canvas = canvas;
+    this.renderer = createRenderer(canvas, kind);
+    this.renderer.setFilter(this.filter);
+    this.renderer.setDedither(this.dedither);
+    if (this.width) this.renderer.setSourceSize(this.width, this.height);
+    this.layout();
+    if (this.frame) this.renderer.draw(this.frame);
   }
 
   setSourceSize(width, height) {
@@ -41,16 +70,19 @@ export class Display {
   }
 
   setFilter(id) {
+    this.filter = id;
     this.renderer.setFilter(id);
     this.renderer.draw();
   }
 
   setDedither(enabled) {
+    this.dedither = enabled;
     this.renderer.setDedither(enabled);
     this.renderer.draw();
   }
 
   draw(frame) {
+    if (frame) this.frame = frame;
     this.renderer.draw(frame);
   }
 
@@ -72,4 +104,8 @@ export class Display {
     if (document.fullscreenElement) document.exitFullscreen();
     else this.fullscreenTarget.requestFullscreen?.().catch(() => {});
   }
+}
+
+function createRenderer(canvas, kind) {
+  return (kind !== 'canvas' && WebGLRenderer.create(canvas)) || new CanvasRenderer(canvas);
 }

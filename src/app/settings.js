@@ -7,6 +7,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
   dedither: false,
   zoom: 'fit',
   volume: 0.8,
+  // 'auto' (WebGL when available), 'webgl' or 'canvas'.
+  renderer: 'auto',
+  // Status bar: emulated fps, speed and time per frame.
+  perfStats: false,
+  // Changed controls (see src/input/bindings.js); null: the defaults.
+  keyBindings: null,
+  padBindings: null,
   // Game Boy: palette for DMG games (see GameBoy.configure) and GBC color correction.
   gbPalette: 'auto',
   colorCorrection: true,

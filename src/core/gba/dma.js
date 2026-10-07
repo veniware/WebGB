@@ -81,6 +81,14 @@ export class Dma {
     }
   }
 
+  /** Video capture: DMA 3 in special timing runs in the HBlanks of lines 2-161, then stops. */
+  videoCapture(line) {
+    const control = this.control[3];
+    if (!(control & 0x8000) || ((control >>> 12) & 3) !== Timing.SPECIAL) return;
+    if (line < 162) this.#transfer(3);
+    else this.control[3] &= ~0x8000;
+  }
+
   /** A sound FIFO wants data: DMA 1 or 2 in special timing to its address. */
   soundRequest(fifoAddress) {
     for (let i = 1; i <= 2; i++) {

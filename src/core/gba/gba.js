@@ -67,6 +67,7 @@ export class Gba {
       requestIrq: (bit, time) => this.irq.request(bit, time),
       onHblank: () => this.dma.trigger(Timing.HBLANK),
       onVblank: () => this.dma.trigger(Timing.VBLANK),
+      onCaptureLine: (line) => this.dma.videoCapture(line),
     });
     this.realBios = bios;
     this.bus = new Bus({

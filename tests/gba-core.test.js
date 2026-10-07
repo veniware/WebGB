@@ -164,6 +164,25 @@ test('sound: a Game Boy channel and a DMA-fed FIFO play at the right pitch', () 
   assert.ok(Math.max(...samples) > 0.5, 'FIFO at full volume');
 });
 
+test('video capture DMA copies once per line on lines 2-161, then stops', () => {
+  // Waits for line 170, then starts DMA 3: special timing, repeat, 16-bit,
+  // one unit per line from EWRAM to IWRAM.
+  const gba = new Gba(cart([
+    0xe3a00404, 0xe2800006, // r0 = VCOUNT
+    0xe1d010b0, 0xe35100aa, 0x1afffffc, // wait for line 170
+    0xe3a02404, 0xe28220d4, // r2 = DMA3SAD
+    0xe3a03402, 0xe5823000, // source 0x02000000
+    0xe3a03403, 0xe5823004, // destination 0x03000000
+    0xe3a034b2, 0xe3833001, 0xe5823008, // count 1, control 0xB200
+  ]));
+  for (let i = 0; i < 400; i++) gba.bus.ewram[i * 2] = i & 0xff;
+  run(gba, 3);
+  const copied = gba.bus.iwram16;
+  assert.equal(copied[159], 159);
+  assert.equal(copied[160], 0);
+  assert.equal(gba.read16(0xde) & 0x8000, 0);
+});
+
 test('save memory type is detected from the SDK\'s ID string', () => {
   assert.equal(detectBackup(cart([], { extra: 'FLASH1M_V103' })), BackupType.FLASH128);
   assert.equal(detectBackup(cart([], { extra: 'FLASH512_V131' })), BackupType.FLASH64);

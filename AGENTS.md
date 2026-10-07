@@ -41,6 +41,12 @@ https://veniware.github.io/WebGB/ (no build or workflow; `.nojekyll` makes
 Pages serve the files as-is). Every push to `main` goes live, so keep `main`
 working. Keep all URLs relative: the site lives under `/WebGB/`.
 
+It's a PWA (`manifest.webmanifest`, `icons/`, `sw.js`): installable, and it
+starts offline. The service worker is network-first (a deploy is picked up as
+soon as the page is online) and precaches the whole app on install, so its
+`FILES` list must name every file; `tests/pwa.test.js` fails when a file is
+missing from it.
+
 ## Commands
 
 ```sh
@@ -59,6 +65,7 @@ tests, e.g. `webgb.emulator.core.getSaveData()`.
 
 ```
 index.html              Page shell: toolbar, stage, touch controls, status bar, dialogs
+sw.js                   Service worker (offline); manifest.webmanifest, icons/: PWA
 src/main.js             Composition root: builds the modules and wires them together
 src/styles.css          All styles (touch layout under @media (pointer: coarse))
 src/app/
@@ -125,6 +132,7 @@ src/audio/
 src/input/
   input-manager.js      Merges sources; cancels opposite D-pad directions
   keyboard.js           Key maps (player 1, player 2, tilt keys) and hotkeys
+  bindings.js           User-changeable controls: actions, defaults, key names
   gamepad.js            Gamepad API polling; 2nd pad = player 2; rumble
   touch.js              On-screen controls (multi-touch, slide between buttons)
   motion.js             Device orientation -> tilt (MBC7)
@@ -145,7 +153,8 @@ src/ui/
   game-dialog.js        Per game: new game, saved games (play/import/export/delete),
                         snapshots (load/take/delete), link cable
   link-dialog.js        Picks player 2's game and saved game
-  settings-dialog.js    Settings (Game Boy palette, color correction, ...)
+  settings-dialog.js    Settings (renderer, performance stats, Game Boy palette, ...)
+  controls-dialog.js    Rebinding keyboard keys and gamepad buttons
   modals.js             Shows dialogs; pauses the game and input while open
   dom.js                h() element helper, formatting, downloads, file picker
   files.js              Accepted file types and limits
@@ -353,25 +362,19 @@ so short taps are never lost.
 ## Roadmap
 
 Done: Game Boy and Game Boy Color (with palettes, color correction, Super
-Game Boy, rare cartridges, rumble, link cable) and the Game Boy Advance core.
+Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core,
+input mapping, performance stats, the renderer setting and the PWA.
 
 1. GBA follow-ups: optional user BIOS file in the settings, idle-loop
    detection (speed on slow phones), link cable, solar sensor (Boktai),
    gyro and rumble cartridges.
 2. Memory viewer/editor (inspect and edit RAM, VRAM, OAM, I/O registers
    of the running game).
-3. Input mapping: rebind keyboard keys and controller buttons from the UI
-   (saved with the settings).
-4. FPS counter toggled from the settings (the status bar shows a basic
-   fps figure today): emulated fps, speed and time per frame, for
-   performance work.
-5. Renderer setting: Auto / WebGL / Canvas 2D, and a WebGPU renderer later
-   (renderers are separate modules in `src/video/`).
-6. Make it a PWA: web app manifest and service worker, so it installs to
-   the home screen (fullscreen on iPhone) and works offline.
-7. More video filters: motion blur (LCD ghosting), smooth edges (xBR/HQx
+3. A WebGPU renderer (renderers are separate modules in `src/video/`; the
+   Renderer setting picks Auto / WebGL / Canvas 2D today).
+4. More video filters: motion blur (LCD ghosting), smooth edges (xBR/HQx
    style), edge detection, sharpening, ... (shaders in `src/video/filters.js`).
-8. Audio filters: low pass, high pass, pitch shifting, echo, ... (Web Audio
+5. Audio filters: low pass, high pass, pitch shifting, echo, ... (Web Audio
    nodes after the worklet in `src/audio/`).
-9. Possibly later: rewind, audio/video recording, full backup export/import
+6. Possibly later: rewind, audio/video recording, full backup export/import
    of the library.

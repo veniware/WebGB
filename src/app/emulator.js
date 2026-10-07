@@ -21,7 +21,8 @@ const SAVE_CHECK_INTERVAL = 2000;
  * yet, the first save creates one.
  *
  * Events: 'loaded' ({ rom, fallback }), 'stopped', 'paused' (boolean),
- * 'fps' (number), 'snapshots' (list changed), 'status' ({ text, error? }),
+ * 'stats' ({ fps, speed, frameMs }: emulated frames per second, speed
+ * relative to the console, CPU time per emulated frame), 'snapshots' (list changed), 'status' ({ text, error? }),
  * 'linked' (player 2's rom), 'unlinked'.
  */
 export class Emulator extends Emitter {
@@ -62,6 +63,7 @@ export class Emulator extends Emitter {
   #saveWrites = [0, 0];
   #fpsFrames = 0;
   #fpsSince = 0;
+  #coreTime = 0;
 
   /**
    * @param {{
@@ -378,10 +380,12 @@ export class Emulator extends Emitter {
         if (image) core.setCameraImage(image);
       }
     }
+    const start = performance.now();
     for (let i = 0; i < frames; i++) {
       core.runFrame();
       this.#audio.push(core.getAudioSamples(), core.sampleRate);
     }
+    this.#coreTime += performance.now() - start;
     this.#audio.flush();
     if (frames) {
       this.#watchSaves(core);
@@ -391,8 +395,11 @@ export class Emulator extends Emitter {
 
     this.#fpsFrames += frames;
     if (now - this.#fpsSince >= 500) {
-      this.emit('fps', (this.#fpsFrames * 1000) / (now - this.#fpsSince));
+      const fps = (this.#fpsFrames * 1000) / (now - this.#fpsSince);
+      const frameMs = this.#fpsFrames ? this.#coreTime / this.#fpsFrames : 0;
+      this.emit('stats', { fps, speed: fps / core.fps, frameMs });
       this.#fpsFrames = 0;
+      this.#coreTime = 0;
       this.#fpsSince = now;
     }
   };

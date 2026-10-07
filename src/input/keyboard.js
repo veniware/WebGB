@@ -75,6 +75,12 @@ export class KeyboardInput {
     });
   }
 
+  /** @param {{ keyMap: Record<string, number>, hotkeys: Record<string, string> }} maps  See bindings.js. */
+  setBindings({ keyMap, hotkeys }) {
+    this.keyMap = keyMap;
+    this.hotkeys = hotkeys;
+  }
+
   #keydown(e) {
     if (!this.enabled || e.ctrlKey || e.metaKey || e.altKey || TEXT_FIELDS.has(e.target?.tagName)) return;
     const hotkey = this.hotkeys[e.code];

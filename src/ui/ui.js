@@ -6,6 +6,8 @@ import { listSnapshots } from '../storage/snapshots.js';
 import { FILTERS } from '../video/filters.js';
 import { baseName, formatSize, pickFiles, SYSTEM_NAMES } from './dom.js';
 import { ROM_ACCEPT, SAVE_EXTENSION } from './files.js';
+import { defaultKeyBindings, defaultPadBindings, gamepadMaps, keyboardMaps, withDefaults } from '../input/bindings.js';
+import { createControlsDialog } from './controls-dialog.js';
 import { createGameDialog } from './game-dialog.js';
 import { createLibraryDialog } from './library-dialog.js';
 import { createLinkDialog } from './link-dialog.js';
@@ -20,7 +22,7 @@ const $ = (id) => document.getElementById(id);
  * Wires the page (toolbar, drag-and-drop, status bar, dialogs) to the
  * emulator. Returns the hotkey handler used by the keyboard.
  */
-export function setupUI({ emulator, display, audio, inputs, settings }) {
+export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, settings }) {
   const el = {
     toolbar: $('toolbar'),
     open: $('open'),
@@ -99,9 +101,31 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     settings,
     onChange: (key, value) => {
       updateSettings({ [key]: value });
-      emulator.configure(coreOptions());
+      if (key === 'renderer') {
+        display.setRenderer(value);
+        el.dedither.disabled = !display.supportsShaders;
+      } else if (key === 'perfStats') {
+        el.fps.textContent = '';
+      } else {
+        emulator.configure(coreOptions());
+      }
     },
   });
+  const applyBindings = () => {
+    keyboard.setBindings(keyboardMaps(withDefaults(settings.keyBindings, defaultKeyBindings())));
+    gamepad.setBindings(gamepadMaps(withDefaults(settings.padBindings, defaultPadBindings())));
+  };
+  applyBindings();
+  const controlsDialog = createControlsDialog({
+    dialog: $('controls'),
+    modals,
+    settings,
+    onChange: (keyBindings, padBindings) => {
+      updateSettings({ keyBindings, padBindings });
+      applyBindings();
+    },
+  });
+  $('controls-open').addEventListener('click', () => controlsDialog.open());
   const library = createLibraryDialog({
     dialog: $('library'),
     modals,
@@ -286,7 +310,11 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     el.pause.textContent = paused ? 'Resume' : 'Pause';
     if (paused && emulator.core) el.fps.textContent = 'Paused';
   });
-  emulator.on('fps', (fps) => (el.fps.textContent = `${fps.toFixed(1)} fps`));
+  emulator.on('stats', ({ fps, speed, frameMs }) => {
+    el.fps.textContent = settings.perfStats
+      ? `${fps.toFixed(1)} fps · ${Math.round(speed * 100)}% · ${frameMs.toFixed(1)} ms/frame · ${display.rendererName}`
+      : '';
+  });
   emulator.on('status', ({ text, error }) => flash(text, error));
   let singleStatus = '';
   emulator.on('linked', (rom) => {

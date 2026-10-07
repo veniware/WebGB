@@ -18,7 +18,7 @@ export const DEFAULT_PAD_MAP = [
 ];
 
 /** Right trigger holds fast-forward. */
-const FAST_FORWARD_BUTTON = 7;
+export const FAST_FORWARD_BUTTON = 7;
 const STICK_DEADZONE = 0.5;
 // The right stick tilts tilt-sensor cartridges.
 const TILT_DEADZONE = 0.15;
@@ -26,8 +26,15 @@ const TILT_DEADZONE = 0.15;
 const isPressed = (button) => !!button && (button.pressed || button.value > 0.5);
 
 export class GamepadInput {
-  constructor(map = DEFAULT_PAD_MAP) {
+  constructor(map = DEFAULT_PAD_MAP, fastForward = [FAST_FORWARD_BUTTON]) {
     this.map = map;
+    this.fastForward = fastForward;
+  }
+
+  /** @param {{ map: Array<[number, number]>, fastForward: number[] }} bindings  See bindings.js. */
+  setBindings({ map, fastForward }) {
+    this.map = map;
+    this.fastForward = fastForward;
   }
 
   /** Rumbles the connected gamepads that support it; strength 0-1. */
@@ -65,7 +72,7 @@ export class GamepadInput {
       if (players > 1 && connected === 1) buttons2 |= pressed;
       else buttons |= pressed;
       connected++;
-      if (isPressed(pad.buttons[FAST_FORWARD_BUTTON])) fastForward = true;
+      if (this.fastForward.some((index) => isPressed(pad.buttons[index]))) fastForward = true;
       const [, , rx = 0, ry = 0] = pad.axes;
       if (Math.hypot(rx, ry) > TILT_DEADZONE) {
         tiltX += rx;

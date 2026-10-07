@@ -4,7 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#20232a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>WebGB</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="src/styles.css">
   <script type="module" src="src/main.js"></script>
 </head>
@@ -134,6 +140,22 @@
       <button type="button" data-close>Close</button>
     </header>
     <section>
+      <header>
+        <h3>Controls</h3>
+        <button type="button" id="controls-open">Keyboard and gamepad…</button>
+      </header>
+    </section>
+    <section>
+      <header><h3>Display</h3></header>
+      <div class="fields">
+        <label for="set-renderer">Renderer</label>
+        <select id="set-renderer" data-setting="renderer"></select>
+        <label for="set-perf-stats">Performance</label>
+        <label class="check"><input id="set-perf-stats" type="checkbox" data-setting="perfStats">
+          Show frame rate, speed and time per frame</label>
+      </div>
+    </section>
+    <section>
       <header><h3>Game Boy</h3></header>
       <div class="fields">
         <label for="set-gb-palette">Colors of Game Boy games</label>
@@ -149,6 +171,19 @@
           Show the border around the screen</label>
       </div>
     </section>
+  </dialog>
+
+  <dialog id="controls" class="panel">
+    <header>
+      <h2>Controls</h2>
+      <button type="button" data-close>Close</button>
+    </header>
+    <p class="empty">Click a key or button, then press the new one. Esc cancels, Delete clears.</p>
+    <table class="bindings">
+      <thead><tr><th></th><th>Keyboard</th><th>Gamepad</th></tr></thead>
+      <tbody data-rows></tbody>
+    </table>
+    <footer><button type="button" data-reset>Reset to defaults</button></footer>
   </dialog>
 </body>
 </html>

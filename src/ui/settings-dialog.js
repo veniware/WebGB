@@ -2,6 +2,11 @@ import { h } from './dom.js';
 
 // Choices for select settings: [value, label] or [group label, choices].
 const CHOICES = {
+  renderer: [
+    ['auto', 'Automatic'],
+    ['webgl', 'WebGL'],
+    ['canvas', '2D canvas'],
+  ],
   gbPalette: [
     ['auto', 'Automatic'],
     ['gbc', 'As on a Game Boy Color'],
