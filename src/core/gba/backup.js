@@ -4,12 +4,22 @@
 export const BackupType = { NONE: 'none', SRAM: 'sram', FLASH64: 'flash64', FLASH128: 'flash128', EEPROM: 'eeprom' };
 
 export function detectBackup(rom) {
-  const text = new TextDecoder('latin1').decode(rom);
-  if (text.includes('FLASH1M_V')) return BackupType.FLASH128;
-  if (text.includes('FLASH512_V') || text.includes('FLASH_V')) return BackupType.FLASH64;
-  if (text.includes('EEPROM_V')) return BackupType.EEPROM;
-  if (text.includes('SRAM_V') || text.includes('SRAM_F_V')) return BackupType.SRAM;
+  if (contains(rom, 'FLASH1M_V')) return BackupType.FLASH128;
+  if (contains(rom, 'FLASH512_V') || contains(rom, 'FLASH_V')) return BackupType.FLASH64;
+  if (contains(rom, 'EEPROM_V')) return BackupType.EEPROM;
+  if (contains(rom, 'SRAM_V') || contains(rom, 'SRAM_F_V')) return BackupType.SRAM;
   return BackupType.NONE;
+}
+
+/** Whether the ROM contains the ASCII text. */
+function contains(rom, text) {
+  const first = text.charCodeAt(0);
+  for (let i = rom.indexOf(first); i >= 0; i = rom.indexOf(first, i + 1)) {
+    let k = 1;
+    while (k < text.length && rom[i + k] === text.charCodeAt(k)) k++;
+    if (k === text.length) return true;
+  }
+  return false;
 }
 
 export class Backup {
@@ -24,6 +34,8 @@ export class Backup {
     this.data = new Uint8Array(size).fill(0xff);
     // EEPROM: 512 bytes or 8 KB, found from the first transfer.
     this.eepromBits = 0;
+    // Counts writes (the host screenshots the moment the game saves).
+    this.writes = 0;
     this.reset();
   }
 
@@ -84,6 +96,7 @@ export class Backup {
       return;
     }
     if (this.type === BackupType.EEPROM) return;
+    if (this.data[address & 0x7fff] !== value) this.writes++;
     this.data[address & 0x7fff] = value;
   }
 
@@ -91,6 +104,7 @@ export class Backup {
     if (this.flashWriteArmed) {
       this.flashWriteArmed = false;
       this.data[(this.flashBank << 16) | address] &= value;
+      this.writes++;
       return;
     }
     if (this.flashBankArmed && address === 0) {
@@ -110,6 +124,7 @@ export class Backup {
       this.flashStage = 0;
       if (this.flashEraseArmed) {
         this.flashEraseArmed = false;
+        this.writes++;
         if (address === 0x5555 && value === 0x10) this.data.fill(0xff);
         else if (value === 0x30) {
           const start = (this.flashBank << 16) | (address & 0xf000);
@@ -167,6 +182,7 @@ export class Backup {
         for (let b = 0; b < 8; b++) byte = (byte << 1) | bits[2 + addressBits + i * 8 + b];
         this.data[block * 8 + i] = byte;
       }
+      this.writes++;
       this.eepromOut = [];
       this.eepromIn = [];
     } else if (command < 2) {

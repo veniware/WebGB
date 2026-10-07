@@ -88,7 +88,6 @@ export class Gba {
       now: () => this.bus.cycles,
       requestFifo: (address) => this.dma.soundRequest(address),
       onTimerChange: () => this.timers.schedule(),
-      onSchedule: (time) => this.#schedule(time),
     });
     this.sio = new Sio({
       now: () => this.bus.cycles,
@@ -102,6 +101,7 @@ export class Gba {
     const onIrqEnable = () => {
       // A pending interrupt is taken a few cycles after it gets unmasked.
       if (this.irqLine && this.irqReadyAt < this.bus.cycles) this.irqReadyAt = this.bus.cycles + UNMASK_DELAY;
+      if (this.irqLine) this.#schedule(Math.max(this.bus.cycles, this.irqReadyAt));
     };
     this.cpu = new Arm7(this.bus, bios ? { onIrqEnable } : { swi: createHleBios(this), onIrqEnable });
     this.bus.cpu = this.cpu;
@@ -131,7 +131,6 @@ export class Gba {
     this.postflg = 0;
     // Inside the BIOS's IntrWait (see bios.js).
     this.biosWaiting = false;
-    this.soundBias = 0x200;
     this.frameStart = 0;
     if (this.realBios) {
       this.cpu.reset();
@@ -157,6 +156,7 @@ export class Gba {
   /** HALTCNT: wait for an enabled interrupt. */
   halt() {
     this.cpu.halted = true;
+    this.eventTime = this.bus.cycles;
   }
 
   #updateIrq(time = this.bus.cycles) {
@@ -165,6 +165,7 @@ export class Gba {
     if ((wake && !this.wakeLine) || (line && !this.irqLine)) this.irqReadyAt = time + IRQ_DELAY;
     this.wakeLine = wake;
     this.irqLine = line;
+    if (wake) this.#schedule(Math.max(this.bus.cycles, this.irqReadyAt));
   }
 
   // --- I/O registers --------------------------------------------------------------
@@ -234,8 +235,8 @@ export class Gba {
       this.halt();
       return;
     }
-    if (aligned >= 0xa0 && aligned < 0xa8) {
-      this.apu.writeFifo8(address, value);
+    if (address >= 0x60 && address < 0xb0) {
+      this.apu.write8(address, value);
       return;
     }
     const old = this.ioRegs[aligned >> 1];
@@ -258,7 +259,14 @@ export class Gba {
     this.#checkKeypadIrq();
   }
 
-  configure() {}
+  /** User options: colorCorrection (look like the GBA's LCD). */
+  configure({ colorCorrection = false } = {}) {
+    this.ppu.setColorCorrection(colorCorrection);
+  }
+
+  getSaveWrites() {
+    return this.backup.writes;
+  }
 
   /** Runs until the next VBlank (one frame). */
   runFrame() {
@@ -268,22 +276,18 @@ export class Gba {
     const limit = bus.cycles + FRAME_CYCLES * 2;
     while (!ppu.frameDone && bus.cycles < limit) {
       this.eventTime = Math.min(ppu.nextEvent, this.timers.nextEvent, this.apu.nextEvent, this.sio.nextEvent);
-      while (bus.cycles < this.eventTime) {
-        if (this.irqLine && !cpu.irqDisable && bus.cycles >= this.irqReadyAt) cpu.irq();
-        if (cpu.halted) {
-          if (this.wakeLine) {
-            if (bus.cycles >= this.irqReadyAt) {
-              cpu.halted = false;
-              continue;
-            }
-            bus.cycles = Math.min(this.irqReadyAt, this.eventTime);
-            continue;
-          }
-          bus.cycles = this.eventTime;
-          break;
-        }
-        cpu.step();
+      // Interrupts are taken between instructions once due; until then they
+      // bring the next stop forward (as do HALT and newly scheduled events).
+      if (this.irqLine && !cpu.irqDisable) {
+        if (bus.cycles >= this.irqReadyAt) cpu.irq();
+        else if (this.irqReadyAt < this.eventTime) this.eventTime = this.irqReadyAt;
       }
+      if (cpu.halted) {
+        if (!this.wakeLine) bus.cycles = this.eventTime;
+        else if (bus.cycles >= this.irqReadyAt) cpu.halted = false;
+        else bus.cycles = Math.min(this.irqReadyAt, this.eventTime);
+      }
+      while (bus.cycles < this.eventTime && !cpu.halted) cpu.step();
       const now = bus.cycles;
       if (ppu.nextEvent <= now) ppu.event(ppu.nextEvent);
       if (this.timers.nextEvent <= now) this.timers.event(now);
@@ -302,11 +306,11 @@ export class Gba {
   }
 
   getSaveData() {
-    if (this.backup.type === 'none' && !this.backup.data.some((b) => b !== 0xff)) return null;
+    // The clock's settings follow the save memory, if the game changed them.
+    const clock = this.gpio.present ? this.gpio.toSave() : new Uint8Array(0);
+    if (this.backup.type === 'none' && !clock.length && !this.backup.data.some((b) => b !== 0xff)) return null;
     const data = this.backup.getSaveData();
-    if (!this.gpio.present) return data;
-    // The clock's state follows the save memory (as mGBA stores it).
-    const clock = this.gpio.toSave();
+    if (!clock.length) return data;
     const out = new Uint8Array(data.length + clock.length);
     out.set(data);
     out.set(clock, data.length);
@@ -314,9 +318,8 @@ export class Gba {
   }
 
   loadSaveData(data) {
-    const size = this.backup.getSaveData().length;
-    if (this.gpio.present && data.length > size && data.length - size >= 16) {
-      this.gpio.fromSave(data.subarray(data.length - 16));
+    // Save memory sizes are multiples of 512 bytes; 16 more are the clock.
+    if (this.gpio.present && data.length % 512 === 16 && this.gpio.fromSave(data.subarray(data.length - 16))) {
       data = data.subarray(0, data.length - 16);
     }
     this.backup.loadSaveData(data);
@@ -347,6 +350,8 @@ export class Gba {
   }
 
   #sync(s) {
+    // The time first: components work out their schedules from it.
+    this.bus.cycles = s.f64(this.bus.cycles);
     this.cpu.sync(s);
     this.bus.sync(s);
     this.ppu.sync(s);
@@ -363,7 +368,6 @@ export class Gba {
     this.keycnt = s.u16(this.keycnt);
     this.postflg = s.u8(this.postflg);
     this.biosWaiting = s.bool(this.biosWaiting);
-    this.bus.cycles = s.f64(this.bus.cycles);
     this.irqReadyAt = s.f64(this.irqReadyAt);
     this.wakeLine = false;
     this.irqLine = false;

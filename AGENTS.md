@@ -15,11 +15,14 @@ Decisions so far:
   hot path could later be rewritten in Wasm without touching anything else.
 - **No build step, no runtime dependencies.** Native ES modules; the browser
   loads `src/` directly. Don't add a bundler or npm packages without asking.
-- **Game Boy / Game Boy Color core done** (`src/core/gb/`); the GBA core is
-  next. Until it exists, GBA ROMs run on the test core (`src/core/test/`).
-- **No boot ROMs** (they're copyrighted): cores start in the state the boot
-  ROM leaves behind. Game Boy games run as on a DMG, Color games as on a CGB
-  (no CGB compatibility mode for DMG games).
+- **Cores:** Game Boy / Game Boy Color (`src/core/gb/`) and Game Boy Advance
+  (`src/core/gba/`). The test core (`src/core/test/`) is only a fallback for
+  systems without a core.
+- **No boot ROMs or BIOS files** (they're copyrighted): cores start in the
+  state the boot ROM leaves behind, and the GBA's BIOS calls are implemented
+  in JavaScript (high-level emulation; the core can also run a real BIOS
+  dump, not exposed in the UI). Game Boy games run as on a DMG, Color games
+  as on a CGB (no CGB compatibility mode for DMG games).
 - **Accuracy is measured with open-source test ROMs** (see Testing); keep
   them passing.
 - **Storage:** IndexedDB for the ROM library, saved games and snapshots (too
@@ -91,6 +94,22 @@ src/core/
     palettes.js         DMG shades, CGB boot ROM compatibility palettes for DMG
                         games, button-combo presets, CGB color (correction)
     constants.js        Clock rate, frame size, interrupt bits
+  gba/                  Game Boy Advance core (see "GBA core")
+    index.js            createCore()
+    gba.js              System: I/O registers, interrupts, keypad, the event
+                        loop (runFrame), saves, save states; implements Core
+    cpu.js              ARM7TDMI: registers, modes, exceptions, pipeline
+    arm.js, thumb.js    Instruction decode tables and handlers
+    bus.js              Memory map, wait states, prefetch buffer, open bus
+    bios.js             HLE BIOS: built-in vectors/IRQ stub, SWIs in JS
+    ppu.js              Line timing and a scanline renderer (all modes,
+                        sprites a line ahead, windows, blending, mosaic)
+    dma.js              Four channels; HBlank/VBlank/sound FIFO/immediate
+    timers.js           Lazy counters, overflow events, cascade
+    apu.js              Game Boy channels (from gb/apu.js) + DMA sound FIFOs
+    sio.js              Serial port with nothing connected
+    backup.js           SRAM / Flash / EEPROM, detected from ID strings
+    gpio.js             Cartridge GPIO: Seiko RTC (Pokémon, Boktai)
   test/test-core.js     Stand-in core: test pattern, button tones, a Start-press
                         counter in battery RAM, save states
 src/video/
@@ -222,6 +241,40 @@ other versions are refused.
 - **Not emulated:** a CGB running DMG games (its compatibility mode); some
   mid-line window/sprite effects (see `KNOWN_FAILURES`).
 
+### GBA core
+
+- **Event loop:** `Gba.runFrame()` runs the CPU in a tight loop until the
+  next event (`eventTime`: PPU line events, timer overflows, serial
+  transfer, a pending interrupt or HALT); components schedule events with an
+  `onSchedule` hook that can pull `eventTime` forward while the CPU runs.
+  Accesses add their cycles to `bus.cycles` (the clock).
+- **CPU:** the pipeline is real (`pipeA`/`pipeB`: the two opcodes fetched
+  ahead), so self-modifying code behaves (the Classic NES Series checks it).
+  Each step's fetch stands for the hardware's prefetch two opcodes ahead; a
+  jump refills (2S + 1N); after a data access the fetch is non-sequential.
+- **Bus timing:** WAITCNT wait states, forced non-sequential accesses at
+  128 KB ROM boundaries, and a prefetch buffer worked out lazily from the
+  time since the last fetch (ROM data accesses stop it).
+- **Interrupts** reach the CPU a few cycles after the request
+  (`IRQ_DELAY`, `UNMASK_DELAY`); timer reads lag a little (`READ_DELAY`);
+  HBlank starts at cycle 1008. These were tuned against mGBA's test suite.
+- **BIOS (HLE):** `bios.js` builds a small BIOS image (vectors, the IRQ
+  dispatcher that calls the game's handler) and implements the SWIs in JS,
+  including the BIOS's side effects on registers and its cycle counts.
+  IntrWait halts and re-runs the SWI after each interrupt.
+- **PPU:** each line is rendered at HBlank with the registers of that moment;
+  sprites for a line are drawn during the line before (OAM changes show one
+  line later, palette changes at once); a BG enabled mid-frame shows from the
+  third line start after; windows open/close on their top/bottom lines.
+- **Sound:** the Game Boy channel classes from `gb/apu.js` on a quarter clock,
+  mixed with the FIFOs like the hardware (10 bits around SOUNDBIAS); FIFO
+  samples are played on timer overflows and refilled by DMA 1/2.
+- **Saves:** the backup type comes from the SDK's ID string in the ROM. The
+  cartridge clock (by game code) follows the wall clock; if the game set it,
+  a 16-byte block ("RTC1", status, offset) follows the save memory.
+- **Not emulated:** link cable and multiboot, the BIOS sound driver calls,
+  solar/gyro/rumble cartridges, mid-line register changes.
+
 ### Library, saved games and snapshots
 
 - Opening or dropping ROM files adds them to the library. Selecting a ROM
@@ -271,8 +324,16 @@ so short taps are never lost.
   rtc3test (on emulated time), Bully, Strikethrough, TurtleTests,
   scribbltests, little-things-gb, mbc3-tester, cgb-acid-hell, wilbertpol's
   Mooneye. Each suite's pass criteria follow the c-sp collection's notes.
+- `tests/gba-core.test.js`: GBA unit tests (hand-assembled programs, BIOS
+  calls, pipeline, open bus, timers, sound, clock, save states).
+- `tests/gba-test-roms.test.js`: jsmolka's gba-tests (r12 = 0 when passed).
+- mGBA's test suite isn't run by `npm test` (it has to be built from source
+  with an ARM toolchain); current results: memory 1552/1552, I/O read
+  130/130, timing 1794/2020, timer count-up 816/936, timer IRQ 73/90,
+  shifter, carry and BIOS math all, multiply long 52/72 (carry flag), DMA
+  1244/1244, SIO all, misc 4/12, video tests all but sub-line glitches.
 - The ROMs are skipped until `npm run fetch-test-roms` has downloaded them
-  (the c-sp/game-boy-test-roms release). `tests/known-failures.js` lists
+  (the c-sp/game-boy-test-roms release and jsmolka/gba-tests). `tests/known-failures.js` lists
   the ones that don't pass yet, with reasons (mostly timing within an
   M-cycle and APU details); remove entries as they get fixed, and don't add
   new ones to hide regressions.
@@ -291,26 +352,26 @@ so short taps are never lost.
 
 ## Roadmap
 
-Done: Game Boy core (CPU, memory/MBCs, PPU, timer, APU, joypad) and Game Boy
-Color support.
+Done: Game Boy and Game Boy Color (with palettes, color correction, Super
+Game Boy, rare cartridges, rumble, link cable) and the Game Boy Advance core.
 
-1. GBA core (needs a BIOS: user-supplied file or high-level emulation).
-2. Game Boy extras: DMG palette choice, CGB color correction, CGB
-   compatibility palettes for DMG games, rumble.
-3. Memory viewer/editor (inspect and edit RAM, VRAM, OAM, I/O registers
+1. GBA follow-ups: optional user BIOS file in the settings, idle-loop
+   detection (speed on slow phones), link cable, solar sensor (Boktai),
+   gyro and rumble cartridges.
+2. Memory viewer/editor (inspect and edit RAM, VRAM, OAM, I/O registers
    of the running game).
-4. Input mapping: rebind keyboard keys and controller buttons from the UI
+3. Input mapping: rebind keyboard keys and controller buttons from the UI
    (saved with the settings).
-5. FPS counter toggled from the settings (the status bar shows a basic
+4. FPS counter toggled from the settings (the status bar shows a basic
    fps figure today): emulated fps, speed and time per frame, for
    performance work.
-6. Renderer setting: Auto / WebGL / Canvas 2D, and a WebGPU renderer later
+5. Renderer setting: Auto / WebGL / Canvas 2D, and a WebGPU renderer later
    (renderers are separate modules in `src/video/`).
-7. Make it a PWA: web app manifest and service worker, so it installs to
+6. Make it a PWA: web app manifest and service worker, so it installs to
    the home screen (fullscreen on iPhone) and works offline.
-8. More video filters: motion blur (LCD ghosting), smooth edges (xBR/HQx
+7. More video filters: motion blur (LCD ghosting), smooth edges (xBR/HQx
    style), edge detection, sharpening, ... (shaders in `src/video/filters.js`).
-9. Audio filters: low pass, high pass, pitch shifting, echo, ... (Web Audio
+8. Audio filters: low pass, high pass, pitch shifting, echo, ... (Web Audio
    nodes after the worklet in `src/audio/`).
-10. Possibly later: rewind, audio/video recording, full backup export/import
+9. Possibly later: rewind, audio/video recording, full backup export/import
    of the library.

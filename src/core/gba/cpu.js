@@ -73,8 +73,12 @@ export class Arm7 {
     this.mode = Mode.SVC;
     this.pc = 0;
     this.halted = false;
-    // The last opcode fetched (open bus reads return it).
-    this.lastOpcode = 0;
+    // The three-stage pipeline: the opcodes at pc and pc + 2/4 were fetched
+    // before the instruction ahead of them ran (self-modifying code can't
+    // change them); `refill` after a jump.
+    this.pipeA = 0;
+    this.pipeB = 0;
+    this.refill = true;
   }
 
   sync(s) {
@@ -88,7 +92,9 @@ export class Arm7 {
     for (const flag of ['irqDisable', 'fiqDisable', 'thumb', 'halted']) this[flag] = s.bool(this[flag]);
     this.mode = s.u8(this.mode);
     this.pc = s.u32(this.pc >>> 0) | 0;
-    this.lastOpcode = s.u32(this.lastOpcode >>> 0) | 0;
+    this.pipeA = s.i32(this.pipeA);
+    this.pipeB = s.i32(this.pipeB);
+    this.refill = s.bool(this.refill);
   }
 
   get cpsr() {
@@ -170,6 +176,7 @@ export class Arm7 {
   branch(address) {
     this.pc = (this.thumb ? address & ~1 : address & ~3) | 0;
     this.bus.branched = true;
+    this.refill = true;
   }
 
   condition(cond) {
@@ -208,14 +215,26 @@ export class Arm7 {
     const bus = this.bus;
     const address = this.pc;
     if (this.thumb) {
-      const op = bus.fetch16(address);
-      this.lastOpcode = op | (op << 16);
+      if (this.refill) {
+        this.refill = false;
+        this.pipeA = bus.peekCode16(address);
+        this.pipeB = bus.peekCode16((address + 2) | 0);
+      }
+      const op = this.pipeA;
+      this.pipeA = this.pipeB;
+      this.pipeB = bus.fetch16((address + 4) | 0);
       this.pc = (address + 2) | 0;
       this.r[15] = address + 4;
       this.thumbTable[op >>> 6](op);
     } else {
-      const op = bus.fetch32(address);
-      this.lastOpcode = op;
+      if (this.refill) {
+        this.refill = false;
+        this.pipeA = bus.peekCode32(address);
+        this.pipeB = bus.peekCode32((address + 4) | 0);
+      }
+      const op = this.pipeA;
+      this.pipeA = this.pipeB;
+      this.pipeB = bus.fetch32((address + 8) | 0);
       this.pc = (address + 4) | 0;
       this.r[15] = address + 8;
       const cond = op >>> 28;

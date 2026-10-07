@@ -6,9 +6,8 @@ A Game Boy / Game Boy Color / Game Boy Advance emulator written in plain
 JavaScript. It runs entirely in the browser: no server-side processing, no
 build step and no dependencies.
 
-> **Status:** Game Boy and Game Boy Color games run. Game Boy Advance
-> emulation is not implemented yet; GBA ROMs start a test core that only
-> exercises the frontend.
+> **Status:** Game Boy, Game Boy Color and Game Boy Advance games run. No
+> BIOS file is needed: the GBA's BIOS functions are built in.
 
 ## Running
 
@@ -28,8 +27,8 @@ npm run fetch-test-roms   # optional: download test ROMs for the accuracy tests
 ```
 
 `npm test` also runs open-source test ROMs (Blargg's tests, the Mooneye Test
-Suite, Mealybug, the acid2 tests, SameSuite, AGE, GBMicrotest and more) when
-they have been downloaded to `tests/roms/`.
+Suite, Mealybug, the acid2 tests, SameSuite, AGE, GBMicrotest and more; for
+the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
 
 ## Features
 
@@ -38,12 +37,20 @@ they have been downloaded to `tests/roms/`.
   CGB double speed and HDMA, and the original hardware's quirks (OAM bug,
   wave RAM). Passes Blargg's tests, dmg-acid2, cgb-acid2, the applicable
   Mooneye Test Suite and most of the Mealybug Tearoom tests.
+- **Game Boy Advance:** ARM7TDMI CPU with the three-stage pipeline, memory
+  wait states and the cartridge prefetch buffer, all video modes with
+  sprites, windows, blending and mosaic, both kinds of sound (the Game Boy
+  channels and the DMA sound FIFOs), DMA, timers and the serial port. The
+  BIOS is emulated (no BIOS file needed). Saves: SRAM, Flash (64/128 KB) and
+  EEPROM, detected automatically; the cartridge clock of the Pokémon games
+  and Boktai. Passes jsmolka's gba-tests and most of mGBA's test suite.
 - **Cartridges:** MBC1, MBC2, MBC3 (real-time clock), MBC5 (rumble), MBC6,
   MBC7 (tilt sensor: device tilt or I/J/K/L keys), MMM01, HuC1 and HuC3
   (infrared, clock), TAMA5 and the Pocket Camera (uses your webcam).
 - **Colors:** Game Boy games can use the Game Boy Color's palettes (chosen
   per game as the GBC does, or any of its presets), the Super Game Boy's
-  palettes or original-screen shades; optional GBC LCD color correction.
+  palettes or original-screen shades; optional GBC and GBA LCD color
+  correction.
 - **Super Game Boy:** games made for it get their colors, borders and
   multiplayer (player 2 on the keyboard or a second gamepad).
 - **Link cable:** play two games linked side by side (stacked in portrait),

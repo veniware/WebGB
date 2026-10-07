@@ -7,6 +7,7 @@ import { createTestCore } from './test/test-core.js';
  */
 const cores = [
   { id: 'gb', name: 'Game Boy', systems: ['gb', 'gbc'], link: true, load: () => import('./gb/index.js') },
+  { id: 'gba', name: 'Game Boy Advance', systems: ['gba'], load: () => import('./gba/index.js') },
 ];
 
 export function registerCore(descriptor) {

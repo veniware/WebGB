@@ -9,18 +9,37 @@ const HDRAW_CYCLES = 1008;
 // The HBlank interrupt comes a little later still (as measured; mGBA).
 const HBLANK_IRQ_DELAY = 8;
 
+// See Ppu.#writeDispcnt.
+const BG_SHOWN = 4;
+
 // Layers in the blend/window registers.
 const OBJ = 4;
 const BACKDROP = 5;
 const TRANSPARENT = 0x8000;
 
-// Sprite sizes [width, height] by shape (attr0 bits 14-15) and size (attr1 bits 14-15).
-const OBJ_SIZES = [
-  [[8, 8], [16, 16], [32, 32], [64, 64]],
-  [[16, 8], [32, 8], [32, 16], [64, 32]],
-  [[8, 16], [8, 32], [16, 32], [32, 64]],
-  [[8, 8], [8, 8], [8, 8], [8, 8]],
-];
+// Sprite sizes by shape (attr0 bits 14-15) * 4 + size (attr1 bits 14-15).
+const OBJ_WIDTHS = [8, 16, 32, 64, 16, 32, 32, 64, 8, 8, 16, 32, 8, 8, 8, 8];
+const OBJ_HEIGHTS = [8, 16, 32, 64, 8, 8, 16, 32, 16, 32, 32, 64, 8, 8, 8, 8];
+
+/** One line of sprite pixels. */
+class SpriteLine {
+  constructor() {
+    // Palette index (256-511), TRANSPARENT where no sprite is.
+    this.color = new Uint16Array(SCREEN_WIDTH);
+    this.priority = new Uint8Array(SCREEN_WIDTH);
+    this.semi = new Uint8Array(SCREEN_WIDTH);
+    this.window = new Uint8Array(SCREEN_WIDTH);
+    this.anySemi = false;
+    this.clear();
+  }
+
+  clear() {
+    this.color.fill(TRANSPARENT);
+    this.priority.fill(4);
+    this.window.fill(0);
+    this.anySemi = false;
+  }
+}
 
 /**
  * GBA video: registers, line timing (VBlank/HBlank/VCOUNT and their
@@ -56,24 +75,57 @@ export class Ppu {
     this.lineY = new Int32Array(2);
     // Per-line layer buffers: 15-bit colors, TRANSPARENT where nothing is drawn.
     this.layers = Array.from({ length: 4 }, () => new Uint16Array(SCREEN_WIDTH));
-    this.objColor = new Uint16Array(SCREEN_WIDTH);
-    this.objPriority = new Uint8Array(SCREEN_WIDTH);
-    this.objSemi = new Uint8Array(SCREEN_WIDTH);
-    this.objWindow = new Uint8Array(SCREEN_WIDTH);
+    // Sprite lines (palette indices, TRANSPARENT where none), drawn a line
+    // ahead like the hardware: the current one and the next one.
+    this.objLine = new SpriteLine();
+    this.objNext = new SpriteLine();
     this.windowMask = new Uint8Array(SCREEN_WIDTH);
+    this.winH = new Uint16Array(2);
+    this.winV = new Uint16Array(2);
+    // Whether each window is open vertically (set on its top line, cleared on its bottom one).
+    this.winActive = new Uint8Array(2);
+    // BG enable state: shown at BG_SHOWN; counts up to it at each line start
+    // after being enabled; negative right after being turned off.
+    this.bgState = new Int8Array(4);
+    // Enabled BGs by priority, and each BG's priority.
+    this.bgOrder = new Uint8Array(4);
+    this.bgPrio = new Uint8Array(4);
     // 15-bit BGR to RGBA.
     this.colors = new Uint32Array(0x8000);
-    for (let c = 0; c < 0x8000; c++) {
-      const r = c & 0x1f;
-      const g = (c >> 5) & 0x1f;
-      const b = (c >> 10) & 0x1f;
-      this.colors[c] = 0xff000000 | (((b << 3) | (b >> 2)) << 16) | (((g << 3) | (g >> 2)) << 8) | ((r << 3) | (r >> 2));
-    }
+    this.colorCorrection = null;
+    this.setColorCorrection(false);
     this.front = new Uint32Array(SCREEN_WIDTH * SCREEN_HEIGHT);
     this.back = new Uint32Array(SCREEN_WIDTH * SCREEN_HEIGHT);
     this.frontBytes = new Uint8ClampedArray(this.front.buffer);
     this.backBytes = new Uint8ClampedArray(this.back.buffer);
     this.reset();
+  }
+
+  /**
+   * Builds the 15-bit color to RGBA table. Corrected: like the GBA's LCD,
+   * darker and less saturated (higan's color emulation).
+   */
+  setColorCorrection(on) {
+    if (this.colorCorrection === on) return;
+    this.colorCorrection = on;
+    const scale = (255 * 255) / 280;
+    for (let c = 0; c < 0x8000; c++) {
+      const r = c & 0x1f;
+      const g = (c >> 5) & 0x1f;
+      const b = (c >> 10) & 0x1f;
+      let R = (r << 3) | (r >> 2);
+      let G = (g << 3) | (g >> 2);
+      let B = (b << 3) | (b >> 2);
+      if (on) {
+        const lr = (r / 31) ** 4;
+        const lg = (g / 31) ** 4;
+        const lb = (b / 31) ** 4;
+        R = Math.min(255, Math.round(((50 * lg + 255 * lr) / 255) ** (1 / 2.2) * scale));
+        G = Math.min(255, Math.round(((30 * lb + 230 * lg + 10 * lr) / 255) ** (1 / 2.2) * scale));
+        B = Math.min(255, Math.round(((220 * lb + 10 * lg + 50 * lr) / 255) ** (1 / 2.2) * scale));
+      }
+      this.colors[c] = (0xff000000 | (B << 16) | (G << 8) | R) >>> 0;
+    }
   }
 
   reset() {
@@ -95,8 +147,12 @@ export class Ppu {
     this.refY.fill(0);
     this.lineX.fill(0);
     this.lineY.fill(0);
-    this.winH = [0, 0];
-    this.winV = [0, 0];
+    this.winH.fill(0);
+    this.winV.fill(0);
+    this.winActive.fill(0);
+    this.bgState.fill(0);
+    this.objLine.clear();
+    this.objNext.clear();
     this.winin = 0;
     this.winout = 0;
     this.mosaic = 0;
@@ -119,14 +175,17 @@ export class Ppu {
     for (const r of ['dispcnt', 'greenSwap', 'dispstat', 'vcount', 'winin', 'winout', 'mosaic', 'bldcnt', 'bldalpha', 'bldy']) {
       this[r] = s.u16(this[r]);
     }
-    for (const array of ['bgcnt', 'hofs', 'vofs', 'pa', 'pb', 'pc', 'pd', 'refX', 'refY', 'lineX', 'lineY']) s.bytes(this[array]);
-    for (let i = 0; i < 2; i++) {
-      this.winH[i] = s.u16(this.winH[i]);
-      this.winV[i] = s.u16(this.winV[i]);
+    for (const array of ['bgcnt', 'hofs', 'vofs', 'pa', 'pb', 'pc', 'pd', 'refX', 'refY', 'lineX', 'lineY', 'winH', 'winV',
+      'winActive', 'bgState']) {
+      s.bytes(this[array]);
     }
     this.hblank = s.bool(this.hblank);
     this.nextEvent = s.f64(this.nextEvent);
     this.lineStart = s.f64(this.lineStart);
+    if (s.reading) {
+      this.objLine.clear();
+      this.objNext.clear();
+    }
   }
 
   get mode() {
@@ -158,7 +217,7 @@ export class Ppu {
 
   write16(address, value) {
     switch (address) {
-      case 0x00: this.dispcnt = value; break;
+      case 0x00: this.#writeDispcnt(value); break;
       case 0x02: this.greenSwap = value & 1; break;
       case 0x04: this.dispstat = value & 0xff38; break;
       case 0x08: case 0x0a: case 0x0c: case 0x0e:
@@ -185,6 +244,28 @@ export class Ppu {
     }
   }
 
+  /**
+   * A BG turned on mid-frame shows up from the third line start after (the
+   * second in bitmap modes); in VBlank right away. Turned off and on again
+   * within two lines, it comes straight back. (As measured in mGBA's suite.)
+   */
+  #writeDispcnt(value) {
+    this.dispcnt = value;
+    const frameStart = this.vcount >= SCREEN_HEIGHT;
+    const state = this.bgState;
+    for (let bg = 0; bg < 4; bg++) {
+      const was = state[bg];
+      if (!(value & (0x100 << bg))) {
+        if (frameStart || (was > 0 && was < BG_SHOWN)) state[bg] = 0;
+        else if (was === BG_SHOWN) state[bg] = -2;
+      } else if (!was) {
+        state[bg] = frameStart ? BG_SHOWN : (value & 7) > 2 ? 2 : 1;
+      } else if (was < 0) {
+        state[bg] = BG_SHOWN;
+      }
+    }
+  }
+
   /** BGxX/BGxY: 28-bit signed reference points; writing one restarts its line counter. */
   #setReference(ref, line, bg, value, high) {
     let v = ref[bg];
@@ -206,6 +287,9 @@ export class Ppu {
         this.#renderLine(this.vcount);
         this.hooks.onHblank();
       }
+      // The sprite unit works a line ahead.
+      const next = this.vcount + 1 === LINES ? 0 : this.vcount + 1;
+      if (next < SCREEN_HEIGHT) this.#sprites(next);
       if (this.dispstat & 0x10) this.hooks.requestIrq(1, now + HBLANK_IRQ_DELAY);
       return;
     }
@@ -213,6 +297,12 @@ export class Ppu {
     this.lineStart = now;
     this.nextEvent = now + HDRAW_CYCLES;
     this.vcount = this.vcount + 1 === LINES ? 0 : this.vcount + 1;
+    const state = this.bgState;
+    for (let bg = 0; bg < 4; bg++) if (state[bg] && state[bg] < BG_SHOWN) state[bg]++;
+    for (let w = 0; w < 2; w++) {
+      if (this.vcount === (this.winV[w] & 0xff)) this.winActive[w] = 0;
+      if (this.vcount === this.winV[w] >>> 8) this.winActive[w] = 1;
+    }
     if (this.vcount === SCREEN_HEIGHT) {
       // VBlank: the frame is complete; affine reference points restart.
       [this.front, this.back] = [this.back, this.front];
@@ -239,7 +329,8 @@ export class Ppu {
       return;
     }
     const mode = dispcnt & 7;
-    let enabled = (dispcnt >>> 8) & 0x1f;
+    let enabled = (dispcnt >>> 8) & 0x10;
+    for (let bg = 0; bg < 4; bg++) if (this.bgState[bg] === BG_SHOWN) enabled |= 1 << bg;
     if (mode === 1) enabled &= 0x17;
     else if (mode === 2) enabled &= 0x1c;
     else if (mode >= 3) enabled &= 0x14;
@@ -251,10 +342,11 @@ export class Ppu {
       else this.#bitmapBackground(mode, line);
       if (this.bgcnt[bg] & 0x40) this.#mosaicLine(line);
     }
-    this.objColor.fill(TRANSPARENT);
-    this.objWindow.fill(0);
-    if (enabled & 0x10 || (dispcnt & 0x8000)) this.#sprites(y);
-    this.#windows(y);
+    // The sprites drawn during the previous line.
+    const line = this.objNext;
+    this.objNext = this.objLine;
+    this.objLine = line;
+    this.#windows();
     this.#compose(base, enabled);
     this.#advanceAffine();
   }
@@ -285,29 +377,39 @@ export class Ppu {
     }
     const py = (mosaicY + this.vofs[bg]) & heightMask;
     const tileRow = py >> 3;
-    const hofs = this.hofs[bg];
-    for (let x = 0; x < SCREEN_WIDTH; x++) {
-      const px = (x + hofs) & widthMask;
-      // Screen blocks of 32x32 tiles; a 512-wide map has two side by side.
-      let block = (tileRow >> 5) * (size & 1 ? 2 : 1) + (px >> 8);
-      if (size === 2) block = tileRow >> 5;
-      const entry = vram16[(screenBase + block * 0x800 + ((tileRow & 31) * 32 + ((px >> 3) & 31)) * 2) >> 1];
+    // Screen blocks of 32x32 tiles: a 512-wide map has two side by side.
+    const rowBlock = size === 3 ? (tileRow >> 5) * 2 : size === 2 ? tileRow >> 5 : 0;
+    const rowBase = screenBase + (tileRow & 31) * 64;
+    let px = (this.hofs[bg]) & widthMask;
+    let x = 0;
+    // One map entry per tile, then its pixels on this row.
+    while (x < SCREEN_WIDTH) {
+      const block = rowBlock + (px >> 8);
+      const entry = vram16[(block * 0x800 + rowBase + ((px >> 3) & 31) * 2) >> 1];
       const tile = entry & 0x3ff;
-      const tx = entry & 0x400 ? 7 - (px & 7) : px & 7;
+      const hflip = (entry & 0x400) !== 0;
       const ty = entry & 0x800 ? 7 - (py & 7) : py & 7;
-      let index;
-      let color;
+      let tx = px & 7;
+      const count = Math.min(8 - tx, SCREEN_WIDTH - x);
       if (colors256) {
-        const address = charBase + tile * 64 + ty * 8 + tx;
-        index = address < 0x10000 ? vram[address] : 0;
-        color = palette[index];
+        const row = charBase + tile * 64 + ty * 8;
+        for (let i = 0; i < count; i++, tx++) {
+          const address = row + (hflip ? 7 - tx : tx);
+          const index = address < 0x10000 ? vram[address] : 0;
+          line[x++] = index ? palette[index] & 0x7fff : TRANSPARENT;
+        }
       } else {
-        const address = charBase + tile * 32 + ty * 4 + (tx >> 1);
-        const byte = address < 0x10000 ? vram[address] : 0;
-        index = tx & 1 ? byte >> 4 : byte & 0xf;
-        color = palette[(entry >>> 12) * 16 + index];
+        const row = charBase + tile * 32 + ty * 4;
+        const bank = (entry >>> 12) * 16;
+        for (let i = 0; i < count; i++, tx++) {
+          const t = hflip ? 7 - tx : tx;
+          const address = row + (t >> 1);
+          const byte = address < 0x10000 ? vram[address] : 0;
+          const index = t & 1 ? byte >> 4 : byte & 0xf;
+          line[x++] = index ? palette[bank + index] & 0x7fff : TRANSPARENT;
+        }
       }
-      line[x] = index ? color & 0x7fff : TRANSPARENT;
+      px = (px + count) & widthMask;
     }
   }
 
@@ -378,22 +480,26 @@ export class Ppu {
   }
 
   #sprites(y) {
+    const out = this.objNext;
+    out.clear();
+    if (!(this.dispcnt & 0x9000)) return;
     const oam16 = this.oam16;
     const vram = this.vram;
-    const palette = this.palette16;
     const oneDimensional = (this.dispcnt & 0x40) !== 0;
     const tileBase = 0x10000;
     const minTile = this.bitmapMode ? 512 : 0;
     const mosaicH = ((this.mosaic >>> 8) & 0xf) + 1;
     const mosaicV = ((this.mosaic >>> 12) & 0xf) + 1;
-    const color = this.objColor;
-    const priority = this.objPriority;
-    const semi = this.objSemi;
-    const window = this.objWindow;
-    // Lower OAM indices win: draw in reverse... rather, skip pixels already taken
-    // by a sprite of equal or higher priority.
-    priority.fill(4);
-    for (let i = 0; i < 128; i++) {
+    const color = out.color;
+    const priority = out.priority;
+    const semi = out.semi;
+    const window = out.window;
+    // A line has time for this many sprite pixels (affine ones cost two,
+    // plus 10 each); sprites past the budget aren't drawn.
+    let cycles = this.dispcnt & 0x20 ? 954 : 1210;
+    // Lower OAM indices win: skip pixels already taken by a sprite of equal
+    // or higher priority.
+    for (let i = 0; i < 128 && cycles > 0; i++) {
       const attr0 = oam16[i * 4];
       const attr1 = oam16[i * 4 + 1];
       const attr2 = oam16[i * 4 + 2];
@@ -401,7 +507,9 @@ export class Ppu {
       if (!affine && attr0 & 0x200) continue; // disabled
       const objMode = (attr0 >>> 10) & 3;
       if (objMode === 3) continue;
-      const [width, height] = OBJ_SIZES[attr0 >>> 14][attr1 >>> 14];
+      const shape = ((attr0 >>> 14) << 2) | (attr1 >>> 14);
+      const width = OBJ_WIDTHS[shape];
+      const height = OBJ_HEIGHTS[shape];
       const double = affine && attr0 & 0x200;
       const boxW = double ? width * 2 : width;
       const boxH = double ? height * 2 : height;
@@ -409,6 +517,7 @@ export class Ppu {
       if (top + boxH > 256) top -= 256;
       let lineY = y - top;
       if (lineY < 0 || lineY >= boxH) continue;
+      cycles -= affine ? 10 + boxW * 2 : boxW;
       const mosaic = (attr0 & 0x1000) !== 0;
       if (mosaic) lineY -= (y % mosaicV);
       let left = attr1 & 0x1ff;
@@ -432,14 +541,16 @@ export class Ppu {
       }
       const hflip = !affine && attr1 & 0x1000;
       const vflip = !affine && attr1 & 0x2000;
-      for (let bx = 0; bx < boxW; bx++) {
+      if (objMode === 1) out.anySemi = true;
+      const first = Math.max(0, -left);
+      const last = Math.min(boxW, SCREEN_WIDTH - left);
+      const cy = lineY - (boxH >> 1);
+      for (let bx = first; bx < last; bx++) {
         const sx = left + bx;
-        if (sx < 0 || sx >= SCREEN_WIDTH) continue;
         let tx;
         let ty;
         if (affine) {
           const cx = bx - (boxW >> 1);
-          const cy = lineY - (boxH >> 1);
           tx = ((pa * cx + pb * cy) >> 8) + (width >> 1);
           ty = ((pc * cx + pd * cy) >> 8) + (height >> 1);
           if (tx < 0 || ty < 0 || tx >= width || ty >= height) continue;
@@ -464,14 +575,14 @@ export class Ppu {
         }
         if (prio >= priority[sx]) continue;
         priority[sx] = prio;
-        color[sx] = palette[colors256 ? 256 + index : pal + index] & 0x7fff;
+        color[sx] = colors256 ? 256 + index : pal + index;
         semi[sx] = objMode === 1 ? 1 : 0;
       }
     }
   }
 
   /** Which layers (and effects, bit 5) each pixel shows, from the windows. */
-  #windows(y) {
+  #windows() {
     const mask = this.windowMask;
     const dispcnt = this.dispcnt;
     if (!(dispcnt & 0xe000)) {
@@ -481,14 +592,12 @@ export class Ppu {
     mask.fill(this.winout & 0x3f);
     if (dispcnt & 0x8000) {
       const inside = (this.winout >>> 8) & 0x3f;
-      for (let x = 0; x < SCREEN_WIDTH; x++) if (this.objWindow[x]) mask[x] = inside;
+      const objWindow = this.objLine.window;
+      for (let x = 0; x < SCREEN_WIDTH; x++) if (objWindow[x]) mask[x] = inside;
     }
     for (let w = 1; w >= 0; w--) {
       if (!(dispcnt & (0x2000 << w))) continue;
-      const y1 = this.winV[w] >>> 8;
-      const y2 = this.winV[w] & 0xff;
-      const inY = y1 <= y2 ? y >= y1 && y < y2 : y >= y1 || y < y2;
-      if (!inY) continue;
+      if (!this.winActive[w]) continue;
       const x1 = this.winH[w] >>> 8;
       const x2 = this.winH[w] & 0xff;
       const inside = (this.winin >>> (w * 8)) & 0x3f;
@@ -503,6 +612,10 @@ export class Ppu {
     const colors = this.colors;
     const layers = this.layers;
     const mask = this.windowMask;
+    const palette = this.palette16;
+    const objColor = this.objLine.color;
+    const objPriority = this.objLine.priority;
+    const objSemi = this.objLine.semi;
     const backdrop = this.palette16[0] & 0x7fff;
     const bldcnt = this.bldcnt;
     const effect = (bldcnt >>> 6) & 3;
@@ -510,10 +623,18 @@ export class Ppu {
     const evb = Math.min(16, (this.bldalpha >>> 8) & 0x1f);
     const evy = Math.min(16, this.bldy & 0x1f);
     // BG order by priority, then number.
-    const order = [];
+    const order = this.bgOrder;
+    const bgPrio = this.bgPrio;
+    let count = 0;
     for (let p = 0; p < 4; p++) {
-      for (let bg = 0; bg < 4; bg++) if (enabled & (1 << bg) && (this.bgcnt[bg] & 3) === p) order.push(bg);
+      for (let bg = 0; bg < 4; bg++) {
+        if (enabled & (1 << bg) && (this.bgcnt[bg] & 3) === p) order[count++] = bg;
+      }
     }
+    for (let bg = 0; bg < 4; bg++) bgPrio[bg] = this.bgcnt[bg] & 3;
+    const objOn = (enabled & 0x10) !== 0;
+    // The layer under the top one only matters for alpha blending.
+    const layersNeeded = effect === 1 || this.objLine.anySemi ? 2 : 1;
     for (let x = 0; x < SCREEN_WIDTH; x++) {
       const visible = mask[x];
       let top = BACKDROP;
@@ -521,38 +642,49 @@ export class Ppu {
       let second = BACKDROP;
       let secondColor = backdrop;
       let found = 0;
-      const objHere = enabled & 0x10 && visible & 0x10 && this.objColor[x] !== TRANSPARENT;
-      const objPrio = objHere ? this.objPriority[x] : 4;
-      let objPlaced = !objHere;
-      for (let k = 0; k < order.length && found < 2; k++) {
+      let objPending = objOn && (visible & 0x10) !== 0 && objColor[x] !== TRANSPARENT;
+      const objPrio = objPriority[x];
+      for (let k = 0; k < count; k++) {
         const bg = order[k];
         if (!(visible & (1 << bg))) continue;
         const color = layers[bg][x];
         if (color === TRANSPARENT) continue;
-        if (!objPlaced && objPrio <= (this.bgcnt[bg] & 3)) {
-          objPlaced = true;
-          if (found === 0) [top, topColor] = [OBJ, this.objColor[x]];
-          else [second, secondColor] = [OBJ, this.objColor[x]];
-          found++;
-          if (found === 2) break;
+        if (objPending && objPrio <= bgPrio[bg]) {
+          objPending = false;
+          if (found === 0) {
+            top = OBJ;
+            topColor = palette[objColor[x]] & 0x7fff;
+          } else {
+            second = OBJ;
+            secondColor = palette[objColor[x]] & 0x7fff;
+          }
+          if (++found === layersNeeded) break;
         }
-        if (found === 0) [top, topColor] = [bg, color];
-        else [second, secondColor] = [bg, color];
-        found++;
+        if (found === 0) {
+          top = bg;
+          topColor = color;
+        } else {
+          second = bg;
+          secondColor = color;
+        }
+        if (++found === layersNeeded) break;
       }
-      if (!objPlaced && found < 2) {
-        if (found === 0) [top, topColor] = [OBJ, this.objColor[x]];
-        else [second, secondColor] = [OBJ, this.objColor[x]];
-        found++;
+      if (objPending && found < layersNeeded) {
+        if (found === 0) {
+          top = OBJ;
+          topColor = palette[objColor[x]] & 0x7fff;
+        } else {
+          second = OBJ;
+          secondColor = palette[objColor[x]] & 0x7fff;
+        }
       }
       let color = topColor;
-      const semi = top === OBJ && this.objSemi[x];
       const secondTarget = (bldcnt >>> (8 + second)) & 1;
-      if (semi && secondTarget) {
+      if (top === OBJ && objSemi[x] && secondTarget) {
         color = blend(topColor, secondColor, eva, evb);
       } else if (visible & 0x20 && effect && (bldcnt >>> top) & 1) {
         if (effect === 1) {
-          if (secondTarget && found >= 1) color = blend(topColor, secondColor, eva, evb);
+          if (secondTarget) color = blend(topColor, secondColor, eva, evb);
         } else if (effect === 2) {
           color = brighten(topColor, evy);
         } else {

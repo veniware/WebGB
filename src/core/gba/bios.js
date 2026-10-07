@@ -67,7 +67,7 @@ export function createHleBios(gba) {
     }
     // Halt, and run the SWI again once an interrupt has been handled.
     gba.biosWaiting = true;
-    cpu.pc = (cpu.pc - (cpu.thumb ? 2 : 4)) | 0;
+    cpu.branch(cpu.pc - (cpu.thumb ? 2 : 4));
     gba.halt();
   }
 
@@ -391,21 +391,21 @@ export function createHleBios(gba) {
     if (flags & 0x08) fill(0x06000000, 0x18000);
     if (flags & 0x10) fill(0x07000000, 0x400);
     if (flags & 0x80) {
-      gba.io.write16(0x000, 0x0080);
-      for (let a = 0x004; a < 0x060; a += 2) gba.io.write16(a, 0);
-      for (let a = 0x0b0; a < 0x100; a += 2) gba.io.write16(a, 0);
-      for (let a = 0x100; a < 0x110; a += 2) gba.io.write16(a, 0);
-      gba.io.write16(0x200, 0);
-      gba.io.write16(0x202, 0xffff);
-      gba.io.write16(0x208, 0);
-      gba.io.write16(0x020, 0x100);
-      gba.io.write16(0x026, 0x100);
-      gba.io.write16(0x030, 0x100);
-      gba.io.write16(0x036, 0x100);
+      gba.write16(0x000, 0x0080);
+      for (let a = 0x004; a < 0x060; a += 2) gba.write16(a, 0);
+      for (let a = 0x0b0; a < 0x100; a += 2) gba.write16(a, 0);
+      for (let a = 0x100; a < 0x110; a += 2) gba.write16(a, 0);
+      gba.write16(0x200, 0);
+      gba.write16(0x202, 0xffff);
+      gba.write16(0x208, 0);
+      gba.write16(0x020, 0x100);
+      gba.write16(0x026, 0x100);
+      gba.write16(0x030, 0x100);
+      gba.write16(0x036, 0x100);
     }
     if (flags & 0x40) {
-      for (let a = 0x060; a < 0x0b0; a += 2) gba.io.write16(a, 0);
-      gba.io.write16(0x088, 0x200);
+      for (let a = 0x060; a < 0x0b0; a += 2) gba.write16(a, 0);
+      gba.write16(0x088, 0x200);
     }
   }
 
@@ -419,7 +419,8 @@ export function createHleBios(gba) {
     const region = (cpu.pc >>> 24) & 0xf;
     if (!call(cpu, comment)) return false;
     bus.idle(42 + bus.n16[region] + stall);
-    bus.branched = true;
+    // Returning from the BIOS refills the pipeline.
+    cpu.branch(cpu.pc);
     return true;
   };
 
@@ -470,7 +471,7 @@ export function createHleBios(gba) {
       case 0x16: unfilter(r[0], r[1], 8, false); return true;
       case 0x17: unfilter(r[0], r[1], 8, true); return true;
       case 0x18: unfilter(r[0], r[1], 16, true); return true;
-      case 0x19: gba.io.write16(0x088, (gba.io.read16(0x088) & ~0x3ff) | (r[0] ? 0x200 : 0)); return true;
+      case 0x19: gba.write16(0x088, (gba.read16(0x088) & ~0x3ff) | (r[0] ? 0x200 : 0)); return true;
       case 0x1f: { // MidiKey2Freq
         const frequency = read32(r[0] + 4) >>> 0;
         r[0] = Math.floor(frequency / 2 ** ((180 - r[1] - r[2] / 256) / 12)) | 0;

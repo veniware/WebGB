@@ -103,7 +103,7 @@ class Channel {
   }
 }
 
-class SquareChannel extends Channel {
+export class SquareChannel extends Channel {
   constructor(hasSweep) {
     super(64);
     this.hasSweep = hasSweep;
@@ -186,7 +186,7 @@ class SquareChannel extends Channel {
   }
 }
 
-class WaveChannel extends Channel {
+export class WaveChannel extends Channel {
   constructor() {
     super(256);
     this.ram = new Uint8Array(16);
@@ -258,7 +258,7 @@ class WaveChannel extends Channel {
   }
 }
 
-class NoiseChannel extends Channel {
+export class NoiseChannel extends Channel {
   constructor() {
     super(64);
   }

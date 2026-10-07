@@ -1,23 +1,217 @@
-/** Cartridge GPIO port (real-time clock): not present yet. */
+// Games with a real-time clock on the cartridge's GPIO port, by game code
+// (the first three letters; the fourth is the region).
+const RTC_GAMES = new Set([
+  'AXV', 'AXP', // Pokémon Ruby, Sapphire
+  'BPE', // Pokémon Emerald
+  'U3I', 'U32', 'U33', // Boktai 1-3
+  'BKA', // Sennen Kazoku
+  'BR4', // Rockman EXE 4.5
+]);
+
+// Command codes as the bits arrive (the command byte is sent MSB first).
+const Command = { RESET: 0, DATETIME: 2, IRQ: 3, CONTROL: 4, TIME: 6 };
+// Data bytes of each command.
+const COMMAND_BYTES = [0, 0, 7, 0, 1, 0, 3, 0];
+// The status register: 24-hour mode.
+const DEFAULT_CONTROL = 0x40;
+const SAVE_MAGIC = 0x31435452; // "RTC1"
+
+const bcd = (value) => ((value / 10) | 0) * 16 + (value % 10);
+const fromBcd = (value) => (value >> 4) * 10 + (value & 0x0f);
+
+/**
+ * The cartridge GPIO port (0x080000C4-C9) with the Seiko S-3511A real-time
+ * clock behind it: a serial protocol over three pins (SCK, SIO, CS). The
+ * clock follows the wall clock, shifted by whatever time the game sets.
+ */
 export class Gpio {
-  constructor() {
-    this.present = false;
-    this.readable = false;
+  /**
+   * @param {Uint8Array} rom
+   * @param {{ now?: () => number }} [options] now: milliseconds (for tests).
+   */
+  constructor(rom, { now = () => Date.now() } = {}) {
+    const code = String.fromCharCode(...rom.subarray(0xac, 0xaf));
+    this.present = RTC_GAMES.has(code);
+    this.now = now;
+    this.time = new Uint8Array(7);
+    this.reset();
+    // The clock's offset from the wall clock (seconds) and its status
+    // register survive resets: they are part of the saved game.
+    this.offset = 0;
+    this.control = DEFAULT_CONTROL;
   }
 
-  reset() {}
+  reset() {
+    this.data = 0;
+    this.direction = 0;
+    this.readable = false;
+    // Pins driven by the clock (for the ones the GBA reads).
+    this.output = 0;
+    this.step = 0;
+    this.sck = 0;
+    this.sioIn = 0;
+    this.bits = 0;
+    this.bitCount = 0;
+    this.command = -1;
+    this.reading = false;
+    this.remaining = 0;
+    this.byteIndex = 0;
+  }
 
-  sync() {}
+  sync(s) {
+    for (const field of ['data', 'direction', 'output', 'step', 'sck', 'sioIn', 'bits', 'bitCount', 'remaining', 'byteIndex',
+      'control']) {
+      this[field] = s.u8(this[field]);
+    }
+    this.command = s.i32(this.command);
+    this.readable = s.bool(this.readable);
+    this.reading = s.bool(this.reading);
+    this.offset = s.f64(this.offset);
+    s.bytes(this.time);
+  }
 
-  read() {
+  read(offset) {
+    if (offset & 1) return 0;
+    switch (offset) {
+      case 0xc4: return ((this.data & this.direction) | (this.output & ~this.direction)) & 0xf;
+      case 0xc6: return this.direction;
+      default: return this.readable ? 1 : 0;
+    }
+  }
+
+  write(offset, value) {
+    switch (offset) {
+      case 0xc4:
+        this.data = value & 0xf;
+        this.#pins((this.data & this.direction) | (this.output & ~this.direction));
+        break;
+      case 0xc6: this.direction = value & 0xf; break;
+      case 0xc8: this.readable = (value & 1) !== 0; break;
+    }
+  }
+
+  /** The serial protocol: CS rising with SCK high starts a transfer; bits move on SCK rising edges. */
+  #pins(pins) {
+    const sck = pins & 1;
+    const cs = pins & 4;
+    const rising = sck && !this.sck;
+    this.sck = sck;
+    switch (this.step) {
+      case 0:
+        if (sck && !cs) this.step = 1;
+        return;
+      case 1:
+        if (sck && cs) {
+          this.step = 2;
+          this.bitCount = 0;
+          this.bits = 0;
+          this.command = -1;
+        } else if (!sck || cs) this.step = 0;
+        return;
+    }
+    if (!cs) {
+      // Transfer over.
+      this.step = sck ? 1 : 0;
+      this.command = -1;
+      this.output = 1;
+      return;
+    }
+    if (!sck) {
+      // The GBA sets SIO while SCK is low; it is taken on the rising edge.
+      this.sioIn = (pins >> 1) & 1;
+      return;
+    }
+    if (!rising) return;
+    if (this.command >= 0 && this.reading) {
+      this.output = 5 | (((this.#readByte() >> this.bitCount) & 1) << 1);
+      if (++this.bitCount === 8) {
+        this.bitCount = 0;
+        this.byteIndex++;
+        if (--this.remaining <= 0) this.command = -1;
+      }
+      return;
+    }
+    this.bits |= this.sioIn << this.bitCount;
+    if (++this.bitCount === 8) this.#byte(this.bits);
+  }
+
+  #byte(value) {
+    this.bits = 0;
+    this.bitCount = 0;
+    if (this.command < 0) {
+      if ((value & 0x0f) !== 0x06) return;
+      this.command = (value >> 4) & 7;
+      this.reading = (value & 0x80) !== 0;
+      this.remaining = COMMAND_BYTES[this.command];
+      this.byteIndex = 0;
+      if (this.command === Command.RESET) {
+        this.control = 0;
+        this.offset = 0;
+      }
+      if (this.command === Command.DATETIME || this.command === Command.TIME) this.#latch();
+      if (!this.remaining) this.command = -1;
+      return;
+    }
+    // A write.
+    if (this.command === Command.CONTROL) this.control = value;
+    else if (this.command === Command.DATETIME || this.command === Command.TIME) {
+      this.time[this.command === Command.TIME ? 4 + this.byteIndex : this.byteIndex] = value;
+    }
+    this.byteIndex++;
+    if (--this.remaining <= 0) {
+      if (this.command === Command.DATETIME || this.command === Command.TIME) this.#setClock();
+      this.command = -1;
+    }
+  }
+
+  #readByte() {
+    if (this.command === Command.CONTROL) return this.control;
+    if (this.command === Command.DATETIME) return this.time[this.byteIndex];
+    if (this.command === Command.TIME) return this.time[4 + this.byteIndex];
     return 0;
   }
 
-  write() {}
-
-  toSave() {
-    return new Uint8Array(0);
+  /** Copies the current time into the registers (BCD). */
+  #latch() {
+    const date = new Date(this.now() + this.offset * 1000);
+    const hour = date.getUTCHours();
+    this.time[0] = bcd(date.getUTCFullYear() % 100);
+    this.time[1] = bcd(date.getUTCMonth() + 1);
+    this.time[2] = bcd(date.getUTCDate());
+    this.time[3] = bcd(date.getUTCDay());
+    // Bit 7: PM.
+    this.time[4] = bcd(this.control & 0x40 ? hour : hour % 12) | (hour >= 12 ? 0x80 : 0);
+    this.time[5] = bcd(date.getUTCMinutes());
+    this.time[6] = bcd(date.getUTCSeconds());
   }
 
-  fromSave() {}
+  /** The game set the clock: keep the difference to the wall clock. */
+  #setClock() {
+    const t = this.time;
+    let hour = fromBcd(t[4] & 0x3f);
+    if (!(this.control & 0x40) && t[4] & 0x80) hour += 12;
+    const set = Date.UTC(2000 + fromBcd(t[0]), fromBcd(t[1] & 0x1f) - 1, fromBcd(t[2] & 0x3f), hour,
+      fromBcd(t[5] & 0x7f), fromBcd(t[6] & 0x7f));
+    if (Number.isFinite(set)) this.offset = Math.round((set - this.now()) / 1000);
+  }
+
+  /** The clock's part of the saved game; empty unless the game changed it. */
+  toSave() {
+    if (this.offset === 0 && this.control === DEFAULT_CONTROL) return new Uint8Array(0);
+    const out = new Uint8Array(16);
+    const view = new DataView(out.buffer);
+    view.setUint32(0, SAVE_MAGIC, true);
+    view.setUint8(4, this.control);
+    view.setFloat64(8, this.offset, true);
+    return out;
+  }
+
+  /** @returns {boolean} whether `data` was the clock's block. */
+  fromSave(data) {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    if (data.length !== 16 || view.getUint32(0, true) !== SAVE_MAGIC) return false;
+    this.control = view.getUint8(4);
+    this.offset = view.getFloat64(8, true);
+    return true;
+  }
 }

@@ -81,6 +81,11 @@ export class Bus {
     this.biosLatch = s.u32(this.biosLatch >>> 0) | 0;
     this.waitControl = s.u16(this.waitControl);
     this.setWaitControl(this.waitControl);
+    for (const flag of ['branched', 'nonseq', 'pfActive']) this[flag] = s.bool(this[flag]);
+    this.pfHead = s.i32(this.pfHead);
+    this.pfCount = s.u8(this.pfCount);
+    this.pfCountdown = s.f64(this.pfCountdown);
+    this.pfTime = s.f64(this.pfTime);
   }
 
   /** WAITCNT: wait states of the ROM areas and SRAM, and the prefetch buffer. */
@@ -121,15 +126,7 @@ export class Bus {
    * two opcodes ahead; after a jump the pipeline refills first (2S + 1N in
    * all), after a data access the fetch is non-sequential.
    */
-  #fetchCycles(address, region, n, s, width) {
-    if (region >= Region.ROM0 && region <= Region.ROM2_HI) {
-      if (this.prefetch) {
-        this.#prefetchFetch(address, n, s, width);
-        return;
-      }
-      // The cartridge bus restarts at each 128 KB block.
-      if ((address & 0x1ffff) === 0) this.nonseq = true;
-    }
+  #fetchCycles(n, s) {
     if (this.branched) {
       this.branched = false;
       this.nonseq = false;
@@ -162,7 +159,7 @@ export class Bus {
       return;
     }
     this.nonseq = false;
-    const capacity = 16 / width;
+    const capacity = width === 2 ? 8 : 4;
     let count = this.pfCount;
     let countdown = this.pfCountdown - (this.cycles - this.pfTime);
     while (countdown <= 0 && count < capacity) {
@@ -185,26 +182,63 @@ export class Bus {
     }
   }
 
+  /** Cartridge opcode fetches (cycles, then the opcode). */
+  #romFetchCycles(address, region, n, s, width) {
+    if (this.prefetch) this.#prefetchFetch(address, n, s, width);
+    else {
+      // The cartridge bus restarts at each 128 KB block.
+      if ((address & 0x1ffff) === 0) this.nonseq = true;
+      this.#fetchCycles(n, s);
+    }
+  }
+
   fetch16(address) {
     const region = (address >>> 24) & 0xf;
-    this.#fetchCycles(address, region, this.n16[region], this.s16[region], 2);
+    if (region >= Region.ROM0 && region <= Region.ROM2_HI) {
+      this.#romFetchCycles(address, region, this.n16[region], this.s16[region], 2);
+      const offset = address & 0x1fffffe;
+      if (offset < this.romSize && this.gpio === null && region !== Region.ROM2_HI) return this.rom16[offset >> 1];
+      return this.#readRom16(address);
+    }
+    this.#fetchCycles(this.n16[region], this.s16[region]);
     if (region === Region.BIOS) {
-      // The pipeline has fetched ahead: that is what the latch holds.
-      const ahead = this.bios16[((address + 4) & 0x3fff) >> 1];
-      this.biosLatch = ahead | (ahead << 16);
-      return this.bios16[(address & 0x3fff) >> 1];
+      // BIOS reads from outside return the last opcode it fetched.
+      const op = this.bios16[(address & 0x3fff) >> 1];
+      this.biosLatch = op | (op << 16);
+      return op;
     }
     return this.#read16(address);
   }
 
   fetch32(address) {
     const region = (address >>> 24) & 0xf;
-    this.#fetchCycles(address, region, this.n32[region], this.s32[region], 4);
+    if (region >= Region.ROM0 && region <= Region.ROM2_HI) {
+      this.#romFetchCycles(address, region, this.n32[region], this.s32[region], 4);
+      const offset = address & 0x1fffffc;
+      if (offset < this.romSize && this.gpio === null && region !== Region.ROM2_HI) return this.rom32[offset >> 2];
+      return this.#read32(address & ~3);
+    }
+    this.#fetchCycles(this.n32[region], this.s32[region]);
     if (region === Region.BIOS) {
-      this.biosLatch = this.bios32[((address + 8) & 0x3fff) >> 2];
-      return this.bios32[(address & 0x3fff) >> 2];
+      this.biosLatch = this.bios32[(address & 0x3fff) >> 2];
+      return this.biosLatch;
     }
     return this.#read32(address);
+  }
+
+  /** Opcodes the pipeline reads again after a jump (their cycles are counted by the next fetch). */
+  peekCode16(address) {
+    const region = (address >>> 24) & 0xf;
+    if (region === Region.BIOS) return this.bios16[(address & 0x3fff) >> 1];
+    if (region === Region.ROM2_HI && this.backup.eeprom) return 0;
+    return this.#read16(address & ~1);
+  }
+
+  peekCode32(address) {
+    const region = (address >>> 24) & 0xf;
+    if (region === Region.BIOS) return this.bios32[(address & 0x3fff) >> 2];
+    if (region === Region.ROM2_HI && this.backup.eeprom) return 0;
+    return this.#read32(address & ~3);
   }
 
   // --- Data accesses ------------------------------------------------------------
