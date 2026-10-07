@@ -432,14 +432,30 @@ so short taps are never lost.
 ## Roadmap
 
 Done: Game Boy and Game Boy Color (with palettes, color correction, Super
-Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core,
-input mapping, performance stats, the renderer setting, the PWA, video
-effects and scalers (ghosting, sharpen, outlines, xBR, LCD grid, CRT),
-sound effects (pitch, low/high pass, bass, echo, mono), the memory viewer/editor with cheat search (Settings → Tools), the GBA BIOS file
-option, rewind, library backup/restore and video recording.
+Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core
+(with its cartridge sensors and an optional BIOS file), input mapping,
+performance stats, the renderer setting, the PWA, video effects and scalers
+(ghosting, sharpen, outlines, xBR, LCD grid, CRT), sound effects (pitch,
+low/high pass, bass, echo, mono), the memory viewer/editor with cheat search
+(Settings → Tools), rewind, library backup/restore and video recording.
 
-1. GBA follow-ups: idle-loop detection (speed on slow phones), link cable.
-2. A WebGPU renderer (renderers are separate modules in `src/video/`; the
-   Renderer setting picks Auto / WebGL / Canvas 2D today).
-3. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
+Not done yet:
+
+1. **WebGPU renderer**: a `src/video/webgpu-renderer.js` with the same
+   interface as the WebGL one, offered by the Renderer setting. Every scaler
+   and effect in `filters.js` has to be ported to WGSL, and WebGPU starts
+   asynchronously (`requestAdapter`), while `Display` creates renderers
+   synchronously today. Deferred: no visible gain over WebGL2 for frames
+   this small.
+2. **GBA idle-loop detection** (speed on slow phones): spot loops that only
+   poll memory or I/O (no writes, same registers each pass) and skip ahead
+   to the next event. Deferred because skipping can break timing: values
+   that change without an event (timer counters) must not be skipped over,
+   and mGBA's timing tests must keep passing. Most games already wait with
+   `VBlankIntrWait`, which halts.
+3. **GBA link cable**: two GBA cores run in lockstep (like `LinkedGameBoys`)
+   with the SIO multiplayer, normal and UART modes between them, and the
+   link dialog offering GBA games. Multiboot (a game sent over the cable)
+   would follow. Deferred: large, and few games need it.
+4. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
    effects (`AudioOutput.setEffects`).
