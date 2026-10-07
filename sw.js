@@ -18,6 +18,7 @@ const FILES = [
   'src/app/settings.js',
   'src/audio/audio-output.js',
   'src/audio/audio-processor.js',
+  'src/audio/pitch-shifter.js',
   'src/audio/resampler.js',
   'src/core/buttons.js',
   'src/core/gb/apu.js',

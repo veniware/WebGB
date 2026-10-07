@@ -5,12 +5,21 @@ const STORAGE_KEY = 'webgb.settings';
 export const DEFAULT_SETTINGS = Object.freeze({
   filter: 'sharp-bilinear',
   dedither: false,
+  // Effects (WebGL): LCD ghosting (motion blur), sharpening, outlines (edge detection).
+  ghosting: false,
+  sharpen: false,
+  outlines: false,
   zoom: 'fit',
   volume: 0.8,
   // 'auto' (WebGL when available), 'webgl' or 'canvas'.
   renderer: 'auto',
   // Status bar: emulated fps, speed and time per frame.
   perfStats: false,
+  // Sound effects: pitch in semitones, filter cutoffs in Hz (0: off), echo preset.
+  audioPitch: 0,
+  audioLowpass: 0,
+  audioHighpass: 0,
+  audioEcho: 'off',
   // Changed controls (see src/input/bindings.js); null: the defaults.
   keyBindings: null,
   padBindings: null,

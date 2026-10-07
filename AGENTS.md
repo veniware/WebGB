@@ -121,13 +121,15 @@ src/core/
                         counter in battery RAM, save states
 src/video/
   display.js            Canvas sizing (zoom, devicePixelRatio), fullscreen
-  webgl-renderer.js     WebGL2 renderer, one shader program per filter
-  canvas-renderer.js    2D-canvas fallback
-  filters.js            Filter registry and GLSL (add filters here)
+  webgl-renderer.js     WebGL2 renderer: effect passes, then one scaler program
+  canvas-renderer.js    2D-canvas fallback (no effects)
+  filters.js            Scaler registry and effect GLSL (add filters here)
   thumbnail.js          Frame -> PNG blob for snapshot thumbnails
 src/audio/
-  audio-output.js       AudioContext + worklet node, batching, autoplay unlock
-  audio-processor.js    AudioWorklet processor (audio thread)
+  audio-output.js       AudioContext + worklet node, batching, autoplay unlock,
+                        sound effects chain
+  audio-processor.js    AudioWorklet processors (audio thread): player, pitch
+  pitch-shifter.js      Pitch shifter DSP (two-tap delay line)
   resampler.js          Ring buffer + resampler + dynamic rate control
 src/input/
   input-manager.js      Merges sources; cancels opposite D-pad directions
@@ -317,6 +319,19 @@ other versions are refused.
 - In-game saves are written when they change (checked every 2 s, on tab hide
   and on pagehide).
 
+### Video and sound effects
+
+- **Video** (WebGL only): a new frame goes through passes at the console's
+  resolution, LCD ghosting (blends with the previous output, ping-pong
+  render targets, advances only on new frames), then one pass for
+  de-dither / sharpen / outlines; the scaler (`FILTERS`, e.g. "Smooth edges
+  (xBR)") draws the result at screen size. Redraws without a new frame reuse
+  the passes' output.
+- **Sound:** emulator worklet -> pitch shifter (worklet, when not 0) ->
+  high pass -> low pass (BiquadFilters) -> echo (delay with feedback, dry +
+  wet) -> volume. `AudioOutput.setEffects()` rebuilds the chain; settings
+  `audioPitch`/`audioLowpass`/`audioHighpass`/`audioEcho`.
+
 ### Input timing
 
 Inputs report buttons pressed since the last poll even if already released,
@@ -363,7 +378,9 @@ so short taps are never lost.
 
 Done: Game Boy and Game Boy Color (with palettes, color correction, Super
 Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core,
-input mapping, performance stats, the renderer setting and the PWA.
+input mapping, performance stats, the renderer setting, the PWA, video
+effects (ghosting, sharpen, outlines, xBR) and sound effects (pitch, low/high
+pass, echo).
 
 1. GBA follow-ups: optional user BIOS file in the settings, idle-loop
    detection (speed on slow phones), link cable, solar sensor (Boktai),
@@ -372,9 +389,7 @@ input mapping, performance stats, the renderer setting and the PWA.
    of the running game).
 3. A WebGPU renderer (renderers are separate modules in `src/video/`; the
    Renderer setting picks Auto / WebGL / Canvas 2D today).
-4. More video filters: motion blur (LCD ghosting), smooth edges (xBR/HQx
-   style), edge detection, sharpening, ... (shaders in `src/video/filters.js`).
-5. Audio filters: low pass, high pass, pitch shifting, echo, ... (Web Audio
-   nodes after the worklet in `src/audio/`).
-6. Possibly later: rewind, audio/video recording, full backup export/import
+4. More video filters (HQx, CRT, LCD grid, ...; `src/video/filters.js`) and
+   sound effects (`AudioOutput.setEffects`).
+5. Possibly later: rewind, audio/video recording, full backup export/import
    of the library.

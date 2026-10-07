@@ -15,6 +15,10 @@ import { createModals } from './modals.js';
 import { createSettingsDialog } from './settings-dialog.js';
 
 const FLASH_DURATION = 4000;
+// Display effects in the settings (see Display.setEffects).
+const EFFECTS = ['ghosting', 'sharpen', 'outlines'];
+// Sound effect settings -> AudioOutput.setEffects keys.
+const AUDIO_EFFECTS = { audioPitch: 'pitch', audioLowpass: 'lowpass', audioHighpass: 'highpass', audioEcho: 'echo' };
 
 const $ = (id) => document.getElementById(id);
 
@@ -103,9 +107,13 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
       updateSettings({ [key]: value });
       if (key === 'renderer') {
         display.setRenderer(value);
-        el.dedither.disabled = !display.supportsShaders;
+        updateShaderControls();
       } else if (key === 'perfStats') {
         el.fps.textContent = '';
+      } else if (EFFECTS.includes(key)) {
+        display.setEffects({ [key]: value });
+      } else if (key in AUDIO_EFFECTS) {
+        audio.setEffects({ [AUDIO_EFFECTS[key]]: value });
       } else {
         emulator.configure(coreOptions());
       }
@@ -263,8 +271,15 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
     updateSettings({ filter: el.filter.value });
   });
 
+  display.setEffects(Object.fromEntries(EFFECTS.map((key) => [key, settings[key]])));
   el.dedither.checked = settings.dedither;
-  el.dedither.disabled = !display.supportsShaders;
+  // Effects need WebGL.
+  function updateShaderControls() {
+    for (const control of [el.dedither, ...document.querySelectorAll('[data-shaders]')]) {
+      control.disabled = !display.supportsShaders;
+    }
+  }
+  updateShaderControls();
   display.setDedither(settings.dedither);
   el.dedither.addEventListener('change', () => {
     display.setDedither(el.dedither.checked);
@@ -281,6 +296,7 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
 
   el.volume.value = String(Math.round(settings.volume * 100));
   audio.setVolume(settings.volume);
+  audio.setEffects(Object.fromEntries(Object.entries(AUDIO_EFFECTS).map(([key, effect]) => [effect, settings[key]])));
   el.volume.addEventListener('input', () => audio.setVolume(Number(el.volume.value) / 100));
   el.volume.addEventListener('change', () => updateSettings({ volume: Number(el.volume.value) / 100 }));
 

@@ -1,10 +1,16 @@
 import { Emitter } from '../app/emitter.js';
 
 const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'keydown'];
+// Echo presets: delay (s), feedback and level of the echoes.
+const ECHOES = {
+  room: { delay: 0.08, feedback: 0.3, wet: 0.3 },
+  hall: { delay: 0.25, feedback: 0.45, wet: 0.35 },
+};
 
 /**
  * Plays core audio through an AudioWorklet. Samples pushed during a frame
- * are batched and posted to the audio thread once per flush().
+ * are batched and posted to the audio thread once per flush(). Optional
+ * effects (see setEffects) are Web Audio nodes between it and the volume.
  *
  * Events: 'state' (AudioContext state string).
  */
@@ -17,6 +23,9 @@ export class AudioOutput extends Emitter {
   #length = 0;
   #rate = 48000;
   #volume = 1;
+  #effects = { pitch: 0, highpass: 0, lowpass: 0, echo: 'off' };
+  // Effect nodes currently connected.
+  #chain = [];
 
   /** True while the browser blocks playback until the next user gesture. */
   get blocked() {
@@ -46,7 +55,8 @@ export class AudioOutput extends Emitter {
         });
         this.#gain = context.createGain();
         this.#gain.gain.value = this.#volume;
-        this.#node.connect(this.#gain).connect(context.destination);
+        this.#gain.connect(context.destination);
+        this.#connect();
         return true;
       })
       .catch((err) => {
@@ -72,6 +82,62 @@ export class AudioOutput extends Emitter {
   setVolume(volume) {
     this.#volume = volume;
     if (this.#gain) this.#gain.gain.value = volume;
+  }
+
+  /**
+   * @param {{ pitch?: number, highpass?: number, lowpass?: number, echo?: 'off' | 'room' | 'hall' }} effects
+   *   pitch in semitones; filter cutoffs in Hz (0: off).
+   */
+  setEffects(effects) {
+    Object.assign(this.#effects, effects);
+    this.#connect();
+  }
+
+  /** (Re)builds the chain: player -> pitch -> high pass -> low pass -> echo -> volume. */
+  #connect() {
+    const context = this.#context;
+    if (!this.#node) return;
+    this.#node.disconnect();
+    for (const node of this.#chain) node.disconnect();
+    this.#chain = [];
+    const { pitch, highpass, lowpass, echo } = this.#effects;
+    let last = this.#node;
+    const add = (node) => {
+      last.connect(node);
+      this.#chain.push(node);
+      last = node;
+    };
+    if (pitch) {
+      const shifter = new AudioWorkletNode(context, 'pitch-shift', { outputChannelCount: [2] });
+      shifter.parameters.get('ratio').value = 2 ** (pitch / 12);
+      add(shifter);
+    }
+    for (const [type, frequency] of [['highpass', highpass], ['lowpass', lowpass]]) {
+      if (!frequency) continue;
+      const filter = context.createBiquadFilter();
+      filter.type = type;
+      filter.frequency.value = frequency;
+      add(filter);
+    }
+    const preset = ECHOES[echo];
+    if (preset) {
+      const input = context.createGain();
+      add(input);
+      const delay = context.createDelay(1);
+      delay.delayTime.value = preset.delay;
+      const feedback = context.createGain();
+      feedback.gain.value = preset.feedback;
+      const wet = context.createGain();
+      wet.gain.value = preset.wet;
+      const mix = context.createGain();
+      input.connect(mix);
+      input.connect(delay);
+      delay.connect(feedback).connect(delay);
+      delay.connect(wet).connect(mix);
+      this.#chain.push(delay, feedback, wet, mix);
+      last = mix;
+    }
+    last.connect(this.#gain);
   }
 
   /** Queues interleaved stereo samples produced at `rate`. */

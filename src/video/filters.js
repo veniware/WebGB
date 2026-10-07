@@ -1,7 +1,11 @@
-// Display filters. Each is a single WebGL2 fragment shader; `canvas` names
-// the closest option for the 2D-canvas fallback ('nearest' or 'smooth').
-// To add a filter, append an entry: its `main` can use source(), bilinear(),
-// vUV, uSrcSize and uDstSize from the prelude.
+// Display filters (scalers) and effects, as WebGL2 shaders.
+//
+// A new frame goes through effect passes at the console's resolution (LCD
+// ghosting, then de-dither / sharpen / outlines), then a scaler draws it at
+// the screen's size. Scalers are single fragment shaders; `canvas` names the
+// closest option for the 2D-canvas fallback ('nearest' or 'smooth'). To add a
+// scaler, append an entry: its `main` can use source(), bilinear(), vUV,
+// uSrcSize and uDstSize from the prelude.
 
 export const VERTEX_SHADER = `#version 300 es
 out vec2 vUV;
@@ -12,33 +16,20 @@ void main() {
   gl_Position = vec4(pos, 0.0, 1.0);
 }`;
 
-const PRELUDE = `#version 300 es
+const COMMON = `#version 300 es
 precision highp float;
 uniform sampler2D uTexture;
 uniform vec2 uSrcSize;
-uniform vec2 uDstSize;
-uniform bool uDedither;
 in vec2 vUV;
 out vec4 fragColor;
 
-vec3 texel(ivec2 p) {
+vec3 source(ivec2 p) {
   return texelFetch(uTexture, clamp(p, ivec2(0), ivec2(uSrcSize) - 1), 0).rgb;
 }
+`;
 
-// Source pixel, optionally de-dithered: checkerboards and 1px stripes are
-// blended into flat color, single-pixel lines are left alone.
-vec3 source(ivec2 p) {
-  vec3 c = texel(p);
-  if (!uDedither) return c;
-  vec3 l = texel(p + ivec2(-1, 0)), r = texel(p + ivec2(1, 0));
-  vec3 u = texel(p + ivec2(0, -1)), d = texel(p + ivec2(0, 1));
-  bool h = l == r && l != c && texel(p + ivec2(-2, 0)) == c && texel(p + ivec2(2, 0)) == c;
-  bool v = u == d && u != c && texel(p + ivec2(0, -2)) == c && texel(p + ivec2(0, 2)) == c;
-  if (h && v) return mix(c, (l + u) * 0.5, 0.5);
-  if (h) return mix(c, l, 0.5);
-  if (v) return mix(c, u, 0.5);
-  return c;
-}
+const PRELUDE = `${COMMON}
+uniform vec2 uDstSize;
 
 // Bilinear sample at a position in texel units (texel centers at +0.5).
 vec3 bilinear(vec2 pos) {
@@ -50,6 +41,59 @@ vec3 bilinear(vec2 pos) {
   return mix(top, bottom, f.y);
 }
 `;
+
+/** LCD ghosting: each frame blends with what the screen showed before. */
+export const GHOSTING_SHADER = `${COMMON}
+uniform sampler2D uPrevious;
+uniform float uKeep;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  fragColor = vec4(mix(source(p), texelFetch(uPrevious, p, 0).rgb, uKeep), 1.0);
+}`;
+
+/** Effects at the console's resolution: de-dither, sharpen, outlines. */
+export const EFFECTS_SHADER = `${COMMON}
+uniform bool uDedither;
+uniform bool uSharpen;
+uniform bool uOutlines;
+
+// Checkerboards and 1px stripes are blended into flat color; single-pixel
+// lines are left alone.
+vec3 dedithered(ivec2 p) {
+  vec3 c = source(p);
+  vec3 l = source(p + ivec2(-1, 0)), r = source(p + ivec2(1, 0));
+  vec3 u = source(p + ivec2(0, -1)), d = source(p + ivec2(0, 1));
+  bool h = l == r && l != c && source(p + ivec2(-2, 0)) == c && source(p + ivec2(2, 0)) == c;
+  bool v = u == d && u != c && source(p + ivec2(0, -2)) == c && source(p + ivec2(0, 2)) == c;
+  if (h && v) return mix(c, (l + u) * 0.5, 0.5);
+  if (h) return mix(c, l, 0.5);
+  if (v) return mix(c, u, 0.5);
+  return c;
+}
+
+float luma(vec3 c) {
+  return dot(c, vec3(0.299, 0.587, 0.114));
+}
+
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec3 c = uDedither ? dedithered(p) : source(p);
+  if (uSharpen) {
+    // Unsharp mask over the four neighbors.
+    vec3 around = source(p + ivec2(-1, 0)) + source(p + ivec2(1, 0)) + source(p + ivec2(0, -1)) + source(p + ivec2(0, 1));
+    c = clamp(c + (c * 4.0 - around) * 0.2, 0.0, 1.0);
+  }
+  if (uOutlines) {
+    // Sobel on brightness: dark lines where it changes sharply.
+    float tl = luma(source(p + ivec2(-1, -1))), t = luma(source(p + ivec2(0, -1))), tr = luma(source(p + ivec2(1, -1)));
+    float l = luma(source(p + ivec2(-1, 0))), r = luma(source(p + ivec2(1, 0)));
+    float bl = luma(source(p + ivec2(-1, 1))), b = luma(source(p + ivec2(0, 1))), br = luma(source(p + ivec2(1, 1)));
+    float gx = tr + 2.0 * r + br - tl - 2.0 * l - bl;
+    float gy = bl + 2.0 * b + br - tl - 2.0 * t - tr;
+    c *= 1.0 - 0.75 * smoothstep(0.35, 1.0, length(vec2(gx, gy)));
+  }
+  fragColor = vec4(c, 1.0);
+}`;
 
 export const FILTERS = [
   {
@@ -99,6 +143,45 @@ export const FILTERS = [
       }
       fragColor = vec4(o, 1.0);`,
   },
+  {
+    id: 'xbr',
+    name: 'Smooth edges (xBR)',
+    canvas: 'smooth',
+    // xBR-style: where an edge runs diagonally across a pixel's corner (it is
+    // more continuous along that diagonal than across it), the corner takes
+    // the neighbor's color along an antialiased 45-degree line.
+    helpers: `
+      float dist(vec3 a, vec3 b) {
+        vec3 d = abs(a - b);
+        return d.r * 0.299 + d.g * 0.587 + d.b * 0.114;
+      }
+
+      // The corner of pixel p towards (dx, dy); f: position in the pixel, 0..1 towards that corner.
+      vec3 corner(ivec2 p, ivec2 dx, ivec2 dy, vec2 f, vec3 color) {
+        vec3 e = source(p), fr = source(p + dx), h = source(p + dy), i = source(p + dx + dy);
+        if (e == fr || e == h) return color;
+        vec3 c = source(p + dx - dy), g = source(p - dx + dy);
+        vec3 f4 = source(p + 2 * dx), h5 = source(p + 2 * dy);
+        vec3 d = source(p - dx), b = source(p - dy);
+        vec3 i5 = source(p + dx + 2 * dy), i4 = source(p + 2 * dx + dy);
+        float along = dist(e, c) + dist(e, g) + dist(i, f4) + dist(i, h5) + 4.0 * dist(h, fr);
+        float across = dist(h, d) + dist(h, i5) + dist(fr, i4) + dist(fr, b) + 4.0 * dist(e, i);
+        if (along >= across) return color;
+        vec3 edge = dist(e, fr) <= dist(e, h) ? fr : h;
+        float w = fwidth(f.x + f.y);
+        return mix(color, edge, smoothstep(1.5 - w, 1.5 + w, f.x + f.y));
+      }`,
+    main: `
+      vec2 pos = vUV * uSrcSize;
+      ivec2 p = ivec2(floor(pos));
+      vec2 f = fract(pos);
+      vec3 o = source(p);
+      o = corner(p, ivec2(1, 0), ivec2(0, 1), f, o);
+      o = corner(p, ivec2(-1, 0), ivec2(0, 1), vec2(1.0 - f.x, f.y), o);
+      o = corner(p, ivec2(1, 0), ivec2(0, -1), vec2(f.x, 1.0 - f.y), o);
+      o = corner(p, ivec2(-1, 0), ivec2(0, -1), 1.0 - f, o);
+      fragColor = vec4(o, 1.0);`,
+  },
 ];
 
 export function getFilter(id) {
@@ -106,5 +189,5 @@ export function getFilter(id) {
 }
 
 export function fragmentShader(filter) {
-  return `${PRELUDE}\nvoid main() {\n${filter.main}\n}`;
+  return `${PRELUDE}\n${filter.helpers ?? ''}\nvoid main() {\n${filter.main}\n}`;
 }

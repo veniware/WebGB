@@ -65,10 +65,12 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
   clock); dropping a `.sav` onto the page imports it for the running game.
 - **Snapshots:** save states that you can return to later. Saved games and
   snapshots show a screenshot from when they were made.
-- **Video:** WebGL2 renderer with filters (Sharp, Nearest, Smooth, Scale2x)
-  and an optional de-dither pass, zoom (Fit or 1×–6×) and fullscreen. Falls
-  back to a 2D canvas without WebGL2.
-- **Audio:** AudioWorklet output with dynamic rate control to avoid crackles.
+- **Video:** WebGL2 renderer with filters (Sharp, Nearest, Smooth, Scale2x,
+  Smooth edges (xBR)), de-dither and effects in Settings (LCD ghosting,
+  sharpen, outlines), zoom (Fit or 1×–6×) and fullscreen. Falls back to a 2D
+  canvas without WebGL2.
+- **Audio:** AudioWorklet output with dynamic rate control to avoid crackles;
+  sound effects in Settings (pitch, low pass, high pass, echo).
 - **Input:** keyboard, gamepads (Gamepad API) and on-screen touch controls;
   keys and gamepad buttons can be changed in Settings → Controls.
 - **Install / offline:** WebGB is a PWA: add it to the home screen (or

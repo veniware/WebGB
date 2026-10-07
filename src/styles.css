@@ -225,6 +225,11 @@ body.dragging .drop-overlay {
   gap: 8px;
 }
 
+.fields .checks {
+  display: grid;
+  gap: 6px;
+}
+
 @media (max-width: 480px) {
   .fields {
     grid-template-columns: 1fr;

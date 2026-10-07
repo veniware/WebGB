@@ -20,6 +20,7 @@ export class Display {
     this.renderer = createRenderer(canvas, renderer);
     this.filter = undefined;
     this.dedither = false;
+    this.effects = {};
     // The last frame drawn, for redrawing with another renderer.
     this.frame = null;
     this.zoom = 'fit';
@@ -51,6 +52,7 @@ export class Display {
     this.renderer = createRenderer(canvas, kind);
     this.renderer.setFilter(this.filter);
     this.renderer.setDedither(this.dedither);
+    this.renderer.setEffects(this.effects);
     if (this.width) this.renderer.setSourceSize(this.width, this.height);
     this.layout();
     if (this.frame) this.renderer.draw(this.frame);
@@ -78,6 +80,13 @@ export class Display {
   setDedither(enabled) {
     this.dedither = enabled;
     this.renderer.setDedither(enabled);
+    this.renderer.draw();
+  }
+
+  /** @param {{ ghosting?: boolean, sharpen?: boolean, outlines?: boolean }} effects  See filters.js. */
+  setEffects(effects) {
+    Object.assign(this.effects, effects);
+    this.renderer.setEffects(this.effects);
     this.renderer.draw();
   }
 

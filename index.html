@@ -150,9 +150,29 @@
       <div class="fields">
         <label for="set-renderer">Renderer</label>
         <select id="set-renderer" data-setting="renderer"></select>
+        <label for="set-ghosting">Effects</label>
+        <div class="checks">
+          <label class="check"><input id="set-ghosting" type="checkbox" data-setting="ghosting" data-shaders>
+            LCD ghosting (motion blur)</label>
+          <label class="check"><input type="checkbox" data-setting="sharpen" data-shaders> Sharpen</label>
+          <label class="check"><input type="checkbox" data-setting="outlines" data-shaders> Outlines (edge detection)</label>
+        </div>
         <label for="set-perf-stats">Performance</label>
         <label class="check"><input id="set-perf-stats" type="checkbox" data-setting="perfStats">
           Show frame rate, speed and time per frame</label>
+      </div>
+    </section>
+    <section>
+      <header><h3>Sound</h3></header>
+      <div class="fields">
+        <label for="set-audio-pitch">Pitch</label>
+        <select id="set-audio-pitch" data-setting="audioPitch"></select>
+        <label for="set-audio-lowpass">Low pass (muffle)</label>
+        <select id="set-audio-lowpass" data-setting="audioLowpass"></select>
+        <label for="set-audio-highpass">High pass (thin)</label>
+        <select id="set-audio-highpass" data-setting="audioHighpass"></select>
+        <label for="set-audio-echo">Echo</label>
+        <select id="set-audio-echo" data-setting="audioEcho"></select>
       </div>
     </section>
     <section>

@@ -1,6 +1,6 @@
 import { getFilter } from './filters.js';
 
-/** Fallback renderer for browsers without WebGL2: nearest or smooth scaling only. */
+/** Fallback renderer for browsers without WebGL2: nearest or smooth scaling only, no effects. */
 export class CanvasRenderer {
   supportsShaders = false;
 
@@ -24,6 +24,8 @@ export class CanvasRenderer {
   }
 
   setDedither() {}
+
+  setEffects() {}
 
   resize(width, height) {
     this.canvas.width = width;

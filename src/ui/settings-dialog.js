@@ -7,6 +7,15 @@ const CHOICES = {
     ['webgl', 'WebGL'],
     ['canvas', '2D canvas'],
   ],
+  audioPitch: Array.from({ length: 25 }, (_, i) => {
+    const semitones = i - 12;
+    const size = Math.abs(semitones);
+    const sign = semitones > 0 ? '+' : '−';
+    return [semitones, semitones ? `${sign}${size} semitone${size > 1 ? 's' : ''}${size === 12 ? ' (an octave)' : ''}` : 'Normal'];
+  }),
+  audioLowpass: [[0, 'Off'], [8000, '8 kHz'], [4000, '4 kHz'], [2000, '2 kHz'], [1000, '1 kHz']],
+  audioHighpass: [[0, 'Off'], [100, '100 Hz'], [300, '300 Hz'], [1000, '1 kHz']],
+  audioEcho: [['off', 'Off'], ['room', 'Room'], ['hall', 'Hall']],
   gbPalette: [
     ['auto', 'Automatic'],
     ['gbc', 'As on a Game Boy Color'],
@@ -53,7 +62,8 @@ export function createSettingsDialog({ dialog, modals, settings, onChange }) {
     const key = control.dataset.setting;
     if (control.tagName === 'SELECT') control.append(...options(CHOICES[key] ?? []));
     control.addEventListener('change', () => {
-      const value = control.type === 'checkbox' ? control.checked : control.value;
+      const value = control.type === 'checkbox' ? control.checked
+        : typeof settings[key] === 'number' ? Number(control.value) : control.value;
       onChange(key, value);
     });
   }
