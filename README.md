@@ -65,6 +65,9 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
   to continue (or start a new game). Saved games can be imported and exported
   as `.sav` files, compatible with other emulators (including the MBC3
   clock); dropping a `.sav` onto the page imports it for the running game.
+- **Backup:** Library → Back up… saves the whole library (games, saved
+  games, snapshots, settings) as one zip; Restore… brings it back, e.g. on
+  another device.
 - **Snapshots:** save states that you can return to later. Saved games and
   snapshots show a screenshot from when they were made.
 - **Video:** WebGL2 renderer with filters (Sharp, Nearest, Smooth, Scale2x,

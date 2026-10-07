@@ -53,7 +53,7 @@
   <main id="play-area" class="play-area">
     <div id="stage" class="stage empty">
       <canvas id="screen"></canvas>
-      <p class="hint">Drop a ROM here (.gb, .gbc, .gba or .zip)<br>or use Open ROM or Library.</p>
+      <p class="hint">Drop a ROM here (.gb, .gbc, .gba or .zip) <br>or use Open ROM or Library.</p>
     </div>
 
     <div id="touch-controls" class="touch-controls">
@@ -90,7 +90,13 @@
     </header>
     <p class="empty" data-empty>No ROMs yet. Add some, or drop them onto the page.</p>
     <ul class="rows" data-list></ul>
-    <footer data-usage></footer>
+    <footer class="split">
+      <span data-usage></span>
+      <span class="actions">
+        <button type="button" data-backup>Back up…</button>
+        <button type="button" data-restore>Restore…</button>
+      </span>
+    </footer>
   </dialog>
 
   <dialog id="game" class="panel">

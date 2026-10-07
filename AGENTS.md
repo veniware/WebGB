@@ -154,6 +154,7 @@ src/storage/
   saves.js              Saved games (battery RAM), several per ROM
   snapshots.js          Snapshot metadata and states (separate stores)
   files.js              Other user files by name (the GBA BIOS)
+  backup.js             Library backup/restore as a zip (manifest + files)
 src/ui/
   ui.js                 Toolbar, opening files, drag-and-drop, status bar, hotkeys
   library-dialog.js     Library: play, export, delete ROMs; add ROMs
@@ -168,6 +169,7 @@ src/ui/
   dom.js                h() element helper, formatting, downloads, file picker
   files.js              Accepted file types and limits
 src/util/crc32.js
+src/util/zip-writer.js  Stored-only zip writer (backups)
 tools/serve.js          Dev static server
 tools/fetch-test-roms.js  Downloads the test ROM collection into tests/roms/
 tests/                  node:test tests (+ helpers.js for fake ROMs/zips, png.js
@@ -322,6 +324,12 @@ other versions are refused.
   one, `Emulator.#watchSaves`).
 - Deleting a ROM deletes its saved games and snapshots.
 - Exported saved games are raw `.sav` files, compatible with other emulators.
+- **Backup** (Library → Back up…): one zip with `webgb-backup.json` (ROM,
+  saved game and snapshot metadata, settings, `format: 1`) and the files it
+  names. Restoring adds what's missing (ROMs by key, saved games by romKey +
+  created + name, snapshots by romKey + created), remaps snapshot `saveId`s,
+  and offers to take the settings too (page reload). Bump `FORMAT` in
+  `backup.js` when the manifest changes, and keep reading older formats.
 
 ### Identities and storage
 
@@ -416,5 +424,4 @@ pass, echo) and the memory viewer/editor (Settings → Tools).
    Renderer setting picks Auto / WebGL / Canvas 2D today).
 4. More video filters (HQx, CRT, LCD grid, ...; `src/video/filters.js`) and
    sound effects (`AudioOutput.setEffects`).
-5. Possibly later: audio/video recording, full backup export/import of the
-   library.
+5. Possibly later: audio/video recording.

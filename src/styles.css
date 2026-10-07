@@ -201,6 +201,19 @@ body.dragging .drop-overlay {
   font-size: 12px;
 }
 
+.panel footer.split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel footer .actions {
+  display: flex;
+  gap: 8px;
+}
+
 .panel .empty {
   margin: 12px 0 0;
   color: var(--muted);

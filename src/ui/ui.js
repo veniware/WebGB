@@ -162,6 +162,17 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
     onPlay: (key) => selectRom(key).catch(reportError),
     onAdd: (files) => addRoms(files).then(reportAdded),
     onError: reportError,
+    settings,
+    onRestored: async ({ roms, saves, snapshots, settings: saved }) => {
+      const count = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
+      flash(`Restored ${count(roms, 'game')}, ${count(saves, 'saved game')} and ${count(snapshots, 'snapshot')}.`);
+      if (saved && JSON.stringify(saved) !== JSON.stringify(settings)
+        && confirm('Use the settings from the backup too? The page reloads.')) {
+        await emulator.stop();
+        saveSettings(saved);
+        location.reload();
+      }
+    },
   });
 
   // --- ROMs and saved-game files -----------------------------------------

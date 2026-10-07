@@ -1,11 +1,13 @@
+import { exportBackup, importBackup } from '../storage/backup.js';
 import { deleteRom, getRomData, listRoms } from '../storage/roms.js';
 import { listSaves } from '../storage/saves.js';
 import { listSnapshots } from '../storage/snapshots.js';
 import { baseName, downloadFile, formatDate, formatSize, h, pickFiles, SYSTEM_SHORT } from './dom.js';
-import { ROM_ACCEPT } from './files.js';
+import { BACKUP_ACCEPT, ROM_ACCEPT } from './files.js';
 
 /**
- * The ROM library: browse, play, export and delete ROMs.
+ * The ROM library: browse, play, export and delete ROMs; back up and
+ * restore everything (games, saved games, snapshots, settings).
  *
  * @param {{
  *   dialog: HTMLDialogElement,
@@ -14,9 +16,11 @@ import { ROM_ACCEPT } from './files.js';
  *   onPlay: (key: string) => void,
  *   onAdd: (files: File[]) => Promise<void>,
  *   onError: (err: Error) => void,
+ *   settings: object,
+ *   onRestored: (result: Awaited<ReturnType<typeof importBackup>>) => void,
  * }} deps
  */
-export function createLibraryDialog({ dialog, modals, emulator, onPlay, onAdd, onError }) {
+export function createLibraryDialog({ dialog, modals, emulator, onPlay, onAdd, onError, settings, onRestored }) {
   const list = dialog.querySelector('[data-list]');
   const empty = dialog.querySelector('[data-empty]');
   const usage = dialog.querySelector('[data-usage]');
@@ -82,6 +86,34 @@ export function createLibraryDialog({ dialog, modals, emulator, onPlay, onAdd, o
     await render().catch(onError);
   });
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
+
+  const backupButtons = [dialog.querySelector('[data-backup]'), dialog.querySelector('[data-restore]')];
+  /** Runs a backup task with the buttons disabled and `text` shown meanwhile. */
+  async function busy(text, task) {
+    backupButtons.forEach((button) => (button.disabled = true));
+    usage.textContent = text;
+    try {
+      await task();
+    } catch (err) {
+      onError(err);
+    } finally {
+      backupButtons.forEach((button) => (button.disabled = false));
+      await render().catch(onError);
+    }
+  }
+
+  backupButtons[0].addEventListener('click', () => busy('Backing up…', async () => {
+    await emulator.flushSave();
+    const blob = await exportBackup(settings);
+    downloadFile(blob, `webgb-backup-${new Date().toISOString().slice(0, 10)}.zip`);
+  }));
+  backupButtons[1].addEventListener('click', async () => {
+    const [file] = await pickFiles({ accept: BACKUP_ACCEPT });
+    if (!file) return;
+    await busy('Restoring…', async () => {
+      onRestored(await importBackup(new Uint8Array(await file.arrayBuffer())));
+    });
+  });
 
   return {
     async open() {
