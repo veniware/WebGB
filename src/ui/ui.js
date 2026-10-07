@@ -126,8 +126,10 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
       if (key === 'renderer') {
         // The recording follows the old canvas, which is replaced.
         stopRecording();
-        display.setRenderer(value);
-        updateShaderControls();
+        display.setRenderer(value).then((ok) => {
+          updateShaderControls();
+          if (!ok) flash(`WebGPU isn't available here; using ${display.rendererName}.`, true);
+        });
       } else if (key === 'rewind') {
         emulator.setRewind(value);
       } else if (key === 'perfStats') {
@@ -362,13 +364,17 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
 
   display.setEffects(Object.fromEntries(EFFECTS.map((key) => [key, settings[key]])));
   el.dedither.checked = settings.dedither;
-  // Effects need WebGL.
+  // Effects need WebGL or WebGPU.
   function updateShaderControls() {
     for (const control of [el.dedither, ...document.querySelectorAll('[data-shaders]')]) {
       control.disabled = !display.supportsShaders;
     }
   }
   updateShaderControls();
+  display.ready.then((ok) => {
+    updateShaderControls();
+    if (!ok) flash(`WebGPU isn't available here; using ${display.rendererName}.`, true);
+  });
   display.setDedither(settings.dedither);
   el.dedither.addEventListener('change', () => {
     display.setDedither(el.dedither.checked);

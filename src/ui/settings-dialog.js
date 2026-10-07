@@ -4,6 +4,7 @@ import { h } from './dom.js';
 const CHOICES = {
   renderer: [
     ['auto', 'Automatic'],
+    ['webgpu', 'WebGPU'],
     ['webgl', 'WebGL'],
     ['canvas', '2D canvas'],
   ],

@@ -1,7 +1,4 @@
-import { EFFECTS_SHADER, fragmentShader, getFilter, GHOSTING_SHADER, VERTEX_SHADER } from './filters.js';
-
-// LCD ghosting: how much of the previous picture stays each frame.
-const GHOSTING_KEEP = 0.5;
+import { EFFECTS_SHADER, fragmentShader, getFilter, GHOSTING_KEEP, GHOSTING_SHADER, VERTEX_SHADER } from './filters.js';
 
 /**
  * GPU renderer. Each new frame is uploaded to a texture, goes through the
@@ -10,6 +7,7 @@ const GHOSTING_KEEP = 0.5;
  */
 export class WebGLRenderer {
   supportsShaders = true;
+  name = 'WebGL';
   #programs = new Map();
 
   /** @returns {WebGLRenderer | null} */
@@ -66,6 +64,11 @@ export class WebGLRenderer {
     Object.assign(this.effects, effects);
     if (!this.effects.ghosting) this.ghostValid = false;
     this.dirty = true;
+  }
+
+  /** Frees the GPU context (browsers allow only a few at once). */
+  destroy() {
+    this.gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
 
   resize(width, height) {

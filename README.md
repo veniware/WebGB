@@ -72,10 +72,10 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
   another device.
 - **Snapshots:** save states that you can return to later. Saved games and
   snapshots show a screenshot from when they were made.
-- **Video:** WebGL2 renderer with filters (Sharp, Nearest, Smooth, Scale2x,
-  Smooth edges (xBR), LCD grid, CRT), de-dither and effects in Settings (LCD ghosting,
-  sharpen, outlines), zoom (Fit or 1×–6×) and fullscreen. Falls back to a 2D
-  canvas without WebGL2.
+- **Video:** WebGL2 renderer (or WebGPU, in Settings) with filters (Sharp,
+  Nearest, Smooth, Scale2x, Smooth edges (xBR), LCD grid, CRT), de-dither and
+  effects in Settings (LCD ghosting, sharpen, outlines), zoom (Fit or 1×–6×)
+  and fullscreen. Falls back to a 2D canvas without WebGL2.
 - **Audio:** AudioWorklet output with dynamic rate control to avoid crackles;
   sound effects in Settings (pitch, low pass, high pass, bass boost, echo,
   mono).
@@ -88,7 +88,7 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
   byte, step one frame at a time or let the game run. Its search finds
   values such as lives or coins and narrows them down as they change.
 - **Performance stats** (Settings): emulated frame rate, speed and time per
-  frame; the renderer (WebGL or 2D canvas) can be chosen too.
+  frame; the renderer (WebGL, WebGPU or 2D canvas) can be chosen too.
 - **Speed:** 1×–8×, plus hold-to-fast-forward.
 - **Recording:** Settings → Tools → Record video (or F9) saves the game's
   picture and sound as a video file.

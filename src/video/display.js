@@ -1,5 +1,6 @@
 import { CanvasRenderer } from './canvas-renderer.js';
 import { WebGLRenderer } from './webgl-renderer.js';
+import { WebGPURenderer } from './webgpu-renderer.js';
 
 /**
  * Owns the screen canvas: picks a renderer, sizes the canvas for the zoom
@@ -10,14 +11,15 @@ export class Display {
    * @param {HTMLCanvasElement} canvas
    * @param {HTMLElement} stage  Element the canvas is centered in.
    * @param {HTMLElement} [fullscreenTarget]  Element made fullscreen (defaults to the stage).
-   * @param {'auto' | 'webgl' | 'canvas'} [renderer]
+   * @param {'auto' | 'webgpu' | 'webgl' | 'canvas'} [renderer]  'auto': WebGL, or the 2D canvas without it.
    */
   constructor(canvas, stage, fullscreenTarget = stage, renderer = 'auto') {
     this.canvas = canvas;
     this.stage = stage;
     this.fullscreenTarget = fullscreenTarget;
-    this.rendererKind = renderer;
-    this.renderer = createRenderer(canvas, renderer);
+    // WebGPU starts asynchronously: WebGL draws until it is ready.
+    this.rendererKind = renderer === 'webgpu' ? 'auto' : renderer;
+    this.renderer = createRenderer(canvas, this.rendererKind);
     this.filter = undefined;
     this.dedither = false;
     this.effects = {};
@@ -28,6 +30,8 @@ export class Display {
     this.height = 0;
     new ResizeObserver(() => this.layout()).observe(stage);
     window.addEventListener('resize', () => this.layout());
+    /** Settles once the renderer asked for is in place: false if WebGPU isn't available. */
+    this.ready = renderer === 'webgpu' ? this.setRenderer('webgpu') : Promise.resolve(true);
   }
 
   get supportsShaders() {
@@ -35,21 +39,53 @@ export class Display {
   }
 
   get rendererName() {
-    return this.renderer.supportsShaders ? 'WebGL' : 'Canvas 2D';
+    return this.renderer.name;
   }
 
   /**
    * Switches renderer. A canvas keeps the kind of context it was first given,
-   * so a fresh one takes its place.
-   * @param {'auto' | 'webgl' | 'canvas'} kind
+   * so a fresh one takes its place. WebGPU starts asynchronously; until it is
+   * ready, and if it isn't available, the current renderer keeps drawing.
+   * @param {'auto' | 'webgpu' | 'webgl' | 'canvas'} kind
+   * @returns {Promise<boolean>} false when WebGPU was asked for but isn't available.
    */
-  setRenderer(kind) {
-    if (kind === this.rendererKind) return;
+  async setRenderer(kind) {
+    if (kind === this.rendererKind) return true;
     this.rendererKind = kind;
     const canvas = this.canvas.cloneNode(false);
+    if (kind !== 'webgpu') {
+      this.#use(canvas, createRenderer(canvas, kind));
+      return true;
+    }
+    const renderer = await WebGPURenderer.create(canvas);
+    if (this.rendererKind !== 'webgpu') {
+      // Another renderer was picked meanwhile.
+      renderer?.destroy();
+      return true;
+    }
+    if (!renderer) {
+      // Picking WebGPU again tries anew.
+      this.rendererKind = 'unavailable';
+      return false;
+    }
+    renderer.onLost = (info) => {
+      if (this.renderer !== renderer) return;
+      console.warn('WebGPU device lost, switching to WebGL:', info.message);
+      // Picking WebGPU again tries anew.
+      this.rendererKind = 'lost';
+      const fallback = this.canvas.cloneNode(false);
+      this.#use(fallback, createRenderer(fallback, 'auto'));
+    };
+    this.#use(canvas, renderer);
+    return true;
+  }
+
+  /** Puts `canvas` and its renderer in place of the current ones. */
+  #use(canvas, renderer) {
+    this.renderer.destroy?.();
     this.canvas.replaceWith(canvas);
     this.canvas = canvas;
-    this.renderer = createRenderer(canvas, kind);
+    this.renderer = renderer;
     this.renderer.setFilter(this.filter);
     this.renderer.setDedither(this.dedither);
     this.renderer.setEffects(this.effects);

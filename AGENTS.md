@@ -59,7 +59,11 @@ Run `npm test` before committing. For UI changes, also load the page in a
 browser (Playwright and Chromium are usually available) and check the console
 for errors at desktop and phone sizes. The page exposes `window.webgb`
 (`emulator`, `display`, `audio`, `inputs`) for the console and for browser
-tests, e.g. `webgb.emulator.core.getSaveData()`.
+tests, e.g. `webgb.emulator.core.getSaveData()`. Headless Chromium runs
+WebGPU (and can show it on a canvas) with `--enable-unsafe-webgpu
+--enable-features=Vulkan --use-vulkan=swiftshader --use-angle=swiftshader
+--disable-vulkan-surface --enable-unsafe-swiftshader`; without the Vulkan
+flags the GPU device is lost on the first frame.
 
 ## Architecture
 
@@ -130,8 +134,10 @@ src/core/
 src/video/
   display.js            Canvas sizing (zoom, devicePixelRatio), fullscreen
   webgl-renderer.js     WebGL2 renderer: effect passes, then one scaler program
+  webgpu-renderer.js    WebGPU renderer: the same passes (starts asynchronously)
   canvas-renderer.js    2D-canvas fallback (no effects)
-  filters.js            Scaler registry and effect GLSL (add filters here)
+  filters.js            Scaler registry, effect shaders in GLSL and WGSL (add
+                        filters here, in both languages)
   thumbnail.js          Frame -> PNG blob for snapshot thumbnails
 src/audio/
   audio-output.js       AudioContext + worklet node, batching, autoplay unlock,
@@ -357,12 +363,22 @@ other versions are refused.
 
 ### Video and sound effects
 
-- **Video** (WebGL only): a new frame goes through passes at the console's
-  resolution, LCD ghosting (blends with the previous output, ping-pong
-  render targets, advances only on new frames), then one pass for
+- **Video** (WebGL and WebGPU): a new frame goes through passes at the
+  console's resolution, LCD ghosting (blends with the previous output,
+  ping-pong render targets, advances only on new frames), then one pass for
   de-dither / sharpen / outlines; the scaler (`FILTERS`, e.g. "Smooth edges
   (xBR)") draws the result at screen size. Redraws without a new frame reuse
-  the passes' output.
+  the passes' output. Every scaler and effect exists in GLSL (`main`) and
+  WGSL (`wgsl`); the two renderers draw the same pixels (checked in the
+  browser, apart from rounding at pixel edges). Derivatives (`fwidth`) are
+  taken up front: WGSL only allows them in uniform control flow.
+- **Renderers** (setting `renderer`): 'auto' is WebGL2, or the 2D canvas
+  without it; 'webgpu' is opt-in. `Display.setRenderer()` swaps in a fresh
+  canvas (a canvas keeps its first context kind) and destroys the old
+  renderer. WebGPU starts asynchronously: WebGL draws until it is ready,
+  stays if WebGPU isn't available (`setRenderer`/`display.ready` resolve
+  false and the UI says so), and takes over again if the GPU device is lost.
+  Renderers expose `name`, `supportsShaders` and optional `destroy()`.
 - **Sound:** emulator worklet -> pitch shifter (worklet, when not 0) ->
   high pass -> low pass -> bass boost (BiquadFilters) -> echo (delay with
   feedback, dry + wet) -> mono (1-channel gain) -> volume.
@@ -437,25 +453,20 @@ Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core
 performance stats, the renderer setting, the PWA, video effects and scalers
 (ghosting, sharpen, outlines, xBR, LCD grid, CRT), sound effects (pitch,
 low/high pass, bass, echo, mono), the memory viewer/editor with cheat search
-(Settings → Tools), rewind, library backup/restore and video recording.
+(Settings → Tools), rewind, library backup/restore, video recording and a
+WebGPU renderer.
 
 Not done yet:
 
-1. **WebGPU renderer**: a `src/video/webgpu-renderer.js` with the same
-   interface as the WebGL one, offered by the Renderer setting. Every scaler
-   and effect in `filters.js` has to be ported to WGSL, and WebGPU starts
-   asynchronously (`requestAdapter`), while `Display` creates renderers
-   synchronously today. Deferred: no visible gain over WebGL2 for frames
-   this small.
-2. **GBA idle-loop detection** (speed on slow phones): spot loops that only
+1. **GBA idle-loop detection** (speed on slow phones): spot loops that only
    poll memory or I/O (no writes, same registers each pass) and skip ahead
    to the next event. Deferred because skipping can break timing: values
    that change without an event (timer counters) must not be skipped over,
    and mGBA's timing tests must keep passing. Most games already wait with
    `VBlankIntrWait`, which halts.
-3. **GBA link cable**: two GBA cores run in lockstep (like `LinkedGameBoys`)
+2. **GBA link cable**: two GBA cores run in lockstep (like `LinkedGameBoys`)
    with the SIO multiplayer, normal and UART modes between them, and the
    link dialog offering GBA games. Multiboot (a game sent over the cable)
    would follow. Deferred: large, and few games need it.
-4. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
+3. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
    effects (`AudioOutput.setEffects`).

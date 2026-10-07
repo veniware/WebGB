@@ -11,7 +11,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   outlines: false,
   zoom: 'fit',
   volume: 0.8,
-  // 'auto' (WebGL when available), 'webgl' or 'canvas'.
+  // 'auto' (WebGL when available), 'webgpu', 'webgl' or 'canvas'.
   renderer: 'auto',
   // Keep the last minute or so of play to rewind (hold the rewind key).
   rewind: true,

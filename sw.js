@@ -106,6 +106,7 @@ const FILES = [
   'src/video/filters.js',
   'src/video/thumbnail.js',
   'src/video/webgl-renderer.js',
+  'src/video/webgpu-renderer.js',
 ];
 
 self.addEventListener('install', (event) => {

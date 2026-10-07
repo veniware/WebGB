@@ -1,11 +1,19 @@
-// Display filters (scalers) and effects, as WebGL2 shaders.
+// Display filters (scalers) and effects, as WebGL2 (GLSL) and WebGPU (WGSL)
+// shaders.
 //
 // A new frame goes through effect passes at the console's resolution (LCD
 // ghosting, then de-dither / sharpen / outlines), then a scaler draws it at
 // the screen's size. Scalers are single fragment shaders; `canvas` names the
 // closest option for the 2D-canvas fallback ('nearest' or 'smooth'). To add a
-// scaler, append an entry: its `main` can use source(), bilinear(), vUV,
-// uSrcSize and uDstSize from the prelude.
+// scaler, append an entry with both versions:
+// - `main` (GLSL) can use source(), bilinear(), vUV, uSrcSize and uDstSize;
+// - `wgsl` (the body of `fn fs(in: VertexOut) -> @location(0) vec4f`) can
+//   use source(), bilinear(), same(), in.uv, in.position and params.srcSize /
+//   params.dstSize.
+// Optional `helpers` / `helpersWgsl` hold functions they need.
+
+/** LCD ghosting: how much of the previous picture stays each frame. */
+export const GHOSTING_KEEP = 0.5;
 
 export const VERTEX_SHADER = `#version 300 es
 out vec2 vUV;
@@ -108,18 +116,27 @@ export const FILTERS = [
       vec2 range = 0.5 - 0.5 / scale;
       vec2 f = (center - clamp(center, -range, range)) * scale + 0.5;
       fragColor = vec4(bilinear(floor(pos) + f), 1.0);`,
+    wgsl: `
+      let pos = in.uv * params.srcSize;
+      let scale = params.dstSize / params.srcSize;
+      let center = fract(pos) - 0.5;
+      let range = 0.5 - 0.5 / scale;
+      let f = (center - clamp(center, -range, range)) * scale + 0.5;
+      return vec4f(bilinear(floor(pos) + f), 1.0);`,
   },
   {
     id: 'nearest',
     name: 'Nearest',
     canvas: 'nearest',
     main: `fragColor = vec4(source(ivec2(floor(vUV * uSrcSize))), 1.0);`,
+    wgsl: `return vec4f(source(vec2i(floor(in.uv * params.srcSize))), 1.0);`,
   },
   {
     id: 'bilinear',
     name: 'Smooth',
     canvas: 'smooth',
     main: `fragColor = vec4(bilinear(vUV * uSrcSize), 1.0);`,
+    wgsl: `return vec4f(bilinear(in.uv * params.srcSize), 1.0);`,
   },
   {
     id: 'scale2x',
@@ -142,6 +159,30 @@ export const FILTERS = [
         else { if (down == right && down != left && right != up) o = down; }
       }
       fragColor = vec4(o, 1.0);`,
+    wgsl: `
+      let pos = in.uv * params.srcSize;
+      let p = vec2i(floor(pos));
+      let f = fract(pos);
+      let e = source(p);
+      let up = source(p + vec2i(0, -1));
+      let down = source(p + vec2i(0, 1));
+      let left = source(p + vec2i(-1, 0));
+      let right = source(p + vec2i(1, 0));
+      var o = e;
+      if (f.y < 0.5) {
+        if (f.x < 0.5) {
+          if (same(left, up) && !same(up, right) && !same(left, down)) { o = up; }
+        } else {
+          if (same(up, right) && !same(up, left) && !same(right, down)) { o = right; }
+        }
+      } else {
+        if (f.x < 0.5) {
+          if (same(left, down) && !same(left, up) && !same(down, right)) { o = left; }
+        } else {
+          if (same(down, right) && !same(down, left) && !same(right, up)) { o = down; }
+        }
+      }
+      return vec4f(o, 1.0);`,
   },
   {
     id: 'xbr',
@@ -149,7 +190,9 @@ export const FILTERS = [
     canvas: 'smooth',
     // xBR-style: where an edge runs diagonally across a pixel's corner (it is
     // more continuous along that diagonal than across it), the corner takes
-    // the neighbor's color along an antialiased 45-degree line.
+    // the neighbor's color along an antialiased 45-degree line. The line's
+    // width w (a derivative) is worked out up front: derivatives are only
+    // defined in uniform control flow.
     helpers: `
       float dist(vec3 a, vec3 b) {
         vec3 d = abs(a - b);
@@ -157,7 +200,7 @@ export const FILTERS = [
       }
 
       // The corner of pixel p towards (dx, dy); f: position in the pixel, 0..1 towards that corner.
-      vec3 corner(ivec2 p, ivec2 dx, ivec2 dy, vec2 f, vec3 color) {
+      vec3 corner(ivec2 p, ivec2 dx, ivec2 dy, vec2 f, vec3 color, float w) {
         vec3 e = source(p), fr = source(p + dx), h = source(p + dy), i = source(p + dx + dy);
         if (e == fr || e == h) return color;
         vec3 c = source(p + dx - dy), g = source(p - dx + dy);
@@ -168,19 +211,56 @@ export const FILTERS = [
         float across = dist(h, d) + dist(h, i5) + dist(fr, i4) + dist(fr, b) + 4.0 * dist(e, i);
         if (along >= across) return color;
         vec3 edge = dist(e, fr) <= dist(e, h) ? fr : h;
-        float w = fwidth(f.x + f.y);
         return mix(color, edge, smoothstep(1.5 - w, 1.5 + w, f.x + f.y));
       }`,
     main: `
       vec2 pos = vUV * uSrcSize;
       ivec2 p = ivec2(floor(pos));
       vec2 f = fract(pos);
+      float w = fwidth(pos.x + pos.y);
       vec3 o = source(p);
-      o = corner(p, ivec2(1, 0), ivec2(0, 1), f, o);
-      o = corner(p, ivec2(-1, 0), ivec2(0, 1), vec2(1.0 - f.x, f.y), o);
-      o = corner(p, ivec2(1, 0), ivec2(0, -1), vec2(f.x, 1.0 - f.y), o);
-      o = corner(p, ivec2(-1, 0), ivec2(0, -1), 1.0 - f, o);
+      o = corner(p, ivec2(1, 0), ivec2(0, 1), f, o, w);
+      o = corner(p, ivec2(-1, 0), ivec2(0, 1), vec2(1.0 - f.x, f.y), o, w);
+      o = corner(p, ivec2(1, 0), ivec2(0, -1), vec2(f.x, 1.0 - f.y), o, w);
+      o = corner(p, ivec2(-1, 0), ivec2(0, -1), 1.0 - f, o, w);
       fragColor = vec4(o, 1.0);`,
+    helpersWgsl: `
+      fn dist(a: vec3f, b: vec3f) -> f32 {
+        let d = abs(a - b);
+        return d.r * 0.299 + d.g * 0.587 + d.b * 0.114;
+      }
+
+      fn corner(p: vec2i, dx: vec2i, dy: vec2i, f: vec2f, color: vec3f, w: f32) -> vec3f {
+        let e = source(p);
+        let fr = source(p + dx);
+        let h = source(p + dy);
+        let i = source(p + dx + dy);
+        if (same(e, fr) || same(e, h)) { return color; }
+        let c = source(p + dx - dy);
+        let g = source(p - dx + dy);
+        let f4 = source(p + 2 * dx);
+        let h5 = source(p + 2 * dy);
+        let d = source(p - dx);
+        let b = source(p - dy);
+        let i5 = source(p + dx + 2 * dy);
+        let i4 = source(p + 2 * dx + dy);
+        let along = dist(e, c) + dist(e, g) + dist(i, f4) + dist(i, h5) + 4.0 * dist(h, fr);
+        let across = dist(h, d) + dist(h, i5) + dist(fr, i4) + dist(fr, b) + 4.0 * dist(e, i);
+        if (along >= across) { return color; }
+        let edge = select(h, fr, dist(e, fr) <= dist(e, h));
+        return mix(color, edge, smoothstep(1.5 - w, 1.5 + w, f.x + f.y));
+      }`,
+    wgsl: `
+      let pos = in.uv * params.srcSize;
+      let p = vec2i(floor(pos));
+      let f = fract(pos);
+      let w = fwidth(pos.x + pos.y);
+      var o = source(p);
+      o = corner(p, vec2i(1, 0), vec2i(0, 1), f, o, w);
+      o = corner(p, vec2i(-1, 0), vec2i(0, 1), vec2f(1.0 - f.x, f.y), o, w);
+      o = corner(p, vec2i(1, 0), vec2i(0, -1), vec2f(f.x, 1.0 - f.y), o, w);
+      o = corner(p, vec2i(-1, 0), vec2i(0, -1), 1.0 - f, o, w);
+      return vec4f(o, 1.0);`,
   },
   {
     id: 'lcd',
@@ -197,6 +277,15 @@ export const FILTERS = [
       vec2 inCell = fract(pos) * scale;
       bool gap = (scale.x >= 3.0 && inCell.x < 1.0) || (scale.y >= 3.0 && inCell.y < 1.0);
       fragColor = vec4(gap ? c * 0.78 : c, 1.0);`,
+    wgsl: `
+      let pos = in.uv * params.srcSize;
+      let scale = params.dstSize / params.srcSize;
+      let center = fract(pos) - 0.5;
+      let range = 0.5 - 0.5 / scale;
+      let c = bilinear(floor(pos) + (center - clamp(center, -range, range)) * scale + 0.5);
+      let inCell = fract(pos) * scale;
+      let gap = (scale.x >= 3.0 && inCell.x < 1.0) || (scale.y >= 3.0 && inCell.y < 1.0);
+      return vec4f(select(c, c * 0.78, gap), 1.0);`,
   },
   {
     id: 'crt',
@@ -211,6 +300,13 @@ export const FILTERS = [
       int column = int(mod(gl_FragCoord.x, 3.0));
       vec3 mask = vec3(column == 0 ? 1.0 : 0.75, column == 1 ? 1.0 : 0.75, column == 2 ? 1.0 : 0.75);
       fragColor = vec4(min(c * scan * mask * 1.35, 1.0), 1.0);`,
+    wgsl: `
+      let pos = in.uv * params.srcSize;
+      let c = bilinear(vec2f(pos.x, floor(pos.y) + 0.5));
+      let scan = 0.6 + 0.4 * sin(3.14159265 * fract(pos.y));
+      let column = i32(in.position.x) % 3;
+      let mask = vec3f(select(0.75, 1.0, column == 0), select(0.75, 1.0, column == 1), select(0.75, 1.0, column == 2));
+      return vec4f(min(c * scan * mask * 1.35, vec3f(1.0)), 1.0);`,
   },
 ];
 
@@ -220,4 +316,111 @@ export function getFilter(id) {
 
 export function fragmentShader(filter) {
   return `${PRELUDE}\n${filter.helpers ?? ''}\nvoid main() {\n${filter.main}\n}`;
+}
+
+// --- WGSL (WebGPU) ---------------------------------------------------------------
+
+// One uniform block for every pass; each reads what it needs.
+const WGSL_COMMON = `
+struct Params {
+  srcSize: vec2f,
+  dstSize: vec2f,
+  keep: f32,
+  dedither: f32,
+  sharpen: f32,
+  outlines: f32,
+}
+
+@group(0) @binding(0) var frame: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: Params;
+
+struct VertexOut {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+}
+
+// One triangle that covers the viewport; uv is 0..1 with the origin at the top-left.
+@vertex fn vs(@builtin(vertex_index) i: u32) -> VertexOut {
+  let pos = vec2f(select(-1.0, 3.0, i == 1u), select(-1.0, 3.0, i == 2u));
+  var out: VertexOut;
+  out.position = vec4f(pos, 0.0, 1.0);
+  out.uv = vec2f(pos.x + 1.0, 1.0 - pos.y) * 0.5;
+  return out;
+}
+
+fn source(p: vec2i) -> vec3f {
+  return textureLoad(frame, clamp(p, vec2i(0), vec2i(params.srcSize) - 1), 0).rgb;
+}
+
+fn same(a: vec3f, b: vec3f) -> bool {
+  return all(a == b);
+}
+
+// Bilinear sample at a position in texel units (texel centers at +0.5).
+fn bilinear(at: vec2f) -> vec3f {
+  let pos = at - 0.5;
+  let i = vec2i(floor(pos));
+  let f = pos - floor(pos);
+  let top = mix(source(i), source(i + vec2i(1, 0)), f.x);
+  let bottom = mix(source(i + vec2i(0, 1)), source(i + vec2i(1, 1)), f.x);
+  return mix(top, bottom, f.y);
+}
+`;
+
+/** LCD ghosting (see GHOSTING_SHADER). */
+export const GHOSTING_WGSL = `${WGSL_COMMON}
+@group(0) @binding(1) var previous: texture_2d<f32>;
+
+@fragment fn fs(in: VertexOut) -> @location(0) vec4f {
+  let p = vec2i(in.position.xy);
+  return vec4f(mix(source(p), textureLoad(previous, p, 0).rgb, params.keep), 1.0);
+}`;
+
+/** De-dither, sharpen, outlines (see EFFECTS_SHADER). */
+export const EFFECTS_WGSL = `${WGSL_COMMON}
+fn dedithered(p: vec2i) -> vec3f {
+  let c = source(p);
+  let l = source(p + vec2i(-1, 0));
+  let r = source(p + vec2i(1, 0));
+  let u = source(p + vec2i(0, -1));
+  let d = source(p + vec2i(0, 1));
+  let h = same(l, r) && !same(l, c) && same(source(p + vec2i(-2, 0)), c) && same(source(p + vec2i(2, 0)), c);
+  let v = same(u, d) && !same(u, c) && same(source(p + vec2i(0, -2)), c) && same(source(p + vec2i(0, 2)), c);
+  if (h && v) { return mix(c, (l + u) * 0.5, 0.5); }
+  if (h) { return mix(c, l, 0.5); }
+  if (v) { return mix(c, u, 0.5); }
+  return c;
+}
+
+fn luma(c: vec3f) -> f32 {
+  return dot(c, vec3f(0.299, 0.587, 0.114));
+}
+
+@fragment fn fs(in: VertexOut) -> @location(0) vec4f {
+  let p = vec2i(in.position.xy);
+  var c = source(p);
+  if (params.dedither > 0.5) { c = dedithered(p); }
+  if (params.sharpen > 0.5) {
+    let around = source(p + vec2i(-1, 0)) + source(p + vec2i(1, 0)) + source(p + vec2i(0, -1)) + source(p + vec2i(0, 1));
+    c = clamp(c + (c * 4.0 - around) * 0.2, vec3f(0.0), vec3f(1.0));
+  }
+  if (params.outlines > 0.5) {
+    let tl = luma(source(p + vec2i(-1, -1)));
+    let t = luma(source(p + vec2i(0, -1)));
+    let tr = luma(source(p + vec2i(1, -1)));
+    let l = luma(source(p + vec2i(-1, 0)));
+    let r = luma(source(p + vec2i(1, 0)));
+    let bl = luma(source(p + vec2i(-1, 1)));
+    let b = luma(source(p + vec2i(0, 1)));
+    let br = luma(source(p + vec2i(1, 1)));
+    let gx = tr + 2.0 * r + br - tl - 2.0 * l - bl;
+    let gy = bl + 2.0 * b + br - tl - 2.0 * t - tr;
+    c *= 1.0 - 0.75 * smoothstep(0.35, 1.0, length(vec2f(gx, gy)));
+  }
+  return vec4f(c, 1.0);
+}`;
+
+/** The scaler's WGSL module (vertex `vs`, fragment `fs`). */
+export function wgslShader(filter) {
+  return `${WGSL_COMMON}\n${filter.helpersWgsl ?? ''}\n@fragment fn fs(in: VertexOut) -> @location(0) vec4f {\n${filter.wgsl}\n}`;
 }

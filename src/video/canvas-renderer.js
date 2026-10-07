@@ -3,6 +3,7 @@ import { getFilter } from './filters.js';
 /** Fallback renderer for browsers without WebGL2: nearest or smooth scaling only, no effects. */
 export class CanvasRenderer {
   supportsShaders = false;
+  name = 'Canvas 2D';
 
   constructor(canvas) {
     this.canvas = canvas;
