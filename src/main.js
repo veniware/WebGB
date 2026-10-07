@@ -13,10 +13,10 @@ import { Display } from './video/display.js';
 
 const settings = loadSettings();
 const display = new Display(
-  document.getElementById('screen'),
-  document.getElementById('stage'),
-  document.getElementById('play-area'),
-  settings.renderer,
+    document.getElementById('screen'),
+    document.getElementById('stage'),
+    document.getElementById('play-area'),
+    settings.renderer,
 );
 const audio = new AudioOutput();
 
@@ -28,12 +28,12 @@ const motion = new MotionInput({ onNeedsPermission: () => ui.needMotionPermissio
 const input = new InputManager([keyboard, gamepad, touch, motion]);
 
 const emulator = new Emulator({
-  display,
-  audio,
-  input,
-  motion,
-  camera: new CameraInput(),
-  rumble: new Rumble({ gamepad }),
+    display,
+    audio,
+    input,
+    motion,
+    camera: new CameraInput(),
+    rumble: new Rumble({ gamepad }),
 });
 ui = setupUI({ emulator, display, audio, inputs: [keyboard, touch], keyboard, gamepad, settings });
 emulator.start();

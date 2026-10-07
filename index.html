@@ -1,280 +1,280 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#20232a">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>WebGB</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/icon-180.png">
-  <link rel="stylesheet" href="src/styles.css">
-  <script type="module" src="src/main.js"></script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#20232a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>WebGB</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/icon-180.png">
+    <link rel="stylesheet" href="src/styles.css">
+    <script type="module" src="src/main.js"></script>
 </head>
 <body>
-  <header id="toolbar" class="toolbar">
-    <button id="open" type="button">Open ROM</button>
-    <button id="library-open" type="button">Library</button>
-    <button id="pause" type="button" disabled>Pause</button>
-    <button id="reset" type="button" disabled>Reset</button>
-    <button id="snapshot" type="button" disabled title="Take snapshot (F2)">Snapshot</button>
-    <button id="saves-open" type="button" disabled title="Saved games and snapshots (F4 loads the latest snapshot)">Saves…</button>
-    <button id="record-stop" type="button" hidden title="Stop recording (F9)">■ Stop recording</button>
-    <label>Speed
-      <select id="speed">
-        <option value="1">1×</option>
-        <option value="1.5">1.5×</option>
-        <option value="2">2×</option>
-        <option value="3">3×</option>
-        <option value="4">4×</option>
-        <option value="8">8×</option>
-      </select>
-    </label>
-    <label>Filter <select id="filter"></select></label>
-    <label><input id="dedither" type="checkbox"> De-dither</label>
-    <label>Zoom
-      <select id="zoom">
-        <option value="fit">Fit</option>
-        <option value="1">1×</option>
-        <option value="2">2×</option>
-        <option value="3">3×</option>
-        <option value="4">4×</option>
-        <option value="5">5×</option>
-        <option value="6">6×</option>
-      </select>
-    </label>
-    <label>Volume <input id="volume" type="range" min="0" max="100" step="1"></label>
-    <button id="fullscreen" type="button" title="Fullscreen (F)">Fullscreen</button>
-    <button id="settings-open" type="button">Settings</button>
-  </header>
-
-  <main id="play-area" class="play-area">
-    <div id="stage" class="stage empty">
-      <canvas id="screen"></canvas>
-      <p class="hint">Drop a ROM here (.gb, .gbc, .gba or .zip) <br>or use Open ROM or Library.</p>
-    </div>
-
-    <div id="touch-controls" class="touch-controls">
-      <div class="touch-shoulder touch-l" data-button="L">L</div>
-      <div class="touch-shoulder touch-r" data-button="R">R</div>
-      <div class="touch-dpad" data-dpad>
-        <span class="up"></span><span class="down"></span><span class="left"></span><span class="right"></span>
-      </div>
-      <div class="touch-face">
-        <div class="touch-round touch-b" data-button="B">B</div>
-        <div class="touch-round touch-a" data-button="A">A</div>
-      </div>
-      <div class="touch-meta">
-        <div class="touch-pill" data-button="SELECT">Select</div>
-        <div class="touch-pill" data-button="START">Start</div>
-        <div class="touch-pill" data-action="rewind" aria-label="Rewind">Back</div>
-        <div class="touch-pill" data-action="fastForward">Fast</div>
-      </div>
-    </div>
-  </main>
-
-  <footer class="statusbar">
-    <span id="status" role="status"></span>
-    <span id="fps"></span>
-  </footer>
-
-  <div class="drop-overlay">Drop to load</div>
-
-  <dialog id="library" class="panel">
-    <header>
-      <h2>Library</h2>
-      <button type="button" data-add>Add ROMs…</button>
-      <button type="button" data-close>Close</button>
+    <header id="toolbar" class="toolbar">
+        <button id="open" type="button">Open ROM</button>
+        <button id="library-open" type="button">Library</button>
+        <button id="pause" type="button" disabled>Pause</button>
+        <button id="reset" type="button" disabled>Reset</button>
+        <button id="snapshot" type="button" disabled title="Take snapshot (F2)">Snapshot</button>
+        <button id="saves-open" type="button" disabled title="Saved games and snapshots (F4 loads the latest snapshot)">Saves…</button>
+        <button id="record-stop" type="button" hidden title="Stop recording (F9)">■ Stop recording</button>
+        <label>Speed
+            <select id="speed">
+                <option value="1">1×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+                <option value="3">3×</option>
+                <option value="4">4×</option>
+                <option value="8">8×</option>
+            </select>
+        </label>
+        <label>Filter <select id="filter"></select></label>
+        <label><input id="dedither" type="checkbox"> De-dither</label>
+        <label>Zoom
+            <select id="zoom">
+                <option value="fit">Fit</option>
+                <option value="1">1×</option>
+                <option value="2">2×</option>
+                <option value="3">3×</option>
+                <option value="4">4×</option>
+                <option value="5">5×</option>
+                <option value="6">6×</option>
+            </select>
+        </label>
+        <label>Volume <input id="volume" type="range" min="0" max="100" step="1"></label>
+        <button id="fullscreen" type="button" title="Fullscreen (F)">Fullscreen</button>
+        <button id="settings-open" type="button">Settings</button>
     </header>
-    <p class="empty" data-empty>No ROMs yet. Add some, or drop them onto the page.</p>
-    <ul class="rows" data-list></ul>
-    <footer class="split">
-      <span data-usage></span>
-      <span class="actions">
-        <button type="button" data-backup>Back up…</button>
-        <button type="button" data-restore>Restore…</button>
-      </span>
+
+    <main id="play-area" class="play-area">
+        <div id="stage" class="stage empty">
+            <canvas id="screen"></canvas>
+            <p class="hint">Drop a ROM here (.gb, .gbc, .gba or .zip) <br>or use Open ROM or Library.</p>
+        </div>
+
+        <div id="touch-controls" class="touch-controls">
+            <div class="touch-shoulder touch-l" data-button="L">L</div>
+            <div class="touch-shoulder touch-r" data-button="R">R</div>
+            <div class="touch-dpad" data-dpad>
+                <span class="up"></span><span class="down"></span><span class="left"></span><span class="right"></span>
+            </div>
+            <div class="touch-face">
+                <div class="touch-round touch-b" data-button="B">B</div>
+                <div class="touch-round touch-a" data-button="A">A</div>
+            </div>
+            <div class="touch-meta">
+                <div class="touch-pill" data-button="SELECT">Select</div>
+                <div class="touch-pill" data-button="START">Start</div>
+                <div class="touch-pill" data-action="rewind" aria-label="Rewind">Back</div>
+                <div class="touch-pill" data-action="fastForward">Fast</div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="statusbar">
+        <span id="status" role="status"></span>
+        <span id="fps"></span>
     </footer>
-  </dialog>
 
-  <dialog id="game" class="panel">
-    <header>
-      <h2 data-title></h2>
-      <button type="button" data-close>Close</button>
-    </header>
-    <section>
-      <header>
-        <h3>Saved games</h3>
-        <button type="button" data-new-game>New game</button>
-        <button type="button" data-import>Import…</button>
-      </header>
-      <p class="empty" data-saves-empty>No saved games yet.</p>
-      <ul class="rows" data-saves></ul>
-    </section>
-    <section data-link-section hidden>
-      <header>
-        <h3>Link cable</h3>
-        <button type="button" data-link>Connect a second game…</button>
-        <button type="button" data-unlink hidden>Disconnect</button>
-      </header>
-      <p class="empty" data-link-status></p>
-    </section>
-    <section>
-      <header>
-        <h3>Snapshots</h3>
-        <button type="button" data-take>Take snapshot</button>
-      </header>
-      <p class="empty" data-snapshots-empty>No snapshots yet.</p>
-      <ul class="rows" data-snapshots></ul>
-    </section>
-  </dialog>
-  <dialog id="link" class="panel">
-    <header>
-      <h2>Link cable</h2>
-      <button type="button" data-close>Close</button>
-    </header>
-    <p class="empty">Pick player 2's game. Both games run side by side, connected as if by a link cable.</p>
-    <p class="empty" data-empty>No games in the library that can be linked with this one (Game Boy with Game Boy, GBA with GBA).</p>
-    <ul class="rows" data-list></ul>
-    <footer>Player 2 uses a second gamepad, or W A S D, H (A), G (B), Y (Start), T (Select).</footer>
-  </dialog>
+    <div class="drop-overlay">Drop to load</div>
 
-  <dialog id="settings" class="panel">
-    <header>
-      <h2>Settings</h2>
-      <button type="button" data-close>Close</button>
-    </header>
-    <section>
-      <header>
-        <h3>Controls</h3>
-        <button type="button" id="controls-open">Keyboard and gamepad…</button>
-      </header>
-    </section>
-    <section>
-      <header>
-        <h3>Tools</h3>
-        <button type="button" id="memory-open" disabled>Memory viewer…</button>
-        <button type="button" id="record-start" disabled title="F9 starts and stops">Record video</button>
-      </header>
-      <div class="fields">
-        <label for="set-rewind">Rewind</label>
-        <label class="check"><input id="set-rewind" type="checkbox" data-setting="rewind">
-          Keep the last minute to rewind (hold R, the left trigger or Back)</label>
-      </div>
-    </section>
-    <section>
-      <header><h3>Display</h3></header>
-      <div class="fields">
-        <label for="set-renderer">Renderer</label>
-        <select id="set-renderer" data-setting="renderer"></select>
-        <label for="set-ghosting">Effects</label>
-        <div class="checks">
-          <label class="check"><input id="set-ghosting" type="checkbox" data-setting="ghosting" data-shaders>
-            LCD ghosting (motion blur)</label>
-          <label class="check"><input type="checkbox" data-setting="sharpen" data-shaders> Sharpen</label>
-          <label class="check"><input type="checkbox" data-setting="outlines" data-shaders> Outlines (edge detection)</label>
+    <dialog id="library" class="panel">
+        <header>
+            <h2>Library</h2>
+            <button type="button" data-add>Add ROMs…</button>
+            <button type="button" data-close>Close</button>
+        </header>
+        <p class="empty" data-empty>No ROMs yet. Add some, or drop them onto the page.</p>
+        <ul class="rows" data-list></ul>
+        <footer class="split">
+            <span data-usage></span>
+            <span class="actions">
+                <button type="button" data-backup>Back up…</button>
+                <button type="button" data-restore>Restore…</button>
+            </span>
+        </footer>
+    </dialog>
+
+    <dialog id="game" class="panel">
+        <header>
+            <h2 data-title></h2>
+            <button type="button" data-close>Close</button>
+        </header>
+        <section>
+            <header>
+                <h3>Saved games</h3>
+                <button type="button" data-new-game>New game</button>
+                <button type="button" data-import>Import…</button>
+            </header>
+            <p class="empty" data-saves-empty>No saved games yet.</p>
+            <ul class="rows" data-saves></ul>
+        </section>
+        <section data-link-section hidden>
+            <header>
+                <h3>Link cable</h3>
+                <button type="button" data-link>Connect a second game…</button>
+                <button type="button" data-unlink hidden>Disconnect</button>
+            </header>
+            <p class="empty" data-link-status></p>
+        </section>
+        <section>
+            <header>
+                <h3>Snapshots</h3>
+                <button type="button" data-take>Take snapshot</button>
+            </header>
+            <p class="empty" data-snapshots-empty>No snapshots yet.</p>
+            <ul class="rows" data-snapshots></ul>
+        </section>
+    </dialog>
+    <dialog id="link" class="panel">
+        <header>
+            <h2>Link cable</h2>
+            <button type="button" data-close>Close</button>
+        </header>
+        <p class="empty">Pick player 2's game. Both games run side by side, connected as if by a link cable.</p>
+        <p class="empty" data-empty>No games in the library that can be linked with this one (Game Boy with Game Boy, GBA with GBA).</p>
+        <ul class="rows" data-list></ul>
+        <footer>Player 2 uses a second gamepad, or W A S D, H (A), G (B), Y (Start), T (Select).</footer>
+    </dialog>
+
+    <dialog id="settings" class="panel">
+        <header>
+            <h2>Settings</h2>
+            <button type="button" data-close>Close</button>
+        </header>
+        <section>
+            <header>
+                <h3>Controls</h3>
+                <button type="button" id="controls-open">Keyboard and gamepad…</button>
+            </header>
+        </section>
+        <section>
+            <header>
+                <h3>Tools</h3>
+                <button type="button" id="memory-open" disabled>Memory viewer…</button>
+                <button type="button" id="record-start" disabled title="F9 starts and stops">Record video</button>
+            </header>
+            <div class="fields">
+                <label for="set-rewind">Rewind</label>
+                <label class="check"><input id="set-rewind" type="checkbox" data-setting="rewind">
+                    Keep the last minute to rewind (hold R, the left trigger or Back)</label>
+            </div>
+        </section>
+        <section>
+            <header><h3>Display</h3></header>
+            <div class="fields">
+                <label for="set-renderer">Renderer</label>
+                <select id="set-renderer" data-setting="renderer"></select>
+                <label for="set-ghosting">Effects</label>
+                <div class="checks">
+                    <label class="check"><input id="set-ghosting" type="checkbox" data-setting="ghosting" data-shaders>
+                        LCD ghosting (motion blur)</label>
+                    <label class="check"><input type="checkbox" data-setting="sharpen" data-shaders> Sharpen</label>
+                    <label class="check"><input type="checkbox" data-setting="outlines" data-shaders> Outlines (edge detection)</label>
+                </div>
+                <label for="set-perf-stats">Performance</label>
+                <label class="check"><input id="set-perf-stats" type="checkbox" data-setting="perfStats">
+                    Show frame rate, speed and time per frame</label>
+            </div>
+        </section>
+        <section>
+            <header><h3>Sound</h3></header>
+            <div class="fields">
+                <label for="set-audio-pitch">Pitch</label>
+                <select id="set-audio-pitch" data-setting="audioPitch"></select>
+                <label for="set-audio-lowpass">Low pass (muffle)</label>
+                <select id="set-audio-lowpass" data-setting="audioLowpass"></select>
+                <label for="set-audio-highpass">High pass (thin)</label>
+                <select id="set-audio-highpass" data-setting="audioHighpass"></select>
+                <label for="set-audio-bass">Bass boost</label>
+                <select id="set-audio-bass" data-setting="audioBass"></select>
+                <label for="set-audio-echo">Echo</label>
+                <select id="set-audio-echo" data-setting="audioEcho"></select>
+                <label for="set-audio-mono">Mono</label>
+                <label class="check"><input id="set-audio-mono" type="checkbox" data-setting="audioMono">
+                    Both speakers play the same sound</label>
+            </div>
+        </section>
+        <section>
+            <header><h3>Game Boy</h3></header>
+            <div class="fields">
+                <label for="set-gb-palette">Colors of Game Boy games</label>
+                <select id="set-gb-palette" data-setting="gbPalette"></select>
+                <label for="set-color-correction">Color screens (GBC, GBA)</label>
+                <label class="check"><input id="set-color-correction" type="checkbox" data-setting="colorCorrection">
+                    Colors like the original LCDs</label>
+                <label for="set-sgb">Super Game Boy</label>
+                <label class="check"><input id="set-sgb" type="checkbox" data-setting="sgb">
+                    Colors and borders of games made for it (from the next start)</label>
+                <label for="set-sgb-border">Super Game Boy border</label>
+                <label class="check"><input id="set-sgb-border" type="checkbox" data-setting="sgbBorder">
+                    Show the border around the screen</label>
+            </div>
+        </section>
+        <section>
+            <header><h3>Game Boy Advance</h3></header>
+            <div class="fields">
+                <label for="gba-bios-load">BIOS</label>
+                <div class="buttons">
+                    <span id="gba-bios-status">Built in</span>
+                    <button type="button" id="gba-bios-load">Load file…</button>
+                    <button type="button" id="gba-bios-remove" hidden>Remove</button>
+                </div>
+                <label for="set-gba-sunlight">Sunlight (Boktai)</label>
+                <select id="set-gba-sunlight" data-setting="gbaSunlight"></select>
+                <label for="set-gba-bios-intro">BIOS intro</label>
+                <label class="check"><input id="set-gba-bios-intro" type="checkbox" data-setting="gbaBiosIntro">
+                    Show the BIOS file's boot animation</label>
+            </div>
+            <p class="empty">Games run without a BIOS file. A dump of your console's BIOS (16 KB) is used from the next start.</p>
+        </section>
+    </dialog>
+
+    <dialog id="controls" class="panel">
+        <header>
+            <h2>Controls</h2>
+            <button type="button" data-close>Close</button>
+        </header>
+        <p class="empty">Click a key or button, then press the new one. Esc cancels, Delete clears.</p>
+        <table class="bindings">
+            <thead><tr><th></th><th>Keyboard</th><th>Gamepad</th></tr></thead>
+            <tbody data-rows></tbody>
+        </table>
+        <footer><button type="button" data-reset>Reset to defaults</button></footer>
+    </dialog>
+
+    <dialog id="memory" class="panel">
+        <header>
+            <h2>Memory</h2>
+            <button type="button" data-close>Close</button>
+        </header>
+        <div class="memory-bar">
+            <select data-region aria-label="Memory region"></select>
+            <input data-address placeholder="Address (hex)" aria-label="Go to address" spellcheck="false" autocomplete="off">
+            <button type="button" data-go>Go</button>
+            <button type="button" data-prev aria-label="Previous page">◀</button>
+            <button type="button" data-next aria-label="Next page">▶</button>
+            <button type="button" data-frame>Next frame</button>
+            <label class="check"><input type="checkbox" data-live> Run the game</label>
         </div>
-        <label for="set-perf-stats">Performance</label>
-        <label class="check"><input id="set-perf-stats" type="checkbox" data-setting="perfStats">
-          Show frame rate, speed and time per frame</label>
-      </div>
-    </section>
-    <section>
-      <header><h3>Sound</h3></header>
-      <div class="fields">
-        <label for="set-audio-pitch">Pitch</label>
-        <select id="set-audio-pitch" data-setting="audioPitch"></select>
-        <label for="set-audio-lowpass">Low pass (muffle)</label>
-        <select id="set-audio-lowpass" data-setting="audioLowpass"></select>
-        <label for="set-audio-highpass">High pass (thin)</label>
-        <select id="set-audio-highpass" data-setting="audioHighpass"></select>
-        <label for="set-audio-bass">Bass boost</label>
-        <select id="set-audio-bass" data-setting="audioBass"></select>
-        <label for="set-audio-echo">Echo</label>
-        <select id="set-audio-echo" data-setting="audioEcho"></select>
-        <label for="set-audio-mono">Mono</label>
-        <label class="check"><input id="set-audio-mono" type="checkbox" data-setting="audioMono">
-          Both speakers play the same sound</label>
-      </div>
-    </section>
-    <section>
-      <header><h3>Game Boy</h3></header>
-      <div class="fields">
-        <label for="set-gb-palette">Colors of Game Boy games</label>
-        <select id="set-gb-palette" data-setting="gbPalette"></select>
-        <label for="set-color-correction">Color screens (GBC, GBA)</label>
-        <label class="check"><input id="set-color-correction" type="checkbox" data-setting="colorCorrection">
-          Colors like the original LCDs</label>
-        <label for="set-sgb">Super Game Boy</label>
-        <label class="check"><input id="set-sgb" type="checkbox" data-setting="sgb">
-          Colors and borders of games made for it (from the next start)</label>
-        <label for="set-sgb-border">Super Game Boy border</label>
-        <label class="check"><input id="set-sgb-border" type="checkbox" data-setting="sgbBorder">
-          Show the border around the screen</label>
-      </div>
-    </section>
-    <section>
-      <header><h3>Game Boy Advance</h3></header>
-      <div class="fields">
-        <label for="gba-bios-load">BIOS</label>
-        <div class="buttons">
-          <span id="gba-bios-status">Built in</span>
-          <button type="button" id="gba-bios-load">Load file…</button>
-          <button type="button" id="gba-bios-remove" hidden>Remove</button>
-        </div>
-        <label for="set-gba-sunlight">Sunlight (Boktai)</label>
-        <select id="set-gba-sunlight" data-setting="gbaSunlight"></select>
-        <label for="set-gba-bios-intro">BIOS intro</label>
-        <label class="check"><input id="set-gba-bios-intro" type="checkbox" data-setting="gbaBiosIntro">
-          Show the BIOS file's boot animation</label>
-      </div>
-      <p class="empty">Games run without a BIOS file. A dump of your console's BIOS (16 KB) is used from the next start.</p>
-    </section>
-  </dialog>
-
-  <dialog id="controls" class="panel">
-    <header>
-      <h2>Controls</h2>
-      <button type="button" data-close>Close</button>
-    </header>
-    <p class="empty">Click a key or button, then press the new one. Esc cancels, Delete clears.</p>
-    <table class="bindings">
-      <thead><tr><th></th><th>Keyboard</th><th>Gamepad</th></tr></thead>
-      <tbody data-rows></tbody>
-    </table>
-    <footer><button type="button" data-reset>Reset to defaults</button></footer>
-  </dialog>
-
-  <dialog id="memory" class="panel">
-    <header>
-      <h2>Memory</h2>
-      <button type="button" data-close>Close</button>
-    </header>
-    <div class="memory-bar">
-      <select data-region aria-label="Memory region"></select>
-      <input data-address placeholder="Address (hex)" aria-label="Go to address" spellcheck="false" autocomplete="off">
-      <button type="button" data-go>Go</button>
-      <button type="button" data-prev aria-label="Previous page">◀</button>
-      <button type="button" data-next aria-label="Next page">▶</button>
-      <button type="button" data-frame>Next frame</button>
-      <label class="check"><input type="checkbox" data-live> Run the game</label>
-    </div>
-    <details class="memory-search">
-      <summary>Search (cheat finder)</summary>
-      <div class="memory-bar">
-        <select data-condition aria-label="Condition"></select>
-        <input data-value placeholder="Value (12, 0x0C)" aria-label="Value" spellcheck="false" autocomplete="off">
-        <button type="button" data-search>New search</button>
-        <button type="button" data-narrow disabled>Narrow</button>
-      </div>
-      <p class="empty" data-found>Search for a value you see in the game (lives, coins…), let it change, then narrow down.</p>
-      <div class="memory-results" data-results></div>
-    </details>
-    <div class="memory" data-grid></div>
-    <footer><span data-range></span> · Type two hex digits to change a byte.</footer>
-  </dialog>
+        <details class="memory-search">
+            <summary>Search (cheat finder)</summary>
+            <div class="memory-bar">
+                <select data-condition aria-label="Condition"></select>
+                <input data-value placeholder="Value (12, 0x0C)" aria-label="Value" spellcheck="false" autocomplete="off">
+                <button type="button" data-search>New search</button>
+                <button type="button" data-narrow disabled>Narrow</button>
+            </div>
+            <p class="empty" data-found>Search for a value you see in the game (lives, coins…), let it change, then narrow down.</p>
+            <div class="memory-results" data-results></div>
+        </details>
+        <div class="memory" data-grid></div>
+        <footer><span data-range></span> · Type two hex digits to change a byte.</footer>
+    </dialog>
 </body>
 </html>

@@ -12,9 +12,9 @@ export const SCREEN_HEIGHT = 144;
 
 /** Bits of IF/IE. */
 export const Interrupt = {
-  VBLANK: 0x01,
-  STAT: 0x02,
-  TIMER: 0x04,
-  SERIAL: 0x08,
-  JOYPAD: 0x10,
+    VBLANK: 0x01,
+    STAT: 0x02,
+    TIMER: 0x04,
+    SERIAL: 0x08,
+    JOYPAD: 0x10,
 };
