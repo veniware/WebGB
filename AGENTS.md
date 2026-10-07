@@ -363,9 +363,10 @@ other versions are refused.
   (xBR)") draws the result at screen size. Redraws without a new frame reuse
   the passes' output.
 - **Sound:** emulator worklet -> pitch shifter (worklet, when not 0) ->
-  high pass -> low pass (BiquadFilters) -> echo (delay with feedback, dry +
-  wet) -> volume. `AudioOutput.setEffects()` rebuilds the chain; settings
-  `audioPitch`/`audioLowpass`/`audioHighpass`/`audioEcho`.
+  high pass -> low pass -> bass boost (BiquadFilters) -> echo (delay with
+  feedback, dry + wet) -> mono (1-channel gain) -> volume.
+  `AudioOutput.setEffects()` rebuilds the chain; settings `audioPitch`,
+  `audioLowpass`, `audioHighpass`, `audioBass`, `audioEcho`, `audioMono`.
 
 ### Rewind
 
@@ -424,13 +425,13 @@ so short taps are never lost.
 Done: Game Boy and Game Boy Color (with palettes, color correction, Super
 Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core,
 input mapping, performance stats, the renderer setting, the PWA, video
-effects (ghosting, sharpen, outlines, xBR), sound effects (pitch, low/high
-pass, echo), the memory viewer/editor with cheat search (Settings → Tools), the GBA BIOS file
+effects and scalers (ghosting, sharpen, outlines, xBR, LCD grid, CRT),
+sound effects (pitch, low/high pass, bass, echo, mono), the memory viewer/editor with cheat search (Settings → Tools), the GBA BIOS file
 option, rewind and library backup/restore.
 
 1. GBA follow-ups: idle-loop detection (speed on slow phones), link cable.
 2. A WebGPU renderer (renderers are separate modules in `src/video/`; the
    Renderer setting picks Auto / WebGL / Canvas 2D today).
-3. More video filters (HQx, CRT, LCD grid, ...; `src/video/filters.js`) and
-   sound effects (`AudioOutput.setEffects`).
+3. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
+   effects (`AudioOutput.setEffects`).
 4. Possibly later: audio/video recording.

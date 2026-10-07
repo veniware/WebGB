@@ -23,7 +23,7 @@ export class AudioOutput extends Emitter {
   #length = 0;
   #rate = 48000;
   #volume = 1;
-  #effects = { pitch: 0, highpass: 0, lowpass: 0, echo: 'off' };
+  #effects = { pitch: 0, highpass: 0, lowpass: 0, bass: 0, echo: 'off', mono: false };
   // Effect nodes currently connected.
   #chain = [];
 
@@ -85,22 +85,23 @@ export class AudioOutput extends Emitter {
   }
 
   /**
-   * @param {{ pitch?: number, highpass?: number, lowpass?: number, echo?: 'off' | 'room' | 'hall' }} effects
-   *   pitch in semitones; filter cutoffs in Hz (0: off).
+   * @param {{ pitch?: number, highpass?: number, lowpass?: number, bass?: number,
+   *   echo?: 'off' | 'room' | 'hall', mono?: boolean }} effects
+   *   pitch in semitones; filter cutoffs in Hz (0: off); bass boost in dB.
    */
   setEffects(effects) {
     Object.assign(this.#effects, effects);
     this.#connect();
   }
 
-  /** (Re)builds the chain: player -> pitch -> high pass -> low pass -> echo -> volume. */
+  /** (Re)builds the chain: player -> pitch -> high pass -> low pass -> bass -> echo -> mono -> volume. */
   #connect() {
     const context = this.#context;
     if (!this.#node) return;
     this.#node.disconnect();
     for (const node of this.#chain) node.disconnect();
     this.#chain = [];
-    const { pitch, highpass, lowpass, echo } = this.#effects;
+    const { pitch, highpass, lowpass, bass, echo, mono } = this.#effects;
     let last = this.#node;
     const add = (node) => {
       last.connect(node);
@@ -119,6 +120,13 @@ export class AudioOutput extends Emitter {
       filter.frequency.value = frequency;
       add(filter);
     }
+    if (bass) {
+      const shelf = context.createBiquadFilter();
+      shelf.type = 'lowshelf';
+      shelf.frequency.value = 200;
+      shelf.gain.value = bass;
+      add(shelf);
+    }
     const preset = ECHOES[echo];
     if (preset) {
       const input = context.createGain();
@@ -136,6 +144,10 @@ export class AudioOutput extends Emitter {
       delay.connect(wet).connect(mix);
       this.#chain.push(delay, feedback, wet, mix);
       last = mix;
+    }
+    if (mono) {
+      // Mixed down to one channel here; the output plays it on both sides.
+      add(new GainNode(context, { channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers' }));
     }
     last.connect(this.#gain);
   }

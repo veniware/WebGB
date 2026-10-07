@@ -20,7 +20,9 @@ const FLASH_DURATION = 4000;
 // Display effects in the settings (see Display.setEffects).
 const EFFECTS = ['ghosting', 'sharpen', 'outlines'];
 // Sound effect settings -> AudioOutput.setEffects keys.
-const AUDIO_EFFECTS = { audioPitch: 'pitch', audioLowpass: 'lowpass', audioHighpass: 'highpass', audioEcho: 'echo' };
+const AUDIO_EFFECTS = {
+  audioPitch: 'pitch', audioLowpass: 'lowpass', audioHighpass: 'highpass', audioBass: 'bass', audioEcho: 'echo', audioMono: 'mono',
+};
 
 const $ = (id) => document.getElementById(id);
 

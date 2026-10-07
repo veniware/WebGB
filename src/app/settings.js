@@ -22,6 +22,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   audioLowpass: 0,
   audioHighpass: 0,
   audioEcho: 'off',
+  // Bass boost in dB; both channels mixed together (mono).
+  audioBass: 0,
+  audioMono: false,
   // Changed controls (see src/input/bindings.js); null: the defaults.
   keyBindings: null,
   padBindings: null,

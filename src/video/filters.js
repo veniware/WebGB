@@ -182,6 +182,36 @@ export const FILTERS = [
       o = corner(p, ivec2(-1, 0), ivec2(0, -1), 1.0 - f, o);
       fragColor = vec4(o, 1.0);`,
   },
+  {
+    id: 'lcd',
+    name: 'LCD grid',
+    canvas: 'nearest',
+    // Each pixel as an LCD cell with a thin dark gap (when it is at least 3
+    // screen pixels wide), colors from the sharp scaler.
+    main: `
+      vec2 pos = vUV * uSrcSize;
+      vec2 scale = uDstSize / uSrcSize;
+      vec2 center = fract(pos) - 0.5;
+      vec2 range = 0.5 - 0.5 / scale;
+      vec3 c = bilinear(floor(pos) + (center - clamp(center, -range, range)) * scale + 0.5);
+      vec2 inCell = fract(pos) * scale;
+      bool gap = (scale.x >= 3.0 && inCell.x < 1.0) || (scale.y >= 3.0 && inCell.y < 1.0);
+      fragColor = vec4(gap ? c * 0.78 : c, 1.0);`,
+  },
+  {
+    id: 'crt',
+    name: 'CRT',
+    canvas: 'smooth',
+    // Scanlines (each line brightest in its middle), a soft horizontal blur
+    // and an aperture-grille mask; brightened to make up for the dark parts.
+    main: `
+      vec2 pos = vUV * uSrcSize;
+      vec3 c = bilinear(vec2(pos.x, floor(pos.y) + 0.5));
+      float scan = 0.6 + 0.4 * sin(3.14159265 * fract(pos.y));
+      int column = int(mod(gl_FragCoord.x, 3.0));
+      vec3 mask = vec3(column == 0 ? 1.0 : 0.75, column == 1 ? 1.0 : 0.75, column == 2 ? 1.0 : 0.75);
+      fragColor = vec4(min(c * scan * mask * 1.35, 1.0), 1.0);`,
+  },
 ];
 
 export function getFilter(id) {
