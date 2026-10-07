@@ -75,6 +75,7 @@ src/app/
   settings.js           Persisted user preferences (localStorage)
   emitter.js            Tiny event emitter
   rewind.js             Rewind history: save states, delta-compressed
+  recorder.js           Video recording (MediaRecorder: screen canvas + sound)
 src/core/
   interface.js          The Core contract (JSDoc) and CoreDescriptor
   registry.js           System -> core lookup; lazy-loads cores with import()
@@ -378,6 +379,14 @@ each and running one frame for its picture. The history is cleared wherever
 the game jumps (reset, snapshot load, link, new game) and is off while two
 games are linked. Setting `rewind`.
 
+### Recording
+
+Settings → Tools → Record video (or F9): `Recorder` records
+`display.canvas.captureStream()` (the screen as drawn, filters included)
+plus `AudioOutput.captureStream()` (what plays, after the volume) with
+MediaRecorder, WebM (VP9/Opus) or MP4 on Safari, and downloads the file on
+stop. Switching renderer stops it (the canvas is replaced).
+
 ### Input timing
 
 Inputs report buttons pressed since the last poll even if already released,
@@ -427,11 +436,10 @@ Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core,
 input mapping, performance stats, the renderer setting, the PWA, video
 effects and scalers (ghosting, sharpen, outlines, xBR, LCD grid, CRT),
 sound effects (pitch, low/high pass, bass, echo, mono), the memory viewer/editor with cheat search (Settings → Tools), the GBA BIOS file
-option, rewind and library backup/restore.
+option, rewind, library backup/restore and video recording.
 
 1. GBA follow-ups: idle-loop detection (speed on slow phones), link cable.
 2. A WebGPU renderer (renderers are separate modules in `src/video/`; the
    Renderer setting picks Auto / WebGL / Canvas 2D today).
 3. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
    effects (`AudioOutput.setEffects`).
-4. Possibly later: audio/video recording.

@@ -24,6 +24,7 @@ export const ACTIONS = [
   { id: 'fullscreen', name: 'Fullscreen', hotkey: true },
   { id: 'snapshot', name: 'Take snapshot', hotkey: true },
   { id: 'loadSnapshot', name: 'Load latest snapshot', hotkey: true },
+  { id: 'record', name: 'Start/stop recording', hotkey: true },
 ];
 
 const BUTTON_ACTIONS = ACTIONS.filter((action) => action.button);

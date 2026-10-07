@@ -1,10 +1,11 @@
+import { Recorder } from '../app/recorder.js';
 import { saveSettings } from '../app/settings.js';
 import { loadRomFile } from '../rom/loader.js';
 import { addRom, listRoms } from '../storage/roms.js';
 import { listSaves } from '../storage/saves.js';
 import { listSnapshots } from '../storage/snapshots.js';
 import { FILTERS } from '../video/filters.js';
-import { baseName, formatSize, pickFiles, SYSTEM_NAMES } from './dom.js';
+import { baseName, downloadFile, formatSize, pickFiles, SYSTEM_NAMES } from './dom.js';
 import { ROM_ACCEPT, SAVE_EXTENSION } from './files.js';
 import { defaultKeyBindings, defaultPadBindings, gamepadMaps, keyboardMaps, withDefaults } from '../input/bindings.js';
 import { setupBiosSetting } from './bios-setting.js';
@@ -123,6 +124,8 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
     onChange: (key, value) => {
       updateSettings({ [key]: value });
       if (key === 'renderer') {
+        // The recording follows the old canvas, which is replaced.
+        stopRecording();
         display.setRenderer(value);
         updateShaderControls();
       } else if (key === 'rewind') {
@@ -158,6 +161,57 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
   const updateMemoryButton = () => ($('memory-open').disabled = !memoryDialog.available);
   emulator.on('loaded', updateMemoryButton);
   emulator.on('stopped', updateMemoryButton);
+
+  // --- Recording ---------------------------------------------------------
+  const recorder = new Recorder();
+  const recordStart = $('record-start');
+  const recordStop = $('record-stop');
+  let recordTimer = 0;
+  recordStart.hidden = !Recorder.supported;
+  const updateRecordButton = () => (recordStart.disabled = !emulator.core || recorder.recording);
+  emulator.on('loaded', updateRecordButton);
+  emulator.on('stopped', () => {
+    updateRecordButton();
+    if (recorder.recording) stopRecording();
+  });
+
+  function startRecording() {
+    if (!Recorder.supported || !emulator.core || recorder.recording) return;
+    recorder.start(display.canvas, audio.captureStream());
+    const tick = () => {
+      const seconds = Math.floor((performance.now() - recorder.started) / 1000);
+      recordStop.textContent = `■ Stop recording ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    };
+    tick();
+    recordTimer = setInterval(tick, 500);
+    recordStop.hidden = false;
+    updateRecordButton();
+  }
+
+  async function stopRecording() {
+    if (!recorder.recording) return;
+    clearInterval(recordTimer);
+    recordStop.hidden = true;
+    const title = emulator.rom ? emulator.rom.info.title || baseName(emulator.rom.name) : 'WebGB';
+    try {
+      const { blob, extension } = await recorder.stop();
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const time = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}`;
+      downloadFile(blob, `${title} ${time}.${extension}`);
+      flash(`Recording saved (${formatSize(blob.size)}).`);
+    } catch (err) {
+      reportError(err);
+    }
+    updateRecordButton();
+  }
+
+  recordStart.addEventListener('click', () => {
+    // Close the settings, so the recording shows the game.
+    $('settings').close();
+    startRecording();
+  });
+  recordStop.addEventListener('click', stopRecording);
   const library = createLibraryDialog({
     dialog: $('library'),
     modals,
@@ -399,6 +453,7 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
     fullscreen: () => display.toggleFullscreen(),
     snapshot: () => emulator.takeSnapshot().catch(reportError),
     loadSnapshot: () => emulator.loadLatestSnapshot().catch(reportError),
+    record: () => (recorder.recording ? stopRecording() : startRecording()),
   };
   return {
     hotkey: (name) => hotkeys[name]?.(),

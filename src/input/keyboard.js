@@ -23,6 +23,7 @@ export const DEFAULT_HOTKEYS = {
   KeyF: 'fullscreen',
   F2: 'snapshot',
   F4: 'loadSnapshot',
+  F9: 'record',
 };
 
 /** Player 2 (two linked games): WASD, G = B, H = A, T = Select, Y = Start. */

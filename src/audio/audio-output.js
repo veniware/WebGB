@@ -152,6 +152,17 @@ export class AudioOutput extends Emitter {
     last.connect(this.#gain);
   }
 
+  /**
+   * What plays, as a MediaStream (for recording); stop() disconnects it.
+   * @returns {{ stream: MediaStream, stop: () => void } | null} null without sound.
+   */
+  captureStream() {
+    if (!this.#gain) return null;
+    const node = this.#context.createMediaStreamDestination();
+    this.#gain.connect(node);
+    return { stream: node.stream, stop: () => this.#gain.disconnect(node) };
+  }
+
   /** Queues interleaved stereo samples produced at `rate`. */
   push(samples, rate) {
     if (!this.#node || this.#context.state !== 'running') return;
