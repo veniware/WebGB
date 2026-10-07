@@ -36,6 +36,9 @@ export class Emulator extends Emitter {
   #display;
   #audio;
   #input;
+  #motion;
+  #camera;
+  #rumble;
   #coreOptions = {};
   #frameDebt = 0;
   #lastTime = 0;
@@ -48,13 +51,23 @@ export class Emulator extends Emitter {
   #fpsSince = 0;
 
   /**
-   * @param {{ display: import('../video/display.js').Display, audio: import('../audio/audio-output.js').AudioOutput, input: import('../input/input-manager.js').InputManager }} deps
+   * @param {{
+   *   display: import('../video/display.js').Display,
+   *   audio: import('../audio/audio-output.js').AudioOutput,
+   *   input: import('../input/input-manager.js').InputManager,
+   *   motion?: import('../input/motion.js').MotionInput,
+   *   camera?: import('../input/camera.js').CameraInput,
+   *   rumble?: import('../input/rumble.js').Rumble,
+   * }} deps  motion/camera/rumble serve cartridges with a tilt sensor, camera or motor.
    */
-  constructor({ display, audio, input }) {
+  constructor({ display, audio, input, motion, camera, rumble }) {
     super();
     this.#display = display;
     this.#audio = audio;
     this.#input = input;
+    this.#motion = motion;
+    this.#camera = camera;
+    this.#rumble = rumble;
     setInterval(() => this.flushSave(), SAVE_CHECK_INTERVAL);
     document.addEventListener('visibilitychange', () => document.hidden && this.flushSave());
     window.addEventListener('pagehide', () => this.flushSave());
@@ -113,6 +126,19 @@ export class Emulator extends Emitter {
     this.setPaused(false);
     touchRom(rom.key).catch(() => {});
     this.emit('loaded', { rom: this.rom, fallback });
+    this.#startPeripherals(core);
+  }
+
+  #startPeripherals(core) {
+    this.#motion?.setActive(Boolean(core.wantsTilt));
+    if (core.wantsCamera && this.#camera) {
+      const { width, height } = core.cameraSize;
+      this.#camera.start(width, height).then((ok) => {
+        if (!ok && this.core === core) {
+          this.emit('status', { text: 'No camera available: the Game Boy Camera shows a test image.', error: true });
+        }
+      });
+    }
   }
 
   /** Stops the running game (after storing its save). */
@@ -130,6 +156,9 @@ export class Emulator extends Emitter {
     this.saveId = null;
     this.#lastSave = null;
     this.#audio.clear();
+    this.#motion?.setActive(false);
+    this.#camera?.stop();
+    this.#rumble?.set(0);
   }
 
   setPaused(paused) {
@@ -218,6 +247,7 @@ export class Emulator extends Emitter {
     const { core } = this;
     if (!core || this.paused) {
       this.#pendingButtons = 0;
+      this.#rumble?.set(0, now);
       return;
     }
 
@@ -235,13 +265,21 @@ export class Emulator extends Emitter {
     if (frames) {
       core.setInput(this.#pendingButtons);
       this.#pendingButtons = 0;
+      if (core.wantsTilt) core.setTilt(input.tiltX ?? 0, input.tiltY ?? 0);
+      if (core.wantsCamera) {
+        const image = this.#camera?.frame(now);
+        if (image) core.setCameraImage(image);
+      }
     }
     for (let i = 0; i < frames; i++) {
       core.runFrame();
       this.#audio.push(core.getAudioSamples(), core.sampleRate);
     }
     this.#audio.flush();
-    if (frames) this.#display.draw(core.getFrameBuffer());
+    if (frames) {
+      this.#display.draw(core.getFrameBuffer());
+      this.#rumble?.set(core.getRumble?.() ?? 0, now);
+    }
 
     this.#fpsFrames += frames;
     if (now - this.#fpsSince >= 500) {

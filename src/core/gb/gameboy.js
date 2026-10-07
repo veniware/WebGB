@@ -1,6 +1,8 @@
 import { StateReader, StateWriter } from '../state.js';
 import { Apu, SAMPLE_RATE } from './apu.js';
 import { createCartridge } from './cartridge.js';
+import { Camera, SENSOR_HEIGHT, SENSOR_WIDTH } from './mappers/camera.js';
+import { Mbc7 } from './mappers/mbc7.js';
 import { CLOCK_RATE, FRAME_DOTS, SCREEN_HEIGHT, SCREEN_WIDTH } from './constants.js';
 import { Cpu } from './cpu.js';
 import { DMG_PALETTES, GBC_PRESETS, gbcCombination, gbcCombinationFor } from './palettes.js';
@@ -92,8 +94,17 @@ export class GameBoy {
     // Remaining 16-byte blocks minus one, as FF55 reads it.
     this.hdmaLength = 0x7f;
     this.hdmaActive = false;
+    // CGB infrared port (RP).
+    this.rp = 0;
+    this.irReceived = false;
     // Dots left in the current runFrame().
     this.frameBudget = 0;
+    this.frameStart = 0;
+    // Rumble motor: time it was on during the current frame (dots).
+    this.rumbleOn = false;
+    this.rumbleSince = 0;
+    this.rumbleDots = 0;
+    this.rumbleLevel = 0;
     this.cart.reset();
     this.cpu.reset();
     this.ppu.reset();
@@ -170,7 +181,7 @@ export class GameBoy {
     s.bytes(this.wram);
     s.bytes(this.hram);
     s.bytes(this.extraRegs);
-    for (const r of ['ie', 'if', 'svbk', 'dmaRegister', 'dmaIndex', 'dmaDelay', 'hdmaLength']) this[r] = s.u8(this[r]);
+    for (const r of ['ie', 'if', 'svbk', 'dmaRegister', 'dmaIndex', 'dmaDelay', 'hdmaLength', 'rp']) this[r] = s.u8(this[r]);
     this.dmaSource = s.u16(this.dmaSource);
     this.hdmaSource = s.u16(this.hdmaSource);
     this.hdmaDest = s.u16(this.hdmaDest);
@@ -194,9 +205,57 @@ export class GameBoy {
     this.apu.beginFrame();
     ppu.frameDone = false;
     this.frameBudget += FRAME_DOTS;
+    this.frameStart = this.frameBudget;
     while (this.frameBudget > 0 && !ppu.frameDone) cpu.step();
+    const elapsed = this.frameStart - this.frameBudget;
     if (ppu.frameDone) this.frameBudget = 0;
     this.apu.catchUp();
+    if (this.rumbleOn) this.rumbleDots += elapsed - this.rumbleSince;
+    this.rumbleLevel = elapsed > 0 ? Math.min(1, this.rumbleDots / elapsed) : 0;
+    this.rumbleDots = 0;
+    this.rumbleSince = 0;
+  }
+
+  /** How much the rumble motor ran during the last frame, 0-1. */
+  getRumble() {
+    return this.rumbleLevel;
+  }
+
+  /** True for cartridges with a tilt sensor (MBC7); see setTilt. */
+  get wantsTilt() {
+    return this.cart instanceof Mbc7;
+  }
+
+  /** Tilt in g: x positive to the right, y positive towards the player. */
+  setTilt(x, y) {
+    if (this.cart instanceof Mbc7) {
+      this.cart.tiltX = x;
+      this.cart.tiltY = y;
+    }
+  }
+
+  /** True for the Game Boy Camera; the host then feeds frames with setCameraImage. */
+  get wantsCamera() {
+    return this.cart instanceof Camera;
+  }
+
+  /** Size of the grayscale images setCameraImage takes. */
+  get cameraSize() {
+    return { width: SENSOR_WIDTH, height: SENSOR_HEIGHT };
+  }
+
+  setCameraImage(pixels) {
+    if (this.cart instanceof Camera) this.cart.setImage(pixels);
+  }
+
+  /** Infrared light from outside (another Game Boy); light this one emits is irLight. */
+  setInfrared(received) {
+    this.irReceived = received;
+    if ('irReceived' in this.cart) this.cart.irReceived = received;
+  }
+
+  get irLight() {
+    return (this.rp & 1) !== 0 || this.cart.irLight === true;
   }
 
   getFrameBuffer() {
@@ -254,6 +313,7 @@ export class GameBoy {
     this.ppu.tick(dots);
     this.apu.pending += dots;
     if (this.serial.cycles) this.serial.tick();
+    if (this.cart.ticking) this.cart.tick(4);
     if (this.dmaDelay || this.dmaActive) this.#dmaTick();
     this.frameBudget -= dots;
   }
@@ -296,7 +356,10 @@ export class GameBoy {
   }
 
   write(addr, value) {
-    if (addr < 0x8000) this.cart.writeRom(addr, value);
+    if (addr < 0x8000) {
+      this.cart.writeRom(addr, value);
+      if (this.cart.rumbling !== this.rumbleOn) this.#rumbleChanged();
+    }
     else if (addr < 0xa000) this.ppu.writeVram(addr, value);
     else if (addr < 0xc000) this.cart.writeRam(addr, value);
     else if (addr < 0xfe00) this.#writeWram(addr, value);
@@ -307,6 +370,13 @@ export class GameBoy {
     } else if (addr < 0xff80) this.#writeIo(addr, value);
     else if (addr < 0xffff) this.hram[addr - 0xff80] = value;
     else this.ie = value;
+  }
+
+  #rumbleChanged() {
+    const now = this.frameStart - this.frameBudget;
+    if (this.rumbleOn) this.rumbleDots += now - this.rumbleSince;
+    this.rumbleSince = now;
+    this.rumbleOn = this.cart.rumbling;
   }
 
   /** C000-DFFF, mirrored at E000-FDFF. D000-DFFF is banked on the CGB. */
@@ -339,6 +409,11 @@ export class GameBoy {
     switch (addr) {
       case 0xff4d: return 0x7e | (this.doubleSpeed ? 0x80 : 0) | (this.speedArmed ? 1 : 0);
       case 0xff55: return (this.hdmaActive ? 0 : 0x80) | this.hdmaLength;
+      case 0xff56: {
+        // Bit 1 is 0 while light is received and reading is enabled (bits 6-7).
+        const dark = (this.rp & 0xc0) !== 0xc0 || !this.irReceived;
+        return 0x3c | (this.rp & 0xc1) | (dark ? 2 : 0);
+      }
       case 0xff70: return 0xf8 | this.svbk;
       case 0xff72: case 0xff73: case 0xff74: return this.extraRegs[addr - 0xff72];
       case 0xff75: return 0x8f | this.extraRegs[3];
@@ -375,6 +450,7 @@ export class GameBoy {
       case 0xff53: this.hdmaDest = ((value & 0x1f) << 8) | (this.hdmaDest & 0xff); return;
       case 0xff54: this.hdmaDest = (this.hdmaDest & 0x1f00) | (value & 0xf0); return;
       case 0xff55: this.#writeHdma(value); return;
+      case 0xff56: this.rp = value & 0xc1; return;
       case 0xff70:
         this.svbk = value & 7;
         this.wramBank = this.svbk || 1;

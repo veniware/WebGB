@@ -24,6 +24,14 @@ export const DEFAULT_HOTKEYS = {
   F4: 'loadSnapshot',
 };
 
+/** KeyboardEvent.code -> tilt direction, for tilt-sensor cartridges (Kirby Tilt 'n' Tumble). */
+export const DEFAULT_TILT_KEYS = {
+  KeyJ: [-1, 0],
+  KeyL: [1, 0],
+  KeyI: [0, -1],
+  KeyK: [0, 1],
+};
+
 const TEXT_FIELDS = new Set(['INPUT', 'SELECT', 'TEXTAREA']);
 
 export class KeyboardInput {
@@ -35,9 +43,10 @@ export class KeyboardInput {
   /**
    * @param {{ keyMap?: Record<string, number>, hotkeys?: Record<string, string>, onHotkey?: (name: string) => void }} [options]
    */
-  constructor({ keyMap = DEFAULT_KEY_MAP, hotkeys = DEFAULT_HOTKEYS, onHotkey = () => {} } = {}) {
+  constructor({ keyMap = DEFAULT_KEY_MAP, hotkeys = DEFAULT_HOTKEYS, tiltKeys = DEFAULT_TILT_KEYS, onHotkey = () => {} } = {}) {
     this.keyMap = keyMap;
     this.hotkeys = hotkeys;
+    this.tiltKeys = tiltKeys;
     this.onHotkey = onHotkey;
     window.addEventListener('keydown', (e) => this.#keydown(e));
     window.addEventListener('keyup', (e) => this.#keyup(e));
@@ -50,7 +59,7 @@ export class KeyboardInput {
   #keydown(e) {
     if (!this.enabled || e.ctrlKey || e.metaKey || e.altKey || TEXT_FIELDS.has(e.target?.tagName)) return;
     const hotkey = this.hotkeys[e.code];
-    if (this.keyMap[e.code] === undefined && !hotkey) return;
+    if (this.keyMap[e.code] === undefined && !hotkey && !this.tiltKeys[e.code]) return;
     e.preventDefault();
     if (e.repeat) return;
     this.#down.add(e.code);
@@ -65,13 +74,22 @@ export class KeyboardInput {
   poll() {
     let buttons = 0;
     let fastForward = false;
+    let tiltX = 0;
+    let tiltY = 0;
     if (this.enabled) {
       for (const code of [...this.#down, ...this.#tapped]) {
         buttons |= this.keyMap[code] ?? 0;
         if (this.hotkeys[code] === 'fastForward') fastForward = true;
       }
+      for (const code of this.#down) {
+        const tilt = this.tiltKeys[code];
+        if (tilt) {
+          tiltX += tilt[0];
+          tiltY += tilt[1];
+        }
+      }
     }
     this.#tapped.clear();
-    return { buttons, fastForward };
+    return { buttons, fastForward, tiltX, tiltY };
   }
 }

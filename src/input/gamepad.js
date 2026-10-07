@@ -20,6 +20,8 @@ export const DEFAULT_PAD_MAP = [
 /** Right trigger holds fast-forward. */
 const FAST_FORWARD_BUTTON = 7;
 const STICK_DEADZONE = 0.5;
+// The right stick tilts tilt-sensor cartridges.
+const TILT_DEADZONE = 0.15;
 
 const isPressed = (button) => !!button && (button.pressed || button.value > 0.5);
 
@@ -28,9 +30,24 @@ export class GamepadInput {
     this.map = map;
   }
 
+  /** Rumbles the connected gamepads that support it; strength 0-1. */
+  rumble(strength, duration) {
+    for (const pad of navigator.getGamepads?.() ?? []) {
+      const actuator = pad?.vibrationActuator;
+      if (!actuator) continue;
+      if (strength > 0) {
+        actuator.playEffect?.('dual-rumble', { duration, strongMagnitude: strength, weakMagnitude: strength }).catch(() => {});
+      } else {
+        actuator.reset?.().catch(() => {});
+      }
+    }
+  }
+
   poll() {
     let buttons = 0;
     let fastForward = false;
+    let tiltX = 0;
+    let tiltY = 0;
     for (const pad of navigator.getGamepads?.() ?? []) {
       if (!pad?.connected) continue;
       for (const [index, button] of this.map) {
@@ -42,7 +59,12 @@ export class GamepadInput {
       if (y < -STICK_DEADZONE) buttons |= Button.UP;
       if (y > STICK_DEADZONE) buttons |= Button.DOWN;
       if (isPressed(pad.buttons[FAST_FORWARD_BUTTON])) fastForward = true;
+      const [, , rx = 0, ry = 0] = pad.axes;
+      if (Math.hypot(rx, ry) > TILT_DEADZONE) {
+        tiltX += rx;
+        tiltY += ry;
+      }
     }
-    return { buttons, fastForward };
+    return { buttons, fastForward, tiltX, tiltY };
   }
 }

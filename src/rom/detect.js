@@ -39,7 +39,12 @@ function gbaInfo(data) {
   return { system: 'gba', title: ascii(data, 0xa0, 12), code: ascii(data, 0xac, 4) };
 }
 
-function gbInfo(data) {
+function gbInfo(rom) {
+  // MMM01 compilations keep the header that describes them with their menu,
+  // in the last 32 KiB; the first one belongs to the first game.
+  const menu = rom.length - 0x8000;
+  const data = menu > 0 && rom[menu + 0x147] >= 0x0b && rom[menu + 0x147] <= 0x0d &&
+    startsWith(rom, menu + 0x104, GB_LOGO) ? rom.subarray(menu) : rom;
   const cgbFlag = data[0x143];
   const color = cgbFlag === 0x80 || cgbFlag === 0xc0;
   // Color-era headers shrink the title to make room for a manufacturer code.

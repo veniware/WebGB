@@ -40,10 +40,10 @@ test('test core state round-trips through saveState/loadState', () => {
   assert.throws(() => core.loadState(new Uint8Array(3)));
 });
 
-test('input manager merges sources and cancels opposite directions', () => {
-  const source = (buttons, fastForward = false) => ({ poll: () => ({ buttons, fastForward }) });
-  const input = new InputManager([source(Button.A | Button.LEFT), source(Button.RIGHT | Button.UP, true)]);
-  assert.deepEqual(input.poll(), { buttons: Button.A | Button.UP, fastForward: true });
+test('input manager merges sources, cancels opposite directions and limits tilt', () => {
+  const source = (buttons, fastForward = false, tiltX = 0) => ({ poll: () => ({ buttons, fastForward, tiltX }) });
+  const input = new InputManager([source(Button.A | Button.LEFT, false, 1), source(Button.RIGHT | Button.UP, true, 1)]);
+  assert.deepEqual(input.poll(), { buttons: Button.A | Button.UP, fastForward: true, tiltX: 1.5, tiltY: 0 });
 });
 
 test('test core counts Start presses in battery RAM', () => {

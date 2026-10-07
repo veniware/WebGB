@@ -299,5 +299,14 @@ export function setupUI({ emulator, display, audio, inputs, settings }) {
     snapshot: () => emulator.takeSnapshot().catch(reportError),
     loadSnapshot: () => emulator.loadLatestSnapshot().catch(reportError),
   };
-  return { hotkey: (name) => hotkeys[name]?.() };
+  return {
+    hotkey: (name) => hotkeys[name]?.(),
+    /** iOS only lets a tap grant motion access; ask on the next one. */
+    needMotionPermission(motion) {
+      flash('Tap the screen to enable tilt controls.');
+      window.addEventListener('pointerup', () => {
+        motion.requestPermission().then((ok) => !ok && flash('Tilt controls were not allowed.', true));
+      }, { once: true });
+    },
+  };
 }

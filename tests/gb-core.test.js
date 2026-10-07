@@ -109,7 +109,7 @@ test('rejects snapshots of other games and survives corrupt ones', () => {
 });
 
 test('rejects unsupported cartridge types', () => {
-  assert.throws(() => new GameBoy(makeGbRom({ cartType: 0xfc })), /0xfc is not supported/);
+  assert.throws(() => new GameBoy(makeGbRom({ cartType: 0x21 })), /0x21 is not supported/);
 });
 
 // --- Cartridges -----------------------------------------------------------------
@@ -217,4 +217,150 @@ test('picks the Game Boy Color palette of known Nintendo titles', () => {
   const other = new GameBoy(makeGbRom());
   other.configure({ gbPalette: 'gbc' });
   assert.notDeepEqual([...other.ppu.dmgBg], [...other.ppu.dmgObj0]);
+});
+
+test('MBC7 reads the tilt sensor and stores the saved game in its EEPROM', () => {
+  const cart = createCartridge(bankedRom(0x22, 8));
+  cart.writeRom(0x0000, 0x0a);
+  cart.writeRom(0x4000, 0x40);
+  cart.tiltX = 1; // one g to the right
+  cart.writeRam(0xa000, 0x55);
+  cart.writeRam(0xa010, 0xaa);
+  assert.equal(cart.readRam(0xa020) | (cart.readRam(0xa030) << 8), 0x81d0 - 0x70);
+  assert.equal(cart.readRam(0xa040) | (cart.readRam(0xa050) << 8), 0x81d0);
+
+  // Bit-bang EEPROM commands: start bit, opcode, address, data (MSB first).
+  const pins = (cs, clk, di) => cart.writeRam(0xa080, (cs ? 0x80 : 0) | (clk ? 0x40 : 0) | (di ? 2 : 0));
+  const send = (bits) => {
+    for (const bit of bits) {
+      pins(1, 0, bit);
+      pins(1, 1, bit);
+    }
+  };
+  const command = (bits) => {
+    pins(0, 0, 0);
+    pins(1, 0, 0);
+    send([1, ...bits]);
+  };
+  const word = (value) => [...Array(16)].map((_, i) => (value >> (15 - i)) & 1);
+  command([0, 0, 1, 1, 0, 0, 0, 0, 0, 0]); // EWEN
+  command([0, 1, 0, 0, 0, 0, 0, 0, 1, 1, ...word(0xbeef)]); // WRITE word 3
+  assert.deepEqual([...cart.getSaveData().slice(6, 8)], [0xef, 0xbe]);
+
+  command([1, 0, 0, 0, 0, 0, 0, 0, 1, 1]); // READ word 3
+  let value = 0;
+  for (let i = 0; i < 16; i++) {
+    pins(1, 0, 0);
+    pins(1, 1, 0);
+    value = (value << 1) | (cart.readRam(0xa080) & 1);
+  }
+  assert.equal(value, 0xbeef);
+});
+
+test('HuC3 clock answers through its command mailbox', () => {
+  let now = 0;
+  const cart = createCartridge(bankedRom(0xfe, 8, 3), { now: () => now });
+  const run = (value) => {
+    cart.writeRom(0x0000, 0x0b);
+    cart.writeRam(0xa000, value);
+    cart.writeRom(0x0000, 0x0c);
+    return cart.readRam(0xa000) & 0x0f;
+  };
+  now = (3 * 1440 + 125) * 60000; // day 3, 02:05
+  run(0x40);
+  run(0x50); // address 0
+  const nibbles = [...Array(7)].map(() => run(0x10));
+  assert.deepEqual(nibbles, [125 & 15, (125 >> 4) & 15, 0, 3, 0, 0, 0]);
+  run(0x62);
+  assert.equal(run(0x00) & 1, 1, 'status request answers 1');
+});
+
+test('MMM01 starts in its menu and maps the selected game', () => {
+  const rom = bankedRom(0x00, 16);
+  rom.set(rom.subarray(0x104, 0x134), 14 * 0x4000 + 0x104);
+  rom[14 * 0x4000 + 0x147] = 0x0d;
+  const cart = createCartridge(rom);
+  assert.equal(cart.constructor.name, 'Mmm01');
+  assert.equal(cart.readRom(0x6000), 15, 'menu: last bank');
+  cart.writeRom(0x2000, 0x04); // game at bank 4
+  cart.writeRom(0x6000, 0x1c); // 32 KiB games: mask the upper bank bits
+  cart.writeRom(0x0000, 0x40); // map
+  assert.equal(cart.readRom(0x2000), 4, 'game bank 0');
+  assert.equal(cart.readRom(0x6000), 5, 'game bank 1');
+  cart.writeRom(0x2000, 0x00);
+  assert.equal(cart.readRom(0x6000), 5, 'selection bits are locked');
+});
+
+test('MBC6 maps two ROM windows and programs flash', () => {
+  const cart = createCartridge(makeGbRom({ cartType: 0x20, size: 0x20000 }));
+  cart.rom[3 * 0x2000] = 0x33;
+  cart.writeRom(0x2000, 3);
+  assert.equal(cart.readRom(0x4000), 0x33);
+  cart.writeRom(0x0c00, 1); // flash on
+  cart.writeRom(0x2800, 8); // window A shows flash
+  cart.writeRom(0x2000, 2);
+  const unlock = () => {
+    cart.writeRom(0x2000, 2);
+    cart.writeRom(0x5555, 0xaa);
+    cart.writeRom(0x2000, 1);
+    cart.writeRom(0x4aaa, 0x55);
+    cart.writeRom(0x2000, 2);
+  };
+  unlock();
+  cart.writeRom(0x5555, 0xa0); // program
+  cart.writeRom(0x2000, 9);
+  cart.writeRom(0x4010, 0x42);
+  cart.writeRom(0x4010, 0xf0); // exit
+  assert.equal(cart.readRom(0x4010), 0x42);
+  assert.equal(cart.getSaveData()[0x8000 + 9 * 0x2000 + 0x10], 0x42);
+});
+
+test('Game Boy Camera captures the host image into tiles', () => {
+  const gb = new GameBoy(makeGbRom({ cartType: 0xfc, size: 0x20000 }));
+  assert.equal(gb.wantsCamera, true);
+  const { width, height } = gb.cameraSize;
+  gb.setCameraImage(new Uint8Array(width * height).fill(255));
+  const cart = gb.cart;
+  cart.writeRom(0x4000, 0x10); // registers
+  cart.writeRam(0xa002, 0x03); // exposure
+  for (let i = 0; i < 16; i++) {
+    cart.writeRam(0xa006 + i * 3, 0x40);
+    cart.writeRam(0xa007 + i * 3, 0x80);
+    cart.writeRam(0xa008 + i * 3, 0xc0);
+  }
+  cart.writeRam(0xa000, 1);
+  assert.equal(cart.readRam(0xa000) & 1, 1, 'busy');
+  for (let i = 0; i < 4; i++) gb.runFrame(); // about 2.6 frames at this exposure
+  assert.equal(cart.readRam(0xa000) & 1, 0, 'done');
+  cart.writeRom(0x4000, 0);
+  assert.ok(cart.ram.slice(0x100, 0x100 + 14 * 16 * 16).some((v) => v !== 0), 'tiles written');
+});
+
+test('TAMA5 reaches its RAM through register writes', () => {
+  const cart = createCartridge(bankedRom(0xfd, 8));
+  const reg = (index, value) => {
+    cart.writeRam(0xa001, index);
+    cart.writeRam(0xa000, value);
+  };
+  reg(4, 0x2); // write value low
+  reg(5, 0xa); // write value high
+  reg(6, 0x0); // RAM write, address high
+  reg(7, 0x5); // address low: performs the write
+  assert.equal(cart.ram[5], 0xa2);
+  reg(6, 0x2); // RAM read
+  reg(7, 0x5);
+  cart.writeRam(0xa001, 0x0c);
+  assert.equal(cart.readRam(0xa000) & 0x0f, 0x2);
+  cart.writeRam(0xa001, 0x0d);
+  assert.equal(cart.readRam(0xa000) & 0x0f, 0xa);
+});
+
+test('reports rumble strength per frame', () => {
+  const gb = new GameBoy(makeGbRom({
+    cartType: 0x1c,
+    code: [0x3e, 0x08, 0xea, 0x00, 0x40, 0x76, 0x18, 0xfd], // motor on, then HALT
+  }));
+  gb.runFrame();
+  gb.runFrame();
+  assert.equal(gb.getRumble(), 1);
 });
