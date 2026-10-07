@@ -103,6 +103,7 @@ export function setupUI({ emulator, display, audio, inputs, keyboard, gamepad, s
     sgbBorder: settings.sgbBorder,
     gbaBios,
     gbaBiosIntro: settings.gbaBiosIntro,
+    gbaSunlight: settings.gbaSunlight,
   });
   emulator.configure(coreOptions());
   setupBiosSetting({

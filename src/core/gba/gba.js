@@ -6,6 +6,7 @@ import { Bus } from './bus.js';
 import { Arm7 } from './cpu.js';
 import { Dma, Timing } from './dma.js';
 import { Gpio } from './gpio.js';
+import { TILT_GAMES, TiltSensor } from './tilt.js';
 import { memoryRegions } from './memory.js';
 import { LINE_CYCLES, Ppu, SCREEN_HEIGHT, SCREEN_WIDTH } from './ppu.js';
 import { Sio } from './sio.js';
@@ -67,7 +68,13 @@ export class Gba {
     this.ioRegs = new Uint16Array(0x200);
     this.irq = new Interrupts((time) => this.#updateIrq(time));
     this.backup = new Backup(detectBackup(rom));
-    this.gpio = new Gpio(rom, { now });
+    this.gpio = new Gpio(rom, { now, cycles: () => this.bus.cycles });
+    const code = String.fromCharCode(...rom.subarray(0xac, 0xaf));
+    this.tilt = TILT_GAMES.has(code) ? new TiltSensor() : null;
+    this.backup.tilt = this.tilt;
+    // The host feeds setTilt() for the accelerometer and the gyro.
+    this.wantsTilt = Boolean(this.tilt || this.gpio.gyro);
+    this.rumbleFrom = 0;
     this.ppu = new Ppu({
       requestIrq: (bit, time) => this.irq.request(bit, time),
       onHblank: () => this.dma.trigger(Timing.HBLANK),
@@ -127,6 +134,7 @@ export class Gba {
     this.sio.reset();
     this.backup.reset();
     this.gpio.reset();
+    this.tilt?.reset();
     this.ioRegs.fill(0);
     this.irq.ie = 0;
     this.irq.if = 0;
@@ -266,9 +274,30 @@ export class Gba {
     this.#checkKeypadIrq();
   }
 
-  /** User options: colorCorrection (look like the GBA's LCD). */
-  configure({ colorCorrection = false } = {}) {
+  /**
+   * User options: colorCorrection (look like the GBA's LCD), gbaSunlight
+   * (0-10, for the solar sensor).
+   */
+  configure({ colorCorrection = false, gbaSunlight = 0 } = {}) {
     this.ppu.setColorCorrection(colorCorrection);
+    this.gpio.light = gbaSunlight;
+  }
+
+  /** Accelerometer cartridges get both axes (in g); the gyro turns with x. */
+  setTilt(x, y) {
+    if (this.tilt) {
+      this.tilt.x = x;
+      this.tilt.y = y;
+    }
+    this.gpio.rotation = x;
+  }
+
+  /** Rumble motor strength since the last call, 0-1. */
+  getRumble() {
+    if (!this.gpio.rumble) return 0;
+    const level = this.gpio.rumbleLevel(this.rumbleFrom);
+    this.rumbleFrom = this.bus.cycles;
+    return level;
   }
 
   getSaveWrites() {
@@ -318,7 +347,7 @@ export class Gba {
 
   getSaveData() {
     // The clock's settings follow the save memory, if the game changed them.
-    const clock = this.gpio.present ? this.gpio.toSave() : new Uint8Array(0);
+    const clock = this.gpio.rtc ? this.gpio.toSave() : new Uint8Array(0);
     if (this.backup.type === 'none' && !clock.length && !this.backup.data.some((b) => b !== 0xff)) return null;
     const data = this.backup.getSaveData();
     if (!clock.length) return data;
@@ -330,7 +359,7 @@ export class Gba {
 
   loadSaveData(data) {
     // Save memory sizes are multiples of 512 bytes; 16 more are the clock.
-    if (this.gpio.present && data.length % 512 === 16 && this.gpio.fromSave(data.subarray(data.length - 16))) {
+    if (this.gpio.rtc && data.length % 512 === 16 && this.gpio.fromSave(data.subarray(data.length - 16))) {
       data = data.subarray(0, data.length - 16);
     }
     this.backup.loadSaveData(data);
@@ -378,6 +407,7 @@ export class Gba {
     this.sio.sync(s);
     this.backup.sync(s);
     this.gpio.sync(s);
+    this.tilt?.sync(s);
     s.bytes(this.ioRegs);
     this.irq.ie = s.u16(this.irq.ie);
     this.irq.if = s.u16(this.irq.if);

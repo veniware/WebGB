@@ -33,6 +33,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   sgbBorder: true,
   // GBA: boot through the BIOS file's intro (when one is loaded; the file is in IndexedDB).
   gbaBiosIntro: false,
+  // GBA: light on Boktai's solar sensor, 0 (none) to 10.
+  gbaSunlight: 0,
 });
 
 export function loadSettings() {

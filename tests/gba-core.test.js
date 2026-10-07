@@ -315,3 +315,87 @@ test('a BIOS file: intro or straight to the game, and snapshots that do not mix'
   assert.throws(() => direct.loadState(builtIn.saveState()), /without the BIOS file/);
   direct.loadState(direct.saveState());
 });
+
+/** A ROM with the given game code, for the cartridge devices. */
+function romWithCode(code) {
+  return cart([], { gameCode: code });
+}
+
+test('Boktai solar sensor: more light, fewer clocks until pin 3 rises', () => {
+  const clocks = (light) => {
+    const gpio = new Gpio(romWithCode('U3IJ'));
+    gpio.light = light;
+    gpio.write(0xc8, 1);
+    gpio.write(0xc6, 7);
+    gpio.write(0xc4, 2); // reset
+    gpio.write(0xc4, 0);
+    for (let n = 1; n < 300; n++) {
+      gpio.write(0xc4, 1);
+      gpio.write(0xc4, 0);
+      if (gpio.read(0xc4) & 8) return n;
+    }
+    return Infinity;
+  };
+  assert.ok(hasSolarAndClock('U3IJ'));
+  assert.equal(clocks(0), 0xff - 0x16);
+  assert.equal(clocks(10), 0xff - 0x16 - 183);
+  assert.ok(clocks(5) < clocks(1));
+});
+
+function hasSolarAndClock(code) {
+  const gpio = new Gpio(romWithCode(code));
+  return gpio.present && gpio.solar && gpio.rtc;
+}
+
+test('WarioWare Twisted gyro: 16 bits per sample, centered at 0x6C0', () => {
+  const read = (rotation) => {
+    const gpio = new Gpio(romWithCode('RZWE'));
+    gpio.rotation = rotation;
+    gpio.write(0xc8, 1);
+    gpio.write(0xc6, 0xb); // pins 0, 1 and the motor
+    gpio.write(0xc4, 1); // sample
+    gpio.write(0xc4, 2);
+    let value = 0;
+    for (let i = 0; i < 16; i++) {
+      gpio.write(0xc4, 0); // falling edge of pin 1: a bit on pin 2
+      value = (value << 1) | ((gpio.read(0xc4) >> 2) & 1);
+      gpio.write(0xc4, 2);
+    }
+    return value;
+  };
+  assert.equal(read(0), 0x6c0);
+  assert.equal(read(1), 0x6c0 + 0x300);
+  assert.equal(read(-1), 0x6c0 - 0x300);
+});
+
+test('rumble: the share of time the motor ran', () => {
+  let cycles = 0;
+  const gpio = new Gpio(romWithCode('V49E'), { cycles: () => cycles });
+  gpio.write(0xc6, 8);
+  gpio.write(0xc4, 8);
+  cycles = 30;
+  gpio.write(0xc4, 0);
+  cycles = 60;
+  gpio.write(0xc4, 8);
+  cycles = 100;
+  assert.equal(gpio.rumbleLevel(0), 0.7);
+  cycles = 200;
+  assert.equal(gpio.rumbleLevel(100), 1, 'still running');
+});
+
+test('Yoshi Topsy-Turvy accelerometer: sampled by writes in the save area', () => {
+  const gba = new Gba(romWithCode('KYGE'));
+  assert.ok(gba.wantsTilt);
+  gba.setTilt(1, -0.5);
+  gba.bus.write8(0x0e008000, 0x55);
+  gba.bus.write8(0x0e008100, 0xaa);
+  const x = gba.bus.read8(0x0e008200) | ((gba.bus.read8(0x0e008300) & 0xf) << 8);
+  const y = gba.bus.read8(0x0e008400) | ((gba.bus.read8(0x0e008500) & 0xf) << 8);
+  assert.equal(gba.bus.read8(0x0e008300) & 0x80, 0x80);
+  assert.equal(x, 0x3a0 + 0x100);
+  assert.equal(y, 0x3a0 - 0x80);
+  // Snapshots keep the sample.
+  const again = new Gba(romWithCode('KYGE'));
+  again.loadState(gba.saveState());
+  assert.equal(again.bus.read8(0x0e008200), x & 0xff);
+});

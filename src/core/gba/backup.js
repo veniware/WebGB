@@ -36,6 +36,8 @@ export class Backup {
     this.eepromBits = 0;
     // Counts writes (the host screenshots the moment the game saves).
     this.writes = 0;
+    // An accelerometer sharing the address space (see tilt.js), or null.
+    this.tilt = null;
     this.reset();
   }
 
@@ -79,6 +81,7 @@ export class Backup {
   // --- SRAM and Flash (0x0E000000) -------------------------------------------------
 
   read8(address) {
+    if (this.tilt?.handles(address)) return this.tilt.read(address);
     if (this.flash) {
       if (this.flashIdMode && address < 2) {
         // Maker and device: Panasonic (64 KB), Sanyo (128 KB).
@@ -91,6 +94,10 @@ export class Backup {
   }
 
   write8(address, value) {
+    if (this.tilt?.handles(address)) {
+      this.tilt.write(address, value);
+      return;
+    }
     if (this.flash) {
       this.#flashWrite(address, value);
       return;

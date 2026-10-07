@@ -60,6 +60,7 @@ const FILES = [
   'src/core/gba/ppu.js',
   'src/core/gba/sio.js',
   'src/core/gba/thumb.js',
+  'src/core/gba/tilt.js',
   'src/core/gba/timers.js',
   'src/core/interface.js',
   'src/core/memory.js',

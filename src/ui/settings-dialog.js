@@ -15,6 +15,8 @@ const CHOICES = {
   }),
   audioLowpass: [[0, 'Off'], [8000, '8 kHz'], [4000, '4 kHz'], [2000, '2 kHz'], [1000, '1 kHz']],
   audioHighpass: [[0, 'Off'], [100, '100 Hz'], [300, '300 Hz'], [1000, '1 kHz']],
+  gbaSunlight: Array.from({ length: 11 }, (_, level) =>
+    [level, level ? `Level ${level}${level === 10 ? ' (full sun)' : ''}` : 'None (indoors)']),
   audioEcho: [['off', 'Off'], ['room', 'Room'], ['hall', 'Hall']],
   gbPalette: [
     ['auto', 'Automatic'],

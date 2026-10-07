@@ -119,7 +119,10 @@ src/core/
     apu.js              Game Boy channels (from gb/apu.js) + DMA sound FIFOs
     sio.js              Serial port with nothing connected
     backup.js           SRAM / Flash / EEPROM, detected from ID strings
-    gpio.js             Cartridge GPIO: Seiko RTC (Pokémon, Boktai)
+    gpio.js             Cartridge GPIO: Seiko RTC (Pokémon, Boktai), solar
+                        sensor (Boktai), gyro and rumble (WarioWare Twisted,
+                        Drill Dozer)
+    tilt.js             Accelerometer in the save area (Yoshi Topsy-Turvy)
     memory.js           Memory regions at their bus addresses
   test/test-core.js     Stand-in core: test pattern, button tones, a Start-press
                         counter in battery RAM, save states
@@ -301,8 +304,14 @@ other versions are refused.
 - **Saves:** the backup type comes from the SDK's ID string in the ROM. The
   cartridge clock (by game code) follows the wall clock; if the game set it,
   a 16-byte block ("RTC1", status, offset) follows the save memory.
+- **Cartridge sensors** (by game code, wiring after mGBA): the solar sensor
+  reads the `gbaSunlight` setting (0-10); the gyro turns with the host's
+  tilt x, the accelerometer gets tilt x/y (`wantsTilt`, so phones use the
+  motion sensor); the rumble motor's share of on-time feeds `getRumble()`.
+  Their state is only in the snapshots of those games (the format of other
+  games' snapshots didn't change). The accelerometer's scale is a guess.
 - **Not emulated:** link cable and multiboot, the BIOS sound driver calls,
-  solar/gyro/rumble cartridges, mid-line register changes.
+  mid-line register changes.
 
 ### Library, saved games and snapshots
 
@@ -414,11 +423,10 @@ Done: Game Boy and Game Boy Color (with palettes, color correction, Super
 Game Boy, rare cartridges, rumble, link cable), the Game Boy Advance core,
 input mapping, performance stats, the renderer setting, the PWA, video
 effects (ghosting, sharpen, outlines, xBR), sound effects (pitch, low/high
-pass, echo) and the memory viewer/editor (Settings → Tools).
+pass, echo), the memory viewer/editor (Settings → Tools), the GBA BIOS file
+option, rewind and library backup/restore.
 
-1. GBA follow-ups: idle-loop
-   detection (speed on slow phones), link cable, solar sensor (Boktai),
-   gyro and rumble cartridges.
+1. GBA follow-ups: idle-loop detection (speed on slow phones), link cable.
 2. Memory viewer: search (cheat finder), watch values while the game runs.
 3. A WebGPU renderer (renderers are separate modules in `src/video/`; the
    Renderer setting picks Auto / WebGL / Canvas 2D today).
