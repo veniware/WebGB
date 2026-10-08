@@ -514,7 +514,10 @@ so short taps are never lost.
   (back-to-back interrupts), timer IRQ 90/90, shifter, carry, multiply long
   and BIOS math all, DMA 1244/1244, SIO all, misc 4/12, video tests all but
   sub-line glitches. A build from source with a newer GCC times its C
-  functions differently ("C loop", the IRQ handlers).
+  functions differently ("C loop", the IRQ handlers). mGBA itself (master,
+  HLE BIOS, October 2026) scores lower on every one of these (timing 1768,
+  count-up 639, timer IRQ 70, misc 4), so it can't settle the remaining
+  cases; the expected values come from hardware.
 - `RUN_KNOWN_FAILURES=1 npm test` runs the known failures too, to find the
   ones that pass now.
 - The ROMs are skipped until `npm run fetch-test-roms` has downloaded them
