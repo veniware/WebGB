@@ -28,7 +28,6 @@ const FILES = [
     "src/core/gb/channels.js",
     "src/core/gb/constants.js",
     "src/core/gb/cpu.js",
-    "src/core/gb/fifo.js",
     "src/core/gb/gameboy.js",
     "src/core/gb/index.js",
     "src/core/gb/joypad.js",

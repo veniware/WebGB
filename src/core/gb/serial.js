@@ -30,6 +30,7 @@ export class Serial {
         // The serial clock: toggled by each falling edge of `mask` in the counter.
         this.clock = false;
         this.mask = 0x80;
+        this.gb.timer?.refreshWatch();
     }
 
     sync(s) {
@@ -39,6 +40,7 @@ export class Serial {
         this.sending = s.u8(this.sending);
         this.clock = s.bool(this.clock);
         this.mask = s.u16(this.mask);
+        if (s.reading) this.gb.timer.refreshWatch();
     }
 
     readSc() {
@@ -52,6 +54,7 @@ export class Serial {
         if (this.clock) this.edge();
         this.sc = value & (this.gb.cgb ? 0x83 : 0x81);
         this.mask = this.sc & 2 ? 0x04 : 0x80;
+        this.gb.timer.refreshWatch();
         if ((this.sc & 0x81) === 0x81) {
             this.sending = this.sb;
             this.onByte?.(written);

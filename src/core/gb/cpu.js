@@ -4,13 +4,75 @@ const N = 0x40;
 const H = 0x20;
 const C = 0x10;
 
+// How a CPU write to an I/O register lines up with the PPU and timers reading
+// it in the same M-cycle (SameBoy's access conflicts, MIT).
+const Conflict = {
+    READ_OLD: 0, // the write lands at the end of the M-cycle
+    READ_NEW: 1, // 1 T-cycle earlier
+    WRITE_CPU: 2, // 1 T-cycle later
+    STAT_DMG: 3, // the DMG STAT bug: all sources enabled for a T-cycle
+    STAT_CGB: 4,
+    STAT_CGB_DOUBLE: 5,
+    PALETTE_DMG: 6, // old | new for a T-cycle
+    PALETTE_CGB: 7,
+    LCDC_DMG: 8,
+    LCDC_SGB: 9,
+    LCDC_CGB: 10,
+    LCDC_CGB_DOUBLE: 11,
+    WX_DMG: 12,
+    SCX: 13, // 2 T-cycles earlier (SCX and the DMG's SCY, CGB double speed)
+};
+
+function conflictMap(entries) {
+    const map = new Uint8Array(0x80);
+    for (const [register, conflict] of entries) map[register - 0xff00] = conflict;
+    return map;
+}
+
+const IF = 0xff0f;
+const NR10 = 0xff10;
+const LCDC = 0xff40;
+const STAT = 0xff41;
+const SCY = 0xff42;
+const SCX = 0xff43;
+const LYC = 0xff45;
+const BGP = 0xff47;
+const OBP0 = 0xff48;
+const OBP1 = 0xff49;
+const WY = 0xff4a;
+const WX = 0xff4b;
+
+const CGB_CONFLICTS = conflictMap([
+    [LCDC, Conflict.LCDC_CGB], [IF, Conflict.WRITE_CPU], [LYC, Conflict.WRITE_CPU], [WY, Conflict.READ_OLD],
+    [STAT, Conflict.STAT_CGB], [BGP, Conflict.PALETTE_CGB], [OBP0, Conflict.PALETTE_CGB],
+    [OBP1, Conflict.PALETTE_CGB], [SCX, Conflict.READ_OLD], [WX, Conflict.WRITE_CPU],
+]);
+const CGB_DOUBLE_CONFLICTS = conflictMap([
+    [LCDC, Conflict.LCDC_CGB_DOUBLE], [IF, Conflict.WRITE_CPU], [LYC, Conflict.READ_OLD], [WY, Conflict.READ_OLD],
+    [STAT, Conflict.STAT_CGB_DOUBLE], [NR10, Conflict.READ_OLD], [SCX, Conflict.SCX], [WX, Conflict.READ_OLD],
+]);
+// IF is written on time on a DMG (gbmicrotest's lyc1_int_if_edge; SameBoy writes it a T-cycle late).
+const DMG_CONFLICTS = conflictMap([
+    [IF, Conflict.READ_OLD], [LYC, Conflict.READ_OLD], [LCDC, Conflict.LCDC_DMG], [SCY, Conflict.SCX],
+    [STAT, Conflict.STAT_DMG], [BGP, Conflict.PALETTE_DMG], [OBP0, Conflict.PALETTE_DMG],
+    [OBP1, Conflict.PALETTE_DMG], [WY, Conflict.READ_OLD], [WX, Conflict.WX_DMG], [SCX, Conflict.SCX],
+]);
+const SGB_CONFLICTS = conflictMap([
+    [IF, Conflict.WRITE_CPU], [LYC, Conflict.READ_OLD], [LCDC, Conflict.LCDC_SGB], [SCY, Conflict.READ_NEW],
+    [STAT, Conflict.STAT_DMG], [BGP, Conflict.READ_NEW], [OBP0, Conflict.READ_NEW], [OBP1, Conflict.READ_NEW],
+    [WY, Conflict.READ_OLD], [WX, Conflict.WX_DMG], [SCX, Conflict.SCX],
+]);
+
 /**
- * Sharp SM83, the Game Boy CPU.
+ * Sharp SM83, the Game Boy CPU, timed to the T-cycle (after SameBoy's
+ * sm83_cpu.c, MIT).
  *
- * Every memory access and internal delay calls `gb.tick()`, which advances
- * the rest of the system by one M-cycle before the access happens. Other
- * components therefore see reads and writes at the right cycle within an
- * instruction, which timing-sensitive games and test ROMs depend on.
+ * Time is owed rather than spent: each access leaves `pending` T-cycles
+ * (normally the 4 of its M-cycle) that the next access first passes on to
+ * `gb.advance()`. Reads happen at the start of their M-cycle; writes to most
+ * I/O registers land a T-cycle or two earlier or later (see Conflict), which
+ * decides who sees what when the CPU and the PPU touch a register in the same
+ * M-cycle.
  *
  * Registers r8 are indexed as in the opcode encoding:
  * 0 B, 1 C, 2 D, 3 E, 4 H, 5 L, 6 (HL), 7 A.
@@ -34,100 +96,303 @@ export class Cpu {
         this.sp = 0;
         this.pc = 0;
         this.ime = false;
-        // EI takes effect after the following instruction.
-        this.imePending = false;
+        // EI: IME flips at the start of the next instruction.
+        this.imeToggle = false;
         this.halted = false;
+        this.justHalted = false;
         // HALT with IME=0 and an interrupt pending doesn't halt; instead the next
         // opcode byte is read twice.
         this.haltBug = false;
         this.stopped = false;
-        // An illegal opcode locks the CPU up until reset.
-        this.locked = false;
-        // M-cycles the CPU is held for (HDMA, speed switch).
-        this.stall = 0;
-        this.ifAtFetch = 0;
+        // T-cycles owed to the rest of the system (see the class comment).
+        this.pending = 0;
     }
 
     sync(s) {
         for (const r of ["a", "f", "b", "c", "d", "e", "h", "l"]) this[r] = s.u8(this[r]);
         this.sp = s.u16(this.sp);
         this.pc = s.u16(this.pc);
-        for (const flag of ["ime", "imePending", "halted", "haltBug", "stopped", "locked"]) this[flag] = s.bool(this[flag]);
-        this.stall = s.u32(this.stall);
+        for (const flag of ["ime", "imeToggle", "halted", "justHalted", "haltBug", "stopped"]) this[flag] = s.bool(this[flag]);
+        this.pending = s.u8(this.pending);
     }
 
-    /** Runs one instruction, interrupt dispatch or idle M-cycle. */
+    /** Runs one instruction, interrupt dispatch or idle step (GB_cpu_run). */
     step() {
         const gb = this.gb;
-        if (this.stall > 0) {
-            this.stall--;
-            gb.tick();
+        const io = gb.io;
+        if (this.stopped) {
+            gb.advance(4);
+            if ((gb.joypad.read() & 0x0f) !== 0x0f) {
+                gb.leaveStopMode();
+                gb.advance(8);
+            }
             return;
         }
-        if (this.halted) {
-            gb.tick();
-            if (gb.ie & gb.if & 0x1f) this.halted = false;
-            return;
+        if (this.halted && !this.justHalted && !(gb.ie & io[0x0f] & 0x1f)) {
+            // Nothing can wake the CPU before the next event: skip ahead.
+            const idle = gb.idleCycles();
+            if (idle) {
+                gb.advance(idle);
+                return;
+            }
         }
-        if (this.stopped || this.locked) {
-            gb.tick();
-            if (this.stopped && gb.joypad.pressed()) this.stopped = false;
-            return;
+        // While halted, the DMG samples interrupts halfway through an M-cycle.
+        if (this.halted && !gb.cgb && !this.justHalted) gb.advance(2);
+        const queue = gb.ie & io[0x0f] & 0x1f;
+        if (this.halted) gb.advance(gb.cgb || this.justHalted ? 4 : 2);
+        this.justHalted = false;
+
+        const effectiveIme = this.ime;
+        if (this.imeToggle) {
+            this.ime = !this.ime;
+            this.imeToggle = false;
         }
-        if (this.ime && gb.ie & gb.if & 0x1f) {
+
+        if (this.halted && !effectiveIme && queue) {
+            // Wakes up without calling the interrupt.
+            this.halted = false;
+            gb.wake();
+        } else if (effectiveIme && queue) {
+            this.halted = false;
+            gb.wake();
             this.#interrupt();
-            return;
+        } else if (!this.halted) {
+            const opcode = this.#read(this.pc);
+            this.pc = (this.pc + 1) & 0xffff;
+            if (gb.hdmaOn) gb.hdmaRun();
+            if (this.haltBug) {
+                this.pc = (this.pc - 1) & 0xffff;
+                this.haltBug = false;
+            }
+            this.#execute(opcode);
         }
-        if (this.imePending) {
-            this.imePending = false;
-            this.ime = true;
-        }
-        this.#execute(this.#fetch());
+        this.#flush();
     }
 
     #interrupt() {
         const gb = this.gb;
-        this.ime = false;
-        gb.tick();
-        gb.tick();
-        gb.oamBug(this.sp);
+        const io = gb.io;
+        this.#read(this.pc);
+        this.#oamBugCycle((this.pc + 1) & 0xffff);
+        gb.triggerOamBug(this.sp);
+        this.#noAccess();
         this.sp = (this.sp - 1) & 0xffff;
         this.#write(this.sp, this.pc >> 8);
-        // Pushing the high byte can overwrite IE (SP = 0x0000), which changes or
-        // cancels the interrupt being dispatched.
-        const enabled = gb.ie;
+        // Pushing the high byte can overwrite IE (SP = 0x0000), and the low
+        // byte IF (SP = 0xFF10), which changes or cancels the interrupt.
+        let queue = gb.ie;
         this.sp = (this.sp - 1) & 0xffff;
-        this.#write(this.sp, this.pc & 0xff);
-        const pending = enabled & gb.if & 0x1f;
-        if (pending) {
-            const bit = pending & -pending;
-            gb.if &= ~bit;
-            this.pc = 0x40 + 8 * (31 - Math.clz32(bit));
+        if (this.sp === IF) {
+            queue &= this.#writeIf(this.pc & 0xff);
+        } else {
+            this.#write(this.sp, this.pc & 0xff);
+            queue &= io[0x0f] & 0x1f;
+        }
+        if (queue) {
+            const bit = 31 - Math.clz32(queue & -queue);
+            // IF is acknowledged 2 T-cycles before the end of the M-cycle.
+            this.pending -= 2;
+            this.#flush();
+            this.pending = 2;
+            io[0x0f] &= ~(1 << bit);
+            this.pc = 0x40 + bit * 8;
         } else {
             this.pc = 0;
         }
-        gb.tick();
+        this.ime = false;
     }
 
-    // --- Memory access (one M-cycle each) ------------------------------------
+    // --- Bus cycles ------------------------------------------------------------
 
     #read(addr) {
-        this.gb.tick();
-        return this.gb.read(addr);
+        const gb = this.gb;
+        if (this.pending) gb.advance(this.pending);
+        gb.addressBus = addr;
+        const value = gb.read(addr);
+        this.pending = 4;
+        return value;
+    }
+
+    /** Pushing PC's low byte onto IF during interrupt dispatch: returns IF before the write. */
+    #writeIf(value) {
+        const gb = this.gb;
+        gb.advance(this.pending);
+        gb.addressBus = IF;
+        const old = gb.io[0x0f] & 0x1f;
+        gb.write(IF, value);
+        this.pending = 4;
+        return old;
     }
 
     #write(addr, value) {
-        this.gb.tick();
-        this.gb.write(addr, value);
+        const gb = this.gb;
+        let pending = this.pending;
+        if ((addr & 0xff80) !== 0xff00) {
+            gb.advance(pending);
+            gb.write(addr, value);
+            this.pending = 4;
+            gb.addressBus = addr;
+            return;
+        }
+        const map = gb.cgb ? (gb.doubleSpeed ? CGB_DOUBLE_CONFLICTS : CGB_CONFLICTS) : gb.sgb ? SGB_CONFLICTS : DMG_CONFLICTS;
+        const io = gb.io;
+        const ppu = gb.ppu;
+        switch (map[addr & 0x7f]) {
+            case Conflict.READ_OLD:
+                gb.advance(pending);
+                gb.write(addr, value);
+                pending = 4;
+                break;
+            case Conflict.READ_NEW:
+                gb.advance(pending - 1);
+                gb.write(addr, value);
+                pending = 5;
+                break;
+            case Conflict.WRITE_CPU:
+                gb.advance(pending + 1);
+                gb.write(addr, value);
+                pending = 3;
+                break;
+            case Conflict.STAT_DMG:
+                // The STAT bug: STAT reads as if every source were enabled for a
+                // T-cycle. At the HBlank-to-OAM edge, HBlank blocks the OAM source.
+                gb.advance(pending);
+                ppu.catchUp();
+                gb.write(addr, ppu.state === 7 && (io[0x41] & 0x28) === 0x08 ? 0xdf : 0xff);
+                gb.advance(1);
+                gb.write(addr, value);
+                pending = 3;
+                break;
+            case Conflict.STAT_CGB: {
+                // The LYC bit takes effect a T-cycle later.
+                const old = io[0x41];
+                gb.advance(pending);
+                gb.write(addr, (old & 0x40) | (value & ~0x40));
+                gb.advance(1);
+                gb.write(addr, value);
+                pending = 3;
+                break;
+            }
+            case Conflict.STAT_CGB_DOUBLE: {
+                const old = io[0x41];
+                gb.advance(pending);
+                gb.write(addr, (value & ~8) | (old & 8));
+                gb.advance(1);
+                gb.write(addr, value);
+                pending = 3;
+                break;
+            }
+            case Conflict.PALETTE_DMG: {
+                gb.advance(pending - 2);
+                const old = gb.read(addr);
+                gb.write(addr, value | old);
+                gb.advance(1);
+                gb.write(addr, value);
+                pending = 5;
+                break;
+            }
+            case Conflict.PALETTE_CGB:
+                gb.advance(pending - 2);
+                gb.write(addr, value);
+                pending = 6;
+                break;
+            case Conflict.LCDC_DMG: {
+                // LCDC.1 is read both when pixels are popped and by the object
+                // fetcher, which see the write differently. The tile map, tile
+                // data and sprite size bits reach the fetcher a T-cycle before
+                // the others (Mealybug Tearoom; SameBoy delays them too).
+                let old = gb.read(addr);
+                gb.advance(pending - 2);
+                ppu.catchUp();
+                if (ppu.positionInLine === 0 && !(value & 2)) old &= ~2;
+                else if (ppu.duringObjectFetch && !(value & 2)) old &= ~2;
+                gb.write(addr, (value & ~0xa3) | (old & 0xa2) | ((old | value) & 1));
+                gb.advance(1);
+                gb.write(addr, value);
+                if (old & 0x20 && !(value & 0x20) && ppu.windowIsBeingFetched) {
+                    ppu.disableWindowPixelInsertionGlitch = true;
+                }
+                pending = 5;
+                break;
+            }
+            case Conflict.LCDC_SGB: {
+                const old = gb.read(addr);
+                gb.advance(pending - 2);
+                // Writing the new value and back aborts an object fetch.
+                gb.write(addr, value);
+                gb.write(addr, old);
+                gb.advance(1);
+                gb.write(addr, value);
+                pending = 5;
+                break;
+            }
+            case Conflict.WX_DMG:
+                gb.advance(pending);
+                gb.write(addr, value);
+                ppu.wxJustChanged = true;
+                gb.advance(1);
+                ppu.wxJustChanged = false;
+                pending = 3;
+                break;
+            case Conflict.LCDC_CGB: {
+                const old = io[0x40];
+                gb.advance(pending);
+                gb.write(addr, value);
+                if (~value & old & 0x10) {
+                    ppu.tileSelGlitch = true;
+                    gb.advance(1);
+                    ppu.tileSelGlitch = false;
+                    pending = 3;
+                } else {
+                    pending = 4;
+                }
+                break;
+            }
+            case Conflict.LCDC_CGB_DOUBLE: {
+                const old = io[0x40];
+                gb.advance(pending - 2);
+                gb.write(addr, (value & ~0x81) | (old & 0x81));
+                ppu.tileSelGlitch = ((value ^ old) & 0x10) !== 0;
+                gb.advance(2);
+                ppu.tileSelGlitch = false;
+                gb.write(addr, value);
+                pending = 4;
+                break;
+            }
+            case Conflict.SCX:
+                gb.advance(pending - 2);
+                gb.write(addr, value);
+                pending = 6;
+                break;
+        }
+        this.pending = pending;
+        gb.addressBus = addr;
+    }
+
+    #noAccess() {
+        this.pending += 4;
+    }
+
+    /**
+     * An M-cycle where the 16-bit increment/decrement unit drives the address
+     * bus: with a value in FE00-FEFF it disturbs OAM on a DMG.
+     */
+    #oamBugCycle(value) {
+        const gb = this.gb;
+        if (this.pending) gb.advance(this.pending);
+        gb.addressBus = value;
+        gb.triggerOamBug(value);
+        this.pending = 4;
+    }
+
+    #flush() {
+        if (this.pending) this.gb.advance(this.pending);
+        this.pending = 0;
     }
 
     #fetch() {
-        this.gb.tick();
-        // HALT looks at the interrupts pending halfway through its opcode fetch.
-        this.ifAtFetch = this.gb.ifMid;
-        const value = this.gb.read(this.pc);
-        if (this.haltBug) this.haltBug = false;
-        else this.pc = (this.pc + 1) & 0xffff;
+        const value = this.#read(this.pc);
+        this.pc = (this.pc + 1) & 0xffff;
         return value;
     }
 
@@ -137,8 +402,7 @@ export class Cpu {
     }
 
     #push(value) {
-        this.gb.tick();
-        this.gb.oamBug(this.sp);
+        this.#oamBugCycle(this.sp);
         this.sp = (this.sp - 1) & 0xffff;
         this.#write(this.sp, value >> 8);
         this.sp = (this.sp - 1) & 0xffff;
@@ -293,16 +557,15 @@ export class Cpu {
     }
 
     #addHl(v) {
+        this.#noAccess();
         const hl = this.hl;
         const r = hl + v;
         this.f = (this.f & Z) | ((hl & 0xfff) + (v & 0xfff) > 0xfff ? H : 0) | (r > 0xffff ? C : 0);
-        this.gb.tick();
         this.hl = r & 0xffff;
     }
 
     /** SP + signed 8-bit offset; flags come from the unsigned low-byte addition. */
-    #spOffset() {
-        const e = this.#fetch();
+    #spOffset(e) {
         const sp = this.sp;
         this.f = ((sp & 0xf) + (e & 0xf) > 0xf ? H : 0) | ((sp & 0xff) + e > 0xff ? C : 0);
         return (sp + ((e << 24) >> 24)) & 0xffff;
@@ -367,23 +630,6 @@ export class Cpu {
 
     // --- Control flow ------------------------------------------------------------
 
-    #jr(taken) {
-        const e = this.#fetch();
-        if (taken) {
-            this.gb.tick();
-            this.gb.oamBug(this.pc);
-            this.pc = (this.pc + ((e << 24) >> 24)) & 0xffff;
-        }
-    }
-
-    #jp(taken) {
-        const addr = this.#fetch16();
-        if (taken) {
-            this.gb.tick();
-            this.pc = addr;
-        }
-    }
-
     #call(taken) {
         const addr = this.#fetch16();
         if (taken) {
@@ -394,12 +640,25 @@ export class Cpu {
 
     #ret() {
         this.pc = this.#pop();
-        this.gb.tick();
+        this.#noAccess();
     }
 
-    #rst(addr) {
-        this.#push(this.pc);
-        this.pc = addr;
+    #halt() {
+        const gb = this.gb;
+        this.#read(this.pc);
+        // The rest of this M-cycle passes while halted (see step()).
+        this.pending = 0;
+        if (gb.ie & gb.io[0x0f] & 0x1f) {
+            // An interrupt is already pending. With IME set (EI; HALT) it is
+            // taken right away and returns to the HALT; with IME off, the HALT
+            // bug: the next byte is read twice.
+            if (this.ime) this.pc = (this.pc - 1) & 0xffff;
+            else this.haltBug = true;
+        } else {
+            this.halted = true;
+            gb.allowHdmaOnWake = (gb.io[0x41] & 3) !== 0;
+        }
+        this.justHalted = true;
     }
 
     // --- Decoder -------------------------------------------------------------------
@@ -414,27 +673,25 @@ export class Cpu {
             case 0x12: this.#write(this.de, this.a); break; // LD (DE),A
             case 0x22: { // LD (HL+),A
                 const hl = this.hl;
-                this.#write(hl, this.a);
                 this.hl = (hl + 1) & 0xffff;
+                this.#write(hl, this.a);
                 break;
             }
             case 0x32: { // LD (HL-),A
                 const hl = this.hl;
-                this.#write(hl, this.a);
                 this.hl = (hl - 1) & 0xffff;
+                this.#write(hl, this.a);
                 break;
             }
             case 0x03: case 0x13: case 0x23: case 0x33: { // INC rr
                 const value = this.#getRp(op >> 4);
-                this.gb.tick();
-                this.gb.oamBug(value);
+                this.#oamBugCycle(value);
                 this.#setRp(op >> 4, (value + 1) & 0xffff);
                 break;
             }
             case 0x0b: case 0x1b: case 0x2b: case 0x3b: { // DEC rr
                 const value = this.#getRp(op >> 4);
-                this.gb.tick();
-                this.gb.oamBug(value);
+                this.#oamBugCycle(value);
                 this.#setRp(op >> 4, (value - 1) & 0xffff);
                 break;
             }
@@ -484,24 +741,31 @@ export class Cpu {
             case 0x1a: this.a = this.#read(this.de); break; // LD A,(DE)
             case 0x2a: { // LD A,(HL+)
                 const hl = this.hl;
-                this.a = this.#read(hl);
                 this.hl = (hl + 1) & 0xffff;
+                this.a = this.#read(hl);
                 break;
             }
             case 0x3a: { // LD A,(HL-)
                 const hl = this.hl;
-                this.a = this.#read(hl);
                 this.hl = (hl - 1) & 0xffff;
+                this.a = this.#read(hl);
                 break;
             }
-            case 0x10: // STOP
-                this.#fetch();
-                if (this.gb.stop()) this.stopped = true;
+            case 0x10: this.#stop(); break;
+            case 0x18: { // JR
+                const e = this.#fetch();
+                this.#oamBugCycle(this.pc);
+                this.pc = (this.pc + ((e << 24) >> 24)) & 0xffff;
                 break;
-            case 0x18: this.#jr(true); break;
-            case 0x20: case 0x28: case 0x30: case 0x38: // JR cc
-                this.#jr(this.#cond((op >> 3) & 3));
+            }
+            case 0x20: case 0x28: case 0x30: case 0x38: { // JR cc
+                const e = this.#fetch();
+                if (this.#cond((op >> 3) & 3)) {
+                    this.pc = (this.pc + ((e << 24) >> 24)) & 0xffff;
+                    this.#oamBugCycle(this.pc);
+                }
                 break;
+            }
             case 0x27: this.#daa(); break;
             case 0x2f: // CPL
                 this.a ^= 0xff;
@@ -513,20 +777,10 @@ export class Cpu {
             case 0x3f: // CCF
                 this.f = (this.f & (Z | C)) ^ C;
                 break;
-            case 0x76: // HALT
-                if (this.gb.ie & this.ifAtFetch & 0x1f) {
-                    // An interrupt is already pending. With IME just set (EI; HALT) it is
-                    // taken right away and returns to the HALT; with IME off, the HALT
-                    // bug: the next byte is read twice.
-                    if (this.ime) this.pc = (this.pc - 1) & 0xffff;
-                    else this.haltBug = true;
-                } else {
-                    this.halted = true;
-                }
-                break;
+            case 0x76: this.#halt(); break;
 
             case 0xc0: case 0xc8: case 0xd0: case 0xd8: // RET cc
-                this.gb.tick();
+                this.#noAccess();
                 if (this.#cond((op >> 3) & 3)) this.#ret();
                 break;
             case 0xc9: this.#ret(); break;
@@ -547,17 +801,28 @@ export class Cpu {
                 this.#push(this.#getRp((op >> 4) & 3));
                 break;
             case 0xf5: this.#push((this.a << 8) | this.f); break; // PUSH AF
-            case 0xc2: case 0xca: case 0xd2: case 0xda: // JP cc
-                this.#jp(this.#cond((op >> 3) & 3));
+            case 0xc2: case 0xca: case 0xd2: case 0xda: { // JP cc
+                const addr = this.#fetch16();
+                if (this.#cond((op >> 3) & 3)) {
+                    this.#noAccess();
+                    this.pc = addr;
+                }
                 break;
-            case 0xc3: this.#jp(true); break;
+            }
+            case 0xc3: { // JP
+                const addr = this.#fetch16();
+                this.#noAccess();
+                this.pc = addr;
+                break;
+            }
             case 0xe9: this.pc = this.hl; break; // JP HL
             case 0xc4: case 0xcc: case 0xd4: case 0xdc: // CALL cc
                 this.#call(this.#cond((op >> 3) & 3));
                 break;
             case 0xcd: this.#call(true); break;
             case 0xc7: case 0xcf: case 0xd7: case 0xdf: case 0xe7: case 0xef: case 0xf7: case 0xff: // RST
-                this.#rst(op & 0x38);
+                this.#push(this.pc);
+                this.pc = op & 0x38;
                 break;
             case 0xc6: case 0xce: case 0xd6: case 0xde: case 0xe6: case 0xee: case 0xf6: case 0xfe: // ALU A,d8
                 this.#alu((op >> 3) & 7, this.#fetch());
@@ -571,33 +836,33 @@ export class Cpu {
             case 0xea: this.#write(this.#fetch16(), this.a); break; // LD (a16),A
             case 0xfa: this.a = this.#read(this.#fetch16()); break; // LD A,(a16)
             case 0xe8: { // ADD SP,e8
-                const sp = this.#spOffset();
-                this.gb.tick();
-                this.gb.tick();
+                const sp = this.#spOffset(this.#fetch());
+                this.#noAccess();
+                this.#noAccess();
                 this.sp = sp;
                 break;
             }
             case 0xf8: { // LD HL,SP+e8
-                const v = this.#spOffset();
-                this.gb.tick();
+                const v = this.#spOffset(this.#fetch());
+                this.#noAccess();
                 this.hl = v;
                 break;
             }
             case 0xf9: // LD SP,HL
-                this.gb.tick();
-                this.gb.oamBug(this.hl);
                 this.sp = this.hl;
+                this.#oamBugCycle(this.hl);
                 break;
-            case 0xf3: // DI
+            case 0xf3: // DI (not delayed)
                 this.ime = false;
-                this.imePending = false;
                 break;
             case 0xfb: // EI
-                this.imePending = true;
+                if (!this.ime) this.imeToggle = true;
                 break;
 
             case 0xd3: case 0xdb: case 0xdd: case 0xe3: case 0xe4: case 0xeb: case 0xec: case 0xed: case 0xf4: case 0xfc: case 0xfd:
-                this.locked = true;
+                // Illegal opcodes lock the CPU up until reset.
+                this.gb.ie = 0;
+                this.halted = true;
                 break;
 
             default:
@@ -606,6 +871,38 @@ export class Cpu {
                 } else {
                     this.#alu((op >> 3) & 7, this.#getR(op & 7)); // ALU A,r
                 }
+        }
+    }
+
+    /** STOP: stops the CPU (and the DMG's PPU) until a button is pressed, or switches the CGB's speed. */
+    #stop() {
+        const gb = this.gb;
+        const io = gb.io;
+        this.#flush();
+        const exitByJoypad = (gb.joypad.read() & 0x0f) !== 0x0f;
+        const speedSwitch = gb.cgb && (io[0x4d] & 1) !== 0 && !exitByJoypad;
+        const immediateExit = speedSwitch || exitByJoypad;
+        const interruptPending = (gb.ie & io[0x0f] & 0x1f) !== 0;
+        if (!exitByJoypad) {
+            if (!immediateExit) gb.dmaRun();
+            gb.enterStopMode();
+        }
+        // With an interrupt pending, the second byte of STOP is executed as an opcode.
+        if (!interruptPending) this.#fetch();
+        if (speedSwitch) {
+            this.#flush();
+            gb.switchSpeed(interruptPending);
+        }
+        if (immediateExit) {
+            gb.leaveStopMode();
+            if (!interruptPending) {
+                gb.dmaRun();
+                this.halted = true;
+                this.justHalted = true;
+                gb.allowHdmaOnWake = (io[0x41] & 3) !== 0;
+            } else {
+                gb.speedSwitchHaltCountdown = 0;
+            }
         }
     }
 }

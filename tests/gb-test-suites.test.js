@@ -79,13 +79,8 @@ const RTC3_SUBTESTS = [["basic-tests", [Button.A], 13], ["range-tests", [Button.
 for (const [name, buttons, seconds] of RTC3_SUBTESTS) {
     for (const model of ["dmg", "cgb"]) {
         romTest(`rtc3test/rtc3test.gb ${name} (${model})`, () => {
-            let cycles = 0;
-            const gb = makeGameBoy("rtc3test/rtc3test.gb", { cgb: model === "cgb", now: () => cycles / 4194.304 });
-            const tick = gb.tick.bind(gb);
-            gb.tick = () => {
-                cycles += gb.doubleSpeed ? 2 : 4;
-                tick();
-            };
+            let gb = null;
+            gb = makeGameBoy("rtc3test/rtc3test.gb", { cgb: model === "cgb", now: () => (gb ? gb.dots : 0) / 4194.304 });
             runFrames(gb, 30);
             for (const button of buttons) {
                 runFrames(gb, 5, () => button);

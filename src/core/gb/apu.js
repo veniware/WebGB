@@ -601,9 +601,9 @@ export class Apu {
         if (startNoise) this.write(0xff23, regs[NR44] | 0x80);
     }
 
-    /** The last address on the CPU's bus (approximated by the PC). */
+    /** The last address on the CPU's bus. */
     #addressBus() {
-        return this.gb.cpu.pc;
+        return this.gb.addressBus;
     }
 
     // --- DIV events -------------------------------------------------------------------

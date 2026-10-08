@@ -13,39 +13,41 @@ import { Serial } from "./serial.js";
 import { Sgb } from "./sgb.js";
 import { Timer } from "./timer.js";
 
-// Where the DMG boot ROM leaves the PPU: line 153, this many dots in (as in Gambatte).
-const BOOT_DOT = 396;
+// System counter (DIV) and its phase when the boot ROM hands over, and how
+// far the PPU is into line 153 (DMG).
+const BOOT_DIV_DMG = 0xabcc;
+const BOOT_DIV_CGB = 0x1ea0;
+const BOOT_DIV_CYCLES = -3;
+const BOOT_PPU_CYCLES = -104;
 
 const STATE_MAGIC = 0x53424757; // "WGBS"
-// M-cycles the CPU is held while switching speed: about 0x20008 T-cycles, so
-// DIV (which keeps counting) wraps around twice and seems to stand still
-// (as measured by the AGE tests; SameBoy agrees).
-const SPEED_SWITCH_CYCLES = 0x20008 / 4 - 2;
+
+// I/O registers the PPU must be caught up for before they're read or written.
+const PPU_REGISTERS = new Uint8Array(0x80);
+for (const reg of [0x0f, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x51, 0x52, 0x53,
+    0x54, 0x55, 0x68, 0x69, 0x6a, 0x6b, 0x6c]) {
+    PPU_REGISTERS[reg] = 1;
+}
 
 /**
  * Game Boy / Game Boy Color system: the memory map, I/O registers, OAM DMA
  * and HDMA, wiring the CPU to the other components. Implements the Core
  * interface (src/core/interface.js).
  *
- * The CPU drives time: each of its M-cycles calls tick(), which advances the
- * timer, PPU, APU, serial port and DMA. In CGB double speed an M-cycle is
- * 2 dots instead of 4, so the PPU and APU run at the same real-time speed.
+ * The CPU drives time: before each memory access it calls advance() with the
+ * T-cycles since the last one, which runs the timer, PPU, APU, serial port
+ * and DMA up to that point. In CGB double speed a T-cycle is half a dot, so
+ * the PPU and APU run at the same real-time speed. Timing follows SameBoy
+ * (MIT, Lior Halphon).
  */
 export class GameBoy {
     id = "gb";
-    version = 5;
-    // Versions loadState() reads: 4 had a simpler APU (its state is carried over).
-    stateVersions = [4, 5];
+    version = 6;
     fps = CLOCK_RATE / FRAME_DOTS;
     sampleRate = SAMPLE_RATE;
     // Cartridge RAM writes so far (see getSaveWrites()); not part of the state.
     saveWrites = 0;
 
-    /**
-     * @param {Uint8Array} rom
-     * @param {{ cgb?: boolean, now?: () => number }} [options]
-     *     cgb: run as a Game Boy Color; now: wall clock for the cartridge RTC.
-     */
     /**
      * @param {Uint8Array} rom
      * @param {{ cgb?: boolean, sgb?: boolean, now?: () => number }} [options]
@@ -62,12 +64,13 @@ export class GameBoy {
         this.cart = createCartridge(rom, { now });
         this.wram = new Uint8Array(cgb ? 0x8000 : 0x2000);
         this.hram = new Uint8Array(0x7f);
-        // FF72-FF75: undocumented CGB registers.
-        this.extraRegs = new Uint8Array(4);
+        // I/O registers kept as written (FF00-FF7F); the timer, serial port,
+        // joypad and APU keep their own.
+        this.io = new Uint8Array(0x80);
         this.cpu = new Cpu(this);
+        this.apu = new Apu(this);
         this.timer = new Timer(this);
         this.ppu = new Ppu(this);
-        this.apu = new Apu(this);
         this.joypad = new Joypad(this);
         this.serial = new Serial(this);
         if (this.sgb) this.ppu.outputShades();
@@ -127,36 +130,49 @@ export class GameBoy {
         // RAM powers up holding noise; some games seed their random numbers with it.
         fillNoise(this.wram);
         fillNoise(this.hram);
-        this.extraRegs.fill(0);
+        this.io.fill(0);
         this.ie = 0;
-        this.if = 0;
-        this.ifMid = 0;
-        this.svbk = 0;
         this.wramBank = 1;
         this.doubleSpeed = false;
-        this.speedArmed = false;
-        this.dmaRegister = 0xff;
-        this.dmaSource = 0;
-        this.dmaIndex = 0;
-        // M-cycles until a requested OAM DMA starts copying.
-        this.dmaDelay = 0;
-        this.dmaActive = false;
-        this.hdmaSource = 0;
-        this.hdmaDest = 0;
-        // Remaining 16-byte blocks minus one, as FF55 reads it.
-        this.hdmaLength = 0x7f;
-        this.hdmaActive = false;
-        // CGB infrared port (RP).
-        this.rp = 0;
+        // The last address the CPU put on the bus (the APU's wave RAM glitches use it).
+        this.addressBus = 0;
+        // OAM DMA (as in SameBoy): the next OAM byte (0xFF while starting up,
+        // 0xA0-0xA1 when ending/off) and source address; T-cycles to run and left over.
+        this.dmaCurrentDest = 0xa1;
+        this.dmaCurrentSrc = 0;
+        this.dmaCycles = 0;
+        this.dmaCyclesModulo = 0;
+        this.dmaRestarting = false;
+        this.dmaPpuVramConflict = false;
+        this.dmaPpuVramConflictAddr = 0;
+        this.inDmaRead = false;
+        // HDMA: copying now (hdmaOn), or a block per HBlank (hdmaOnHblank).
+        this.hdmaOn = false;
+        this.hdmaOnHblank = false;
+        this.hdmaStepsLeft = 0;
+        this.hdmaCurrentSrc = 0;
+        this.hdmaCurrentDest = 0;
+        this.hdmaInProgress = false;
+        this.addrForHdmaConflict = 0xffff;
+        this.allowHdmaOnWake = false;
+        // Speed switch (CGB): T-cycles until it takes effect, the PPU frozen, the CPU halted.
+        this.speedSwitchCountdown = 0;
+        this.speedSwitchFreeze = 0;
+        this.speedSwitchHaltCountdown = 0;
+        this.doubleSpeedAlignment = 0;
         this.irReceived = false;
-        // Dots left in the current runFrame().
+        // 8 MHz units run since power-on, and left in the current runFrame();
+        // the run stops when frameBudget reaches stopAt.
+        this.totalCycles = 0;
+        this.stopAt = 0;
         this.frameBudget = 0;
         this.frameStart = 0;
-        // Rumble motor: time it was on during the current frame (dots).
+        // Rumble motor: time it was on during the current frame.
         this.rumbleOn = false;
         this.rumbleSince = 0;
-        this.rumbleDots = 0;
+        this.rumbleTime = 0;
         this.rumbleLevel = 0;
+        this.io[0x46] = this.io[0x48] = this.io[0x49] = this.cgb ? 0 : 0xff;
         this.cart.reset();
         this.cpu.reset();
         this.ppu.reset();
@@ -169,7 +185,7 @@ export class GameBoy {
 
     /** State the boot ROM leaves behind; the boot ROM itself isn't run (it's copyrighted). */
     #boot() {
-        const cpu = this.cpu;
+        const { cpu, io, ppu } = this;
         if (this.cgb) {
             [cpu.a, cpu.f, cpu.b, cpu.c, cpu.d, cpu.e, cpu.h, cpu.l] = [0x11, 0x80, 0x00, 0x00, 0xff, 0x56, 0x00, 0x0d];
         } else if (this.sgb) {
@@ -179,9 +195,9 @@ export class GameBoy {
         }
         cpu.sp = 0xfffe;
         cpu.pc = 0x0100;
-        this.timer.reset(this.cgb ? 0x1ea0 : 0xabc8);
+        this.timer.reset(this.cgb ? BOOT_DIV_CGB : BOOT_DIV_DMG, BOOT_DIV_CYCLES);
         this.joypad.select = 0;
-        this.if = 0x01;
+        io[0x0f] = 0x01;
 
         // Sound registers as the boot chime leaves them (without retriggering it).
         const sound = [
@@ -193,13 +209,24 @@ export class GameBoy {
         // The chime's channel is still on, faded out (the SGB plays no chime).
         this.apu.bootState(sound, !this.sgb);
 
-        this.ppu.writeRegister(0xff47, 0xfc);
+        io[0x47] = 0xfc;
+        io[0x41] = 0x80;
         if (this.cgb) {
-            this.ppu.writeRegister(0xff40, 0x91);
-        } else {
-            if (!this.sgb) this.#bootLogo();
-            this.ppu.startAfterBoot(BOOT_DOT);
+            ppu.writeRegister(0x40, 0x91);
+            return;
         }
+        if (!this.sgb) this.#bootLogo();
+        // The DMG boot ROM hands over during line 153, LY already reading 0.
+        io[0x40] = 0x91;
+        io[0x41] = 0x81;
+        ppu.currentLine = 153;
+        ppu.positionInLine = 0xf0;
+        ppu.windowY = 0xff;
+        ppu.lyForComparison = 0;
+        ppu.modeForInterrupt = 1;
+        ppu.statUpdate();
+        ppu.state = 17;
+        ppu.cycles = BOOT_PPU_CYCLES;
     }
 
     /**
@@ -240,14 +267,31 @@ export class GameBoy {
         this.sgb?.sync(s);
         s.bytes(this.wram);
         s.bytes(this.hram);
-        s.bytes(this.extraRegs);
-        for (const r of ["ie", "if", "svbk", "dmaRegister", "dmaIndex", "dmaDelay", "hdmaLength", "rp"]) this[r] = s.u8(this[r]);
-        this.dmaSource = s.u16(this.dmaSource);
-        this.hdmaSource = s.u16(this.hdmaSource);
-        this.hdmaDest = s.u16(this.hdmaDest);
-        for (const flag of ["doubleSpeed", "speedArmed", "dmaActive", "hdmaActive"]) this[flag] = s.bool(this[flag]);
+        s.bytes(this.io);
+        for (const r of ["ie", "wramBank", "dmaCurrentDest", "dmaCyclesModulo", "hdmaStepsLeft", "speedSwitchFreeze",
+            "doubleSpeedAlignment", "speedSwitchCountdown"]) {
+            this[r] = s.u8(this[r]);
+        }
+        for (const r of ["dmaCurrentSrc", "dmaCycles", "dmaPpuVramConflictAddr", "hdmaCurrentSrc", "hdmaCurrentDest",
+            "addressBus"]) {
+            this[r] = s.u16(this[r]);
+        }
+        for (const flag of ["doubleSpeed", "dmaRestarting", "dmaPpuVramConflict", "hdmaOn", "hdmaOnHblank",
+            "allowHdmaOnWake"]) {
+            this[flag] = s.bool(this[flag]);
+        }
+        this.speedSwitchHaltCountdown = s.i32(this.speedSwitchHaltCountdown);
         this.frameBudget = s.i32(this.frameBudget);
-        this.wramBank = this.svbk || 1;
+        if (s.reading) this.timer.refreshWatch();
+    }
+
+    /** IF, for the serial port and joypad. */
+    get if() {
+        return this.io[0x0f];
+    }
+
+    set if(value) {
+        this.io[0x0f] = value;
     }
 
     // --- Core interface ------------------------------------------------------------
@@ -261,10 +305,16 @@ export class GameBoy {
      * time while the LCD is off, so frames stay in step with the display.
      */
     runFrame() {
-        const { cpu, ppu } = this;
         this.beginFrame();
-        while (this.frameBudget > 0 && !ppu.frameDone) cpu.step();
+        this.#runToVBlank();
         this.endFrame(true);
+    }
+
+    // (A separate method so V8 doesn't throw away the optimized loop at each frame's end.)
+    #runToVBlank() {
+        const { cpu, ppu } = this;
+        this.stopAt = 0;
+        while (this.frameBudget > 0 && !ppu.frameDone) cpu.step();
     }
 
     // Linked machines run in small slices instead: beginFrame(), runDots()
@@ -273,14 +323,15 @@ export class GameBoy {
     beginFrame() {
         this.apu.beginFrame();
         this.ppu.frameDone = false;
-        this.frameBudget += FRAME_DOTS;
+        this.frameBudget += FRAME_DOTS * 2;
         this.frameStart = this.frameBudget;
     }
 
     /** Runs whole instructions until `dots` more dots have passed. */
     runDots(dots) {
         const { cpu } = this;
-        const target = this.frameBudget - dots;
+        const target = this.frameBudget - dots * 2;
+        this.stopAt = target;
         while (this.frameBudget > target) cpu.step();
     }
 
@@ -290,10 +341,15 @@ export class GameBoy {
         if (alignToVBlank && this.ppu.frameDone) this.frameBudget = 0;
         this.apu.catchUp();
         this.sgb?.render(this.ppu.front);
-        if (this.rumbleOn) this.rumbleDots += elapsed - this.rumbleSince;
-        this.rumbleLevel = elapsed > 0 ? Math.min(1, this.rumbleDots / elapsed) : 0;
-        this.rumbleDots = 0;
+        if (this.rumbleOn) this.rumbleTime += elapsed - this.rumbleSince;
+        this.rumbleLevel = elapsed > 0 ? Math.min(1, this.rumbleTime / elapsed) : 0;
+        this.rumbleTime = 0;
         this.rumbleSince = 0;
+    }
+
+    /** Dots run so far (for tests that run on emulated time). */
+    get dots() {
+        return this.totalCycles / 2;
     }
 
     /** How much the rumble motor ran during the last frame, 0-1. */
@@ -335,7 +391,7 @@ export class GameBoy {
     }
 
     get irLight() {
-        return (this.rp & 1) !== 0 || this.cart.irLight === true;
+        return (this.io[0x56] & 1) !== 0 || this.cart.irLight === true;
     }
 
     getFrameBuffer() {
@@ -380,8 +436,8 @@ export class GameBoy {
     }
 
     loadState(data, version = this.version) {
+        if (version !== this.version) throw new Error("This snapshot is from an older version of the emulator.");
         const s = new StateReader(data);
-        s.version = version;
         if (!this.#header(s)) throw new Error("This snapshot is for a different game or system.");
         const backup = this.saveState();
         try {
@@ -406,98 +462,206 @@ export class GameBoy {
 
     // --- Timing ----------------------------------------------------------------------
 
-    /** Advances everything but the CPU by one M-cycle. */
-    tick() {
-        this.timer.tick();
-        const dots = this.doubleSpeed ? 2 : 4;
-        // In two halves: what's pending halfway through decides a HALT (see Cpu).
-        this.ppu.tick(dots >> 1);
-        this.ifMid = this.if;
-        this.ppu.tick(dots >> 1);
-        this.apu.pending += dots;
-        if (this.cart.ticking) this.cart.tick(4);
-        if (this.dmaDelay || this.dmaActive) this.#dmaTick();
-        this.frameBudget -= dots;
-    }
-
-    /** STOP: resets DIV, then switches speed if armed (returns false) or stops the CPU (true). */
-    stop() {
-        this.timer.writeDiv();
-        if (!this.cgb || !this.speedArmed) return true;
-        this.speedArmed = false;
-        this.doubleSpeed = !this.doubleSpeed;
-        this.cpu.stall += SPEED_SWITCH_CYCLES;
-        return false;
-    }
-
-    /** Called by the PPU at the start of each HBlank: runs one HDMA block. */
-    hblank() {
-        if (!this.hdmaActive) return;
-        this.#hdmaBlock();
-        this.cpu.stall += this.doubleSpeed ? 16 : 8;
-        if (this.hdmaLength === 0) {
-            this.hdmaLength = 0x7f;
-            this.hdmaActive = false;
-        } else {
-            this.hdmaLength--;
+    /** Runs everything but the CPU for `cycles` CPU T-cycles (GB_advance_cycles). */
+    advance(cycles) {
+        if (this.speedSwitchCountdown | this.speedSwitchHaltCountdown | this.speedSwitchFreeze) {
+            this.#advanceSwitching(cycles);
+            return;
         }
+        this.dmaCycles = cycles;
+        const timer = this.timer;
+        // (The timer's common case, inlined.)
+        const divCycles = timer.divCycles + cycles;
+        if (divCycles <= 0 && !this.cpu.stopped) timer.divCycles = divCycles;
+        else timer.run(cycles);
+        if (this.cart.ticking && !this.cpu.halted && !this.cpu.stopped) this.cart.tick(cycles);
+        this.#advanceVideo(this.doubleSpeed ? cycles : cycles << 1);
+    }
+
+    /** advance() around a speed switch. */
+    #advanceSwitching(cycles) {
+        if (this.speedSwitchCountdown) {
+            if (this.speedSwitchCountdown === cycles) {
+                this.doubleSpeed = !this.doubleSpeed;
+                this.timer.refreshWatch();
+                this.speedSwitchCountdown = 0;
+            } else if (this.speedSwitchCountdown > cycles) {
+                this.speedSwitchCountdown -= cycles;
+            } else {
+                const before = this.speedSwitchCountdown;
+                cycles -= before;
+                this.speedSwitchCountdown = 0;
+                this.advance(before);
+                this.doubleSpeed = !this.doubleSpeed;
+                this.timer.refreshWatch();
+            }
+        }
+        this.dmaCycles = cycles;
+        this.timer.run(cycles);
+        if (this.cart.ticking && !this.cpu.halted && !this.cpu.stopped) this.cart.tick(cycles);
+        if (this.speedSwitchHaltCountdown) {
+            this.speedSwitchHaltCountdown -= cycles;
+            if (this.speedSwitchHaltCountdown <= 0) {
+                this.speedSwitchHaltCountdown = 0;
+                this.cpu.halted = false;
+            }
+        }
+        if (this.speedSwitchFreeze) {
+            if (this.speedSwitchFreeze >= cycles) {
+                this.speedSwitchFreeze -= cycles;
+                return;
+            }
+            cycles -= this.speedSwitchFreeze;
+            this.speedSwitchFreeze = 0;
+        }
+        this.#advanceVideo(this.doubleSpeed ? cycles : cycles << 1);
+    }
+
+    /** The rest of advance(), in 8 MHz units (the same in both speeds). */
+    #advanceVideo(units) {
+        if (this.io[0x40] & 0x80) this.doubleSpeedAlignment = (this.doubleSpeedAlignment + units) & 0xff;
+        this.frameBudget -= units;
+        this.totalCycles += units;
+        this.ppu.run(units, false);
+        if (this.dmaCurrentDest !== 0xa1 && !this.cpu.stopped) this.dmaRun();
+    }
+
+    /**
+     * While halted: whole M-cycles (in T-cycles) that can pass in one go
+     * because nothing can raise an interrupt meanwhile, or 0. Running them
+     * in one advance() is exact: it's the same as stepping through them.
+     */
+    idleCycles() {
+        if (this.speedSwitchCountdown | this.speedSwitchHaltCountdown | this.speedSwitchFreeze || this.hdmaOn) return 0;
+        if ((this.serial.sc & 0x81) === 0x81) return 0;
+        // In 8 MHz units: the PPU's next step, the end of this run.
+        let units = Math.min(this.ppu.quietUnits, this.frameBudget - this.stopAt);
+        let cycles = this.doubleSpeed ? units : units >> 1;
+        cycles = Math.min(cycles, this.timer.quietCycles);
+        // Two M-cycles of margin, so the interrupt is taken by the usual steps.
+        cycles = ((cycles - 8) & ~3);
+        return cycles >= 16 ? cycles : 0;
+    }
+
+    /** Leaving HALT: a waiting HBlank DMA block and OAM DMA go on. */
+    wake() {
+        if (this.hdmaOnHblank && (this.io[0x41] & 3) === 0 && this.allowHdmaOnWake) this.hdmaOn = true;
+        this.dmaCycles = 4;
+        this.dmaRun();
+        this.speedSwitchHaltCountdown = 0;
+    }
+
+    enterStopMode() {
+        const { ppu } = this;
+        this.timer.writeDiv();
+        // The CPU-side DIV reset signal is held a little longer.
+        if (!this.cpu.ime) this.timer.divCycles = -4;
+        this.cpu.stopped = true;
+        this.allowHdmaOnWake = (this.io[0x41] & 3) !== 0;
+        ppu.oamPpuBlocked = !ppu.oamReadBlocked;
+        ppu.vramPpuBlocked = !ppu.vramReadBlocked;
+        ppu.cgbPalettesPpuBlocked = !ppu.cgbPalettesBlocked;
+    }
+
+    leaveStopMode() {
+        const { ppu } = this;
+        this.cpu.stopped = false;
+        if (this.hdmaOnHblank && (this.io[0x41] & 3) === 0 && this.allowHdmaOnWake) this.hdmaOn = true;
+        this.dmaCycles = 4;
+        this.dmaRun();
+        ppu.oamPpuBlocked = false;
+        ppu.vramPpuBlocked = false;
+        ppu.cgbPalettesPpuBlocked = false;
+    }
+
+    /**
+     * STOP with KEY1 armed: the speed changes 6 T-cycles later (to double)
+     * or at once (to single); without a pending interrupt the CPU is then
+     * halted for about 0x20008 T-cycles while DIV keeps counting.
+     */
+    switchSpeed(interruptPending) {
+        if (this.io[0x40] & 0x80 && this.doubleSpeed && this.doubleSpeedAlignment & 7) this.speedSwitchFreeze = 2;
+        if (this.doubleSpeed) {
+            this.doubleSpeed = false;
+            this.timer.refreshWatch();
+        } else {
+            this.speedSwitchCountdown = 6;
+            this.speedSwitchFreeze = 1;
+        }
+        if (!interruptPending) {
+            this.speedSwitchHaltCountdown = 0x20008;
+            this.speedSwitchFreeze = 5;
+        }
+        this.io[0x4d] = 0;
+    }
+
+    /** The CPU's 16-bit increment/decrement unit put `addr` on the bus (DMG OAM bug). */
+    triggerOamBug(addr) {
+        this.ppu.triggerOamBug(addr);
     }
 
     // --- Memory map ------------------------------------------------------------------
 
     read(addr) {
-        if (this.dmaActive && addr < 0xfe00) {
-            const value = this.#dmaConflict(addr);
-            if (value >= 0) return value;
+        if (this.dmaCurrentDest !== 0xa1 && this.#dmaBusy(addr)) {
+            // OAM DMA occupies the bus it copies from: the CPU meets its address instead.
+            const src = this.dmaCurrentSrc;
+            if (this.cgb && cgbBus(addr) === Bus.MAIN && src >= 0xe000) return 0xff;
+            if (this.cgb && addr >= 0xc000 && (cgbBus(src) !== Bus.RAM || src >= 0xe000)) {
+                addr = ((src - 1) & 0x1000) | (addr & 0xfff) | 0xc000;
+            } else {
+                addr = (src - 1) & 0xffff;
+            }
         }
         if (addr < 0x8000) return this.cart.readRom(addr);
-        if (addr < 0xa000) return this.ppu.readVram(addr);
+        if (addr < 0xa000) {
+            if (this.dmaCurrentDest === 0xa1) this.ppu.catchUp();
+            return this.ppu.readVram(addr);
+        }
         if (addr < 0xc000) return this.cart.readRam(addr);
         if (addr < 0xfe00) return this.#readWram(addr);
         if (addr < 0xff00) {
-            if (!this.cgb && this.ppu.oamWriteBlocked) {
-                this.ppu.oamBugRead();
-                return 0xff;
-            }
-            if (addr >= 0xfea0) return this.ppu.oamReadBlocked ? 0xff : 0;
-            return this.dmaActive ? 0xff : this.ppu.readOam(addr);
+            this.ppu.catchUp();
+            return this.ppu.cpuReadOam(addr);
         }
         if (addr < 0xff80) return this.#readIo(addr);
         if (addr < 0xffff) return this.hram[addr - 0xff80];
         return this.ie;
     }
 
-    /**
-     * The CPU's 16-bit increment/decrement unit drives the address bus: with a
-     * value in FE00-FEFF it disturbs OAM on a DMG like a write would.
-     */
-    oamBug(addr) {
-        if (addr >= 0xfe00 && addr < 0xff00 && !this.cgb) this.ppu.oamBugWrite();
+    write(addr, value) {
+        if (this.dmaCurrentDest !== 0xa1 && this.#dmaBusy(addr) && !this.#dmaWriteConflict(addr, value)) return;
+        this.#write(addr, value);
     }
 
-    write(addr, value) {
-        if (this.dmaActive && addr < 0xfe00 && this.#dmaWriteConflict(addr, value)) return;
+    #write(addr, value) {
         if (addr < 0x8000) {
             this.cart.writeRom(addr, value);
             if (this.cart.rumbling !== this.rumbleOn) this.#rumbleChanged();
-        }
-        else if (addr < 0xa000) this.ppu.writeVram(addr, value);
-        else if (addr < 0xc000) {
+        } else if (addr < 0xa000) {
+            this.ppu.catchUp();
+            this.ppu.writeVram(addr, value);
+        } else if (addr < 0xc000) {
             this.cart.writeRam(addr, value);
             this.saveWrites++;
+        } else if (addr < 0xfe00) {
+            this.#writeWram(addr, value);
+        } else if (addr < 0xff00) {
+            this.ppu.catchUp();
+            this.ppu.cpuWriteOam(addr, value);
+        } else if (addr < 0xff80) {
+            this.#writeIo(addr, value);
+        } else if (addr < 0xffff) {
+            this.hram[addr - 0xff80] = value;
+        } else {
+            this.ppu.catchUp();
+            this.ie = value;
         }
-        else if (addr < 0xfe00) this.#writeWram(addr, value);
-        else if (addr < 0xff00) {
-            if (!this.cgb && this.ppu.oamWriteBlocked) this.ppu.oamBugWrite();
-            else if (addr < 0xfea0 && !this.dmaActive) this.ppu.writeOam(addr, value);
-        } else if (addr < 0xff80) this.#writeIo(addr, value);
-        else if (addr < 0xffff) this.hram[addr - 0xff80] = value;
-        else this.ie = value;
     }
 
     #rumbleChanged() {
         const now = this.frameStart - this.frameBudget;
-        if (this.rumbleOn) this.rumbleDots += now - this.rumbleSince;
+        if (this.rumbleOn) this.rumbleTime += now - this.rumbleSince;
         this.rumbleSince = now;
         this.rumbleOn = this.cart.rumbling;
     }
@@ -515,189 +679,221 @@ export class GameBoy {
     }
 
     #readIo(addr) {
-        switch (addr) {
-            case 0xff00: return this.joypad.read();
-            case 0xff01: return this.serial.sb;
-            case 0xff02: return this.serial.readSc();
-            case 0xff04: return this.timer.div;
-            case 0xff05: return this.timer.tima;
-            case 0xff06: return this.timer.tma;
-            case 0xff07: return this.timer.tac;
-            case 0xff0f: return 0xe0 | this.if;
-            case 0xff46: return this.dmaRegister;
-        }
-        if (addr < 0xff10) return 0xff;
-        if (addr < 0xff40) return this.apu.read(addr);
-        if (!this.cgb) return addr < 0xff4c ? this.ppu.readRegister(addr) : 0xff;
-        switch (addr) {
-            case 0xff4d: return 0x7e | (this.doubleSpeed ? 0x80 : 0) | (this.speedArmed ? 1 : 0);
-            case 0xff55: return (this.hdmaActive ? 0 : 0x80) | this.hdmaLength;
-            case 0xff56: {
+        const reg = addr & 0x7f;
+        const io = this.io;
+        const cgb = this.cgb;
+        if (PPU_REGISTERS[reg]) this.ppu.catchUp();
+        switch (reg) {
+            case 0x00: return this.joypad.read();
+            case 0x01: return this.serial.sb;
+            case 0x02: return this.serial.readSc();
+            case 0x04: return this.timer.div;
+            case 0x05: return this.timer.readTima();
+            case 0x06: return this.timer.tma;
+            case 0x07: return this.timer.tac | 0xf8;
+            case 0x0f: return io[0x0f] | 0xe0;
+            case 0x40: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47: case 0x48: case 0x49:
+            case 0x4a: case 0x4b:
+                return io[reg];
+            case 0x41: case 0x4f: case 0x68: case 0x69: case 0x6a: case 0x6b: case 0x6c:
+                return this.ppu.readRegister(reg);
+            case 0x4d: return cgb ? (io[0x4d] & 0x7f) | (this.doubleSpeed ? 0xfe : 0x7e) : 0xff;
+            case 0x55:
+                if (!cgb) return 0xff;
+                return (this.hdmaOn || this.hdmaOnHblank ? 0 : 0x80) | ((this.hdmaStepsLeft - 1) & 0x7f);
+            case 0x56: {
+                if (!cgb) return 0xff;
                 // Bit 1 is 0 while light is received and reading is enabled (bits 6-7).
-                const dark = (this.rp & 0xc0) !== 0xc0 || !this.irReceived;
-                return 0x3c | (this.rp & 0xc1) | (dark ? 2 : 0);
+                let value = (io[0x56] & 0xc1) | 0x2e;
+                if ((io[0x56] & 0xc0) === 0xc0 && this.irReceived) value &= ~2;
+                return value;
             }
-            case 0xff70: return 0xf8 | this.svbk;
-            case 0xff72: case 0xff73: case 0xff74: return this.extraRegs[addr - 0xff72];
-            case 0xff75: return 0x8f | this.extraRegs[3];
-            case 0xff76: case 0xff77: return this.apu.readPcm(addr);
+            case 0x70: return cgb ? io[0x70] : 0xff;
+            case 0x72: case 0x73: case 0x74: return cgb ? io[reg] : 0xff;
+            case 0x75: return cgb ? io[0x75] | 0x8f : 0xff;
+            case 0x76: case 0x77: return cgb ? this.apu.readPcm(addr) : 0xff;
         }
-        return addr < 0xff70 ? this.ppu.readRegister(addr) : 0xff;
+        if (reg >= 0x10 && reg < 0x40) return this.apu.read(addr);
+        return 0xff;
     }
 
     #writeIo(addr, value) {
-        switch (addr) {
-            case 0xff00: this.joypad.write(value); return;
-            case 0xff01: this.serial.sb = value; return;
-            case 0xff02: this.serial.writeSc(value); return;
-            case 0xff04: this.timer.writeDiv(); return;
-            case 0xff05: this.timer.writeTima(value); return;
-            case 0xff06: this.timer.writeTma(value); return;
-            case 0xff07: this.timer.writeTac(value); return;
-            case 0xff0f: this.if = value & 0x1f; return;
-            case 0xff46: this.#startDma(value); return;
-        }
-        if (addr < 0xff10) return;
-        if (addr < 0xff40) {
-            this.apu.write(addr, value);
-            return;
-        }
-        if (!this.cgb) {
-            if (addr < 0xff4c) this.ppu.writeRegister(addr, value);
-            return;
-        }
-        switch (addr) {
-            case 0xff4d: this.speedArmed = (value & 1) !== 0; return;
-            case 0xff51: this.hdmaSource = (value << 8) | (this.hdmaSource & 0xff); return;
-            case 0xff52: this.hdmaSource = (this.hdmaSource & 0xff00) | (value & 0xf0); return;
-            case 0xff53: this.hdmaDest = ((value & 0x1f) << 8) | (this.hdmaDest & 0xff); return;
-            case 0xff54: this.hdmaDest = (this.hdmaDest & 0x1f00) | (value & 0xf0); return;
-            case 0xff55: this.#writeHdma(value); return;
-            case 0xff56: this.rp = value & 0xc1; return;
-            case 0xff70:
-                this.svbk = value & 7;
-                this.wramBank = this.svbk || 1;
+        const reg = addr & 0x7f;
+        const io = this.io;
+        const cgb = this.cgb;
+        if (PPU_REGISTERS[reg]) this.ppu.catchUp();
+        switch (reg) {
+            case 0x00: this.joypad.write(value); return;
+            case 0x01: this.serial.sb = value; return;
+            case 0x02: this.serial.writeSc(value); return;
+            case 0x04: this.timer.writeDiv(); return;
+            case 0x05: this.timer.writeTima(value); return;
+            case 0x06: this.timer.writeTma(value); return;
+            case 0x07: this.timer.writeTac(value); return;
+            case 0x0f: io[0x0f] = value; return;
+            case 0x40: case 0x41: case 0x42: case 0x43: case 0x45: case 0x47: case 0x48: case 0x49: case 0x4a:
+            case 0x4b: case 0x4f: case 0x68: case 0x69: case 0x6a: case 0x6b: case 0x6c:
+                this.ppu.writeRegister(reg, value);
                 return;
-            case 0xff72: case 0xff73: case 0xff74: this.extraRegs[addr - 0xff72] = value; return;
-            case 0xff75: this.extraRegs[3] = value & 0x70; return;
+            case 0x46:
+                this.dmaRestarting = this.dmaCurrentDest !== 0xa1 && this.dmaCurrentDest !== 0xa0;
+                this.dmaCycles = 0;
+                this.dmaCyclesModulo = 2;
+                this.dmaCurrentDest = 0xff;
+                this.dmaCurrentSrc = value << 8;
+                io[0x46] = value;
+                this.ppu.statUpdate();
+                return;
+            case 0x4d: if (cgb) io[0x4d] = value; return;
+            case 0x51:
+                if (!cgb) return;
+                this.hdmaCurrentSrc = (this.hdmaCurrentSrc & 0xf0) | (value << 8);
+                // E000-FFFF reads like F000-FFFF (and can't wrap into anything useful).
+                if (this.hdmaCurrentSrc >= 0xe000) this.hdmaCurrentSrc |= 0xf000;
+                return;
+            case 0x52: if (cgb) this.hdmaCurrentSrc = (this.hdmaCurrentSrc & 0xff00) | (value & 0xf0); return;
+            case 0x53: if (cgb) this.hdmaCurrentDest = (this.hdmaCurrentDest & 0xf0) | (value << 8); return;
+            case 0x54: if (cgb) this.hdmaCurrentDest = (this.hdmaCurrentDest & 0xff00) | (value & 0xf0); return;
+            case 0x55:
+                if (!cgb) return;
+                this.hdmaStepsLeft = (value & 0x7f) + 1;
+                if (!(value & 0x80) && this.hdmaOnHblank) {
+                    // Stops an HBlank transfer.
+                    this.hdmaOnHblank = false;
+                    return;
+                }
+                this.hdmaOn = !(value & 0x80);
+                this.hdmaOnHblank = (value & 0x80) !== 0;
+                // Started in HBlank (or with the LCD off): the first block goes now.
+                if (this.hdmaOnHblank && (io[0x41] & 3) === 0 && this.ppu.state !== 7) this.hdmaOn = true;
+                return;
+            case 0x56: if (cgb) io[0x56] = value; return;
+            case 0x70:
+                if (!cgb) return;
+                this.wramBank = value & 7 || 1;
+                io[0x70] = value | 0xf8;
+                return;
+            case 0x72: case 0x73: case 0x74: case 0x75: io[reg] = value; return;
         }
-        if (addr < 0xff70) this.ppu.writeRegister(addr, value);
+        if (reg >= 0x10 && reg < 0x40) this.apu.write(addr, value);
     }
 
     // --- DMA ---------------------------------------------------------------------------
 
-    #startDma(value) {
-        this.dmaRegister = value;
-        // Sources from E000 up read work RAM, like its echo.
-        this.dmaSource = (value >= 0xe0 ? value - 0x20 : value) << 8;
-        // Copying starts two M-cycles after the write; a DMA already running
-        // continues until then.
-        this.dmaDelay = 2;
-    }
-
-    /** One byte per M-cycle; OAM stays blocked until the M-cycle after the last byte. */
-    #dmaTick() {
-        if (this.dmaActive) {
-            if (this.dmaIndex === 0xa0) this.dmaActive = false;
-            else this.#dmaCopy();
-        }
-        if (this.dmaDelay && --this.dmaDelay === 0) {
-            this.dmaIndex = 0;
-            this.dmaActive = true;
-            this.#dmaCopy();
-        }
-    }
-
-    #dmaCopy() {
-        this.ppu.oam[this.dmaIndex] = this.#dmaRead(this.dmaSource + this.dmaIndex);
-        this.dmaIndex++;
-    }
-
     /**
-     * OAM DMA occupies the bus it copies from: the CPU accessing that bus
-     * meets the DMA's address instead. The CGB has a separate bus for work
-     * RAM, with odder rules (these follow SameBoy).
+     * Whether OAM DMA occupies the bus `addr` is on. The CGB has a separate bus
+     * for work RAM, with odder rules (these follow SameBoy).
      */
     #dmaBusy(addr) {
-        const next = this.dmaSource + this.dmaIndex;
-        if (addr === next || (next >= 0xe000 && (next & ~0x2000) === addr)) return false;
-        if (!this.cgb) return dmgBus(addr) === dmgBus(next);
-        if (addr >= 0xc000) return cgbBus(next) !== Bus.VRAM;
-        if (next >= 0xe000) return cgbBus(addr) !== Bus.VRAM;
-        return cgbBus(addr) === cgbBus(next);
-    }
-
-    /** A read during OAM DMA: the byte being copied, or -1 when the bus is free. */
-    #dmaConflict(addr) {
-        if (!this.#dmaBusy(addr)) return -1;
-        const last = this.dmaSource + this.dmaIndex - 1;
-        if (this.cgb && addr >= 0xc000 && (cgbBus(last + 1) !== Bus.RAM || last + 1 >= 0xe000)) {
-            return this.#readWram((last & 0x1000) | (addr & 0xfff) | 0xc000);
-        }
-        if (this.cgb && cgbBus(addr) === Bus.MAIN && last + 1 >= 0xe000) return 0xff;
-        return this.#dmaRead(last);
-    }
-
-    /** A write during OAM DMA; returns false when the bus is free. */
-    #dmaWriteConflict(addr, value) {
-        if (!this.#dmaBusy(addr)) return false;
-        const next = this.dmaSource + this.dmaIndex;
-        const last = next - 1;
+        if (addr >= 0xfe00 || this.hdmaInProgress) return false;
+        // Not while it's starting up.
+        if (this.dmaCurrentDest === 0xff || this.dmaCurrentDest === 0) return false;
+        const src = this.dmaCurrentSrc;
+        if (src === addr || (src >= 0xe000 && (src & ~0x2000) === addr)) return false;
         if (this.cgb) {
-            if (cgbBus(addr) === Bus.MAIN && next >= 0xe000) return true;
-            if (addr >= 0xc000 && (next < 0xc000 || next >= 0xe000)) {
-                this.#writeWram((last & 0x1000) | (addr & 0xfff) | 0xc000, value);
-                return true;
-            }
-            if (last >= 0xa000) return true;
-            this.ppu.oam[this.dmaIndex - 1] = 0;
-        } else if (last >= 0xa000) {
-            // The DMA's source wins; the byte being copied picks up the write's 0 bits.
-            this.ppu.oam[this.dmaIndex - 1] &= value;
-            return true;
+            if (addr >= 0xc000) return cgbBus(src) !== Bus.VRAM;
+            if (src >= 0xe000) return cgbBus(addr) !== Bus.VRAM;
+            return cgbBus(addr) === cgbBus(src);
+        }
+        return dmgBus(addr) === dmgBus(src);
+    }
+
+    /** A CPU write during OAM DMA on its bus; returns true when the write still goes (elsewhere). */
+    #dmaWriteConflict(addr, value) {
+        const src = this.dmaCurrentSrc;
+        const oam = this.ppu.oam;
+        if (this.cgb && cgbBus(addr) === Bus.MAIN && src >= 0xe000) return false;
+        if (this.cgb && addr >= 0xc000 && (src < 0xc000 || src >= 0xe000)) {
+            this.#write(((src - 1) & 0x1000) | (addr & 0xfff) | 0xc000, value);
+            return false;
+        }
+        const target = (src - 1) & 0xffff;
+        if (this.cgb || target >= 0xa000) {
+            // The byte being copied is disturbed.
+            if (target < 0xa000) oam[this.dmaCurrentDest - 1] = 0;
+            else if (!this.cgb) oam[this.dmaCurrentDest - 1] &= value;
+            if (!this.cgb || target >= 0xa000) return false;
         }
         // The write lands on the DMA's address instead (on a ROM source: the mapper).
-        if (last < 0x8000) this.cart.writeRom(last, value);
-        else this.ppu.writeVram(last, value);
-        return true;
+        this.#write(target, value);
+        return false;
     }
 
-    /** Reads for DMA, which bypasses the PPU's access restrictions. */
-    #dmaRead(addr) {
-        if (addr < 0x8000) return this.cart.readRom(addr);
-        if (addr < 0xa000) return this.ppu.vram[(this.ppu.vramBank << 13) | (addr & 0x1fff)];
-        if (addr < 0xc000) return this.cart.readRam(addr);
-        return this.#readWram(addr);
+    /** Runs OAM DMA for the T-cycles in dmaCycles: a byte every 4 (GB_dma_run). */
+    dmaRun() {
+        if (this.dmaCurrentDest === 0xa1) return;
+        const cpu = this.cpu;
+        if (cpu.halted || cpu.stopped) return;
+        const oam = this.ppu.oam;
+        let cycles = this.dmaCycles + this.dmaCyclesModulo;
+        this.inDmaRead = true;
+        while (cycles >= 4) {
+            cycles -= 4;
+            if (this.dmaCurrentDest >= 0xa0) {
+                // Starting up (0xFF) or finishing (0xA0): an M-cycle without a copy.
+                this.dmaCurrentDest = (this.dmaCurrentDest + 1) & 0xff;
+                if (this.ppu.state === 8) {
+                    this.io[0x41] |= 2;
+                    this.ppu.statUpdate();
+                }
+                break;
+            }
+            if (this.hdmaInProgress && (this.hdmaStepsLeft > 1 || (this.hdmaCurrentDest & 0xf) !== 0xf)) {
+                this.dmaCurrentDest++;
+            } else if (this.dmaCurrentSrc < 0xe000) {
+                oam[this.dmaCurrentDest++] = this.read(this.dmaCurrentSrc);
+            } else {
+                // From E000 up: work RAM like its echo on a DMG, nothing on a CGB.
+                oam[this.dmaCurrentDest++] = this.cgb ? 0xff : this.read(this.dmaCurrentSrc & ~0x2000);
+            }
+            this.dmaCurrentSrc = (this.dmaCurrentSrc + 1) & 0xffff;
+            this.dmaPpuVramConflict = false;
+        }
+        this.inDmaRead = false;
+        this.dmaCyclesModulo = cycles;
+        this.dmaCycles = 0;
     }
 
-    #writeHdma(value) {
-        if (this.hdmaActive && !(value & 0x80)) {
-            // Stops an HBlank transfer; FF55 then reads bit 7 set and the length just written.
-            this.hdmaActive = false;
-            this.hdmaLength = value & 0x7f;
-            return;
+    /** Copies HDMA blocks while hdmaOn: 2 bytes per M-cycle, the CPU waiting (GB_hdma_run). */
+    hdmaRun() {
+        const { ppu } = this;
+        const vram = ppu.vram;
+        const cycles = this.doubleSpeed ? 4 : 2;
+        this.addrForHdmaConflict = 0xffff;
+        const vramBase = ppu.vramBank << 13;
+        this.hdmaInProgress = true;
+        this.advance(cycles);
+        while (this.hdmaOn) {
+            let byte = 0xff;
+            this.addrForHdmaConflict = 0xffff;
+            const src = this.hdmaCurrentSrc;
+            if (src < 0x8000 || (src & 0xe000) === 0xc000 || (src & 0xe000) === 0xa000) byte = this.read(src);
+            if (this.dmaCurrentDest !== 0xa1 && (this.dmaCyclesModulo === 2 || this.doubleSpeed) && (src & 0xff) < 0xa0) {
+                ppu.oam[src & 0xff] = byte;
+            }
+            this.hdmaCurrentSrc = (src + 1) & 0xffff;
+            this.advance(cycles);
+            let dest;
+            if (this.addrForHdmaConflict === 0xffff) {
+                dest = this.hdmaCurrentDest & 0x1fff;
+            } else {
+                // The PPU read VRAM at the same time: the addresses mix (CGB-E).
+                dest = this.hdmaCurrentDest & this.addrForHdmaConflict & 0x1fff;
+            }
+            this.hdmaCurrentDest = (this.hdmaCurrentDest + 1) & 0xffff;
+            vram[vramBase + dest] = byte;
+            if (ppu.vramWriteBlocked) vram[(vramBase ^ 0x2000) + dest] = byte;
+            if ((this.hdmaCurrentDest & 0xf) === 0) {
+                if (--this.hdmaStepsLeft === 0 || this.hdmaCurrentDest === 0) {
+                    this.hdmaOn = false;
+                    this.hdmaOnHblank = false;
+                } else if (this.hdmaOnHblank) {
+                    this.hdmaOn = false;
+                }
+            }
         }
-        this.hdmaLength = value & 0x7f;
-        if (value & 0x80) {
-            this.hdmaActive = true;
-            // Started in HBlank (or with the LCD off): the first block goes now.
-            if (this.ppu.mode === 0) this.hblank();
-            return;
-        }
-        // General-purpose DMA: everything at once, with the CPU held meanwhile.
-        const blocks = this.hdmaLength + 1;
-        for (let i = 0; i < blocks; i++) this.#hdmaBlock();
-        this.hdmaLength = 0x7f;
-        this.cpu.stall += blocks * (this.doubleSpeed ? 16 : 8);
-    }
-
-    #hdmaBlock() {
-        const { vram, vramBank } = this.ppu;
-        for (let i = 0; i < 16; i++) {
-            vram[(vramBank << 13) | this.hdmaDest] = this.#dmaRead(this.hdmaSource);
-            this.hdmaSource = (this.hdmaSource + 1) & 0xffff;
-            this.hdmaDest = (this.hdmaDest + 1) & 0x1fff;
-        }
+        this.hdmaInProgress = false;
+        if (!this.doubleSpeed) this.advance(2);
     }
 }
 
