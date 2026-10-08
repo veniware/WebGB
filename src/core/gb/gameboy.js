@@ -1,3 +1,29 @@
+/*
+ * Memory access timing, OAM DMA, HDMA and the speed switch are ported from
+ * SameBoy's Core/memory.c, Core/timing.c and Core/sm83_cpu.c (reduced to
+ * the DMG-B, SGB and CGB-E). SameBoy's license:
+ *
+ * Copyright (c) 2015-2026 Lior Halphon
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 import { StateReader, StateWriter } from "../state.js";
 import { Apu, SAMPLE_RATE } from "./apu.js";
 import { createCartridge } from "./cartridge.js";
@@ -43,6 +69,8 @@ for (const reg of [0x0f, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0
 export class GameBoy {
     id = "gb";
     version = 6;
+    // Versions loadState() reads: 4 and 5 are the M-cycle core's (converted).
+    stateVersions = [4, 5, 6];
     fps = CLOCK_RATE / FRAME_DOTS;
     sampleRate = SAMPLE_RATE;
     // Cartridge RAM writes so far (see getSaveWrites()); not part of the state.
@@ -436,12 +464,14 @@ export class GameBoy {
     }
 
     loadState(data, version = this.version) {
-        if (version !== this.version) throw new Error("This snapshot is from an older version of the emulator.");
+        if (!this.stateVersions.includes(version)) throw new Error("This snapshot is from another version of the emulator.");
         const s = new StateReader(data);
+        s.version = version;
         if (!this.#header(s)) throw new Error("This snapshot is for a different game or system.");
         const backup = this.saveState();
         try {
-            this.sync(s);
+            if (version < 6) this.#syncLegacy(s);
+            else this.sync(s);
             if (!s.done) throw new Error("Invalid save state.");
         } catch (err) {
             const restore = new StateReader(backup);
@@ -449,6 +479,105 @@ export class GameBoy {
             this.sync(restore);
             throw err;
         }
+    }
+
+    /**
+     * Reads a state of the M-cycle core (versions 4-5). Memory, CPU, timer,
+     * APU and cartridge carry over; the PPU restarts the line it was on, so
+     * the game goes on a few dots off.
+     */
+    #syncLegacy(s) {
+        const { cpu, timer, ppu, io } = this;
+        for (const r of ["a", "f", "b", "c", "d", "e", "h", "l"]) cpu[r] = s.u8(0);
+        cpu.sp = s.u16(0);
+        cpu.pc = s.u16(0);
+        const [ime, imePending, halted, haltBug, stopped, locked] = [0, 0, 0, 0, 0, 0].map(() => s.bool(false));
+        s.u32(0); // M-cycles the CPU was held (HDMA, speed switch)
+        Object.assign(cpu, { ime, imeToggle: imePending && !ime, halted: halted || locked, haltBug, stopped, justHalted: false,
+            pending: 0 });
+
+        timer.counter = s.u16(0);
+        timer.tima = s.u8(0);
+        timer.tma = s.u8(0);
+        timer.tac = s.u8(0) & 7;
+        const [overflow, reloaded] = [s.bool(false), s.bool(false)];
+        timer.reloadState = overflow ? 1 : reloaded ? 2 : 0;
+        timer.divState = 2;
+        timer.divCycles = -3;
+
+        ppu.reset();
+        s.bytes(ppu.vram);
+        s.bytes(ppu.oam);
+        s.bytes(ppu.bgPaletteRam);
+        s.bytes(ppu.objPaletteRam);
+        const [vramBank, lcdc, statEnables, scy, scx, ly, lyc, bgp, obp0, obp1, wy, wx, bcps, ocps, , mode, , , windowLine] =
+            Array.from({ length: 20 }, () => s.u8(0));
+        s.u16(0); // dot
+        s.u16(0); // next event
+        const flags = Array.from({ length: 11 }, () => s.bool(false));
+        const [windowTriggered, coincidence, statSignal] = flags.slice(4, 7);
+        ppu.frameSkipped = flags[8];
+        for (const length of [10, 7]) s.bytes(new Uint8Array(length));
+        s.u8(0);
+        s.bytes(new Int32Array(64));
+        s.bytes(new Uint8Array(64));
+        s.bytes(new Uint8Array(64));
+        s.bytes(ppu.front);
+        ppu.vramBank = vramBank;
+        Object.assign(io, { [0x40]: lcdc, [0x41]: 0x80 | statEnables | (coincidence ? 4 : 0) | (lcdc & 0x80 ? mode : 0),
+            [0x42]: scy, [0x43]: scx, [0x44]: ly, [0x45]: lyc, [0x47]: bgp, [0x48]: obp0, [0x49]: obp1, [0x4a]: wy,
+            [0x4b]: wx, [0x68]: bcps, [0x6a]: ocps });
+        ppu.wyTriggered = windowTriggered;
+        ppu.windowY = (windowLine - 1) & 0xff;
+        ppu.statInterruptLine = statSignal;
+        ppu.lycInterruptLine = coincidence;
+        ppu.positionInLine = 0xf0;
+        if (lcdc & 0x80) {
+            // At the start of the line (LY reads 0 during most of line 153).
+            const line = mode === 1 && ly === 0 ? 153 : ly;
+            ppu.currentLine = line;
+            ppu.state = line < 144 ? 102 : line < 153 ? 114 : 115;
+        }
+        ppu.refreshPalettes();
+
+        this.apu.sync(s);
+        this.joypad.sync(s);
+        this.serial.sync(s);
+        this.cart.sync(s);
+        this.sgb?.sync(s);
+        s.bytes(this.wram);
+        s.bytes(this.hram);
+        const extra = new Uint8Array(4);
+        s.bytes(extra);
+        io.set(extra, 0x72);
+        const [ie, flagsIf, svbk, dmaRegister, dmaIndex, dmaDelay, hdmaLength, rp] = Array.from({ length: 8 }, () => s.u8(0));
+        const [dmaSource, hdmaSource, hdmaDest] = [s.u16(0), s.u16(0), s.u16(0)];
+        const [doubleSpeed, speedArmed, dmaActive, hdmaActive] = [0, 0, 0, 0].map(() => s.bool(false));
+        this.frameBudget = s.i32(0) * 2;
+        // An illegal opcode locked the CPU up.
+        this.ie = locked ? 0 : ie;
+        io[0x0f] = flagsIf;
+        io[0x46] = dmaRegister;
+        io[0x56] = rp;
+        io[0x4d] = speedArmed ? 1 : 0;
+        if (this.cgb) {
+            io[0x70] = svbk | 0xf8;
+            this.wramBank = svbk || 1;
+        }
+        this.doubleSpeed = doubleSpeed;
+        this.dmaCurrentDest = dmaDelay ? 0xff : dmaActive ? dmaIndex : 0xa1;
+        this.dmaCurrentSrc = dmaDelay ? dmaRegister << 8 : (dmaSource + dmaIndex) & 0xffff;
+        this.dmaCycles = 0;
+        this.dmaCyclesModulo = 0;
+        this.hdmaOn = false;
+        this.hdmaOnHblank = hdmaActive;
+        this.hdmaStepsLeft = hdmaLength + 1;
+        this.hdmaCurrentSrc = hdmaSource;
+        this.hdmaCurrentDest = hdmaDest | 0x8000;
+        this.speedSwitchCountdown = 0;
+        this.speedSwitchFreeze = 0;
+        this.speedSwitchHaltCountdown = 0;
+        timer.refreshWatch();
     }
 
     /** Writes or checks the state header (format, system, ROM size). */

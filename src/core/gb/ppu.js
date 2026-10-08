@@ -1,3 +1,30 @@
+/*
+ * The display state machine, pixel fetcher and FIFOs, line renderer and OAM
+ * bug patterns are ported from SameBoy's Core/display.c and Core/memory.c
+ * (reduced to the DMG-B, SGB and CGB-E; the output is WebGB's own).
+ * SameBoy's license:
+ *
+ * Copyright (c) 2015-2026 Lior Halphon
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 import { SCREEN_HEIGHT, SCREEN_WIDTH } from "./constants.js";
 import { cgbToPixel, DEFAULT_DMG_PALETTE, rgbToPixel } from "./palettes.js";
 
@@ -325,9 +352,12 @@ export class Ppu {
         s.bytes(this.objectsY);
         s.bytes(this.currentTileData);
         s.bytes(this.objectTileData);
-        s.bytes(this.back);
+        // The back buffer is redrawn before it's shown (states are taken between frames).
         s.bytes(this.front);
-        if (s.reading) this.#refreshColors();
+        if (s.reading) {
+            this.back.set(this.front);
+            this.#refreshColors();
+        }
     }
 
     // --- Colors ----------------------------------------------------------------------

@@ -90,14 +90,16 @@ src/core/
     index.js            createCore(): CGB mode for Color ROMs; createLinkedCore()
     gameboy.js          System: memory map, I/O registers, OAM DMA, HDMA, speed
                         switch, frame loop, save states; implements Core
-    cpu.js              SM83 CPU, M-cycle accurate
-    ppu.js              PPU: mode/STAT timing, line renderer, DMG and CGB
-    fifo.js             Dot-by-dot pixel FIFO for lines changed during drawing
-                        (adapted from SameBoy, MIT)
+    cpu.js              SM83 CPU, T-cycle timed: owed cycles, per-register
+                        write timing (ported from SameBoy, MIT)
+    ppu.js              PPU: SameBoy's display state machine (MIT): STAT and
+                        access locks per dot, fetcher/FIFOs, whole-line
+                        renderer, OAM bug
     apu.js              APU: 2 MHz channel timing ported from SameBoy (MIT),
                         DIV events, mixing, filtering
     channels.js         Simple channel models (the GBA's sound; reading old states)
-    timer.js            DIV/TIMA from the 16-bit system counter (falling edges)
+    timer.js            DIV/TIMA: SameBoy's system counter state machine
+                        (falling edges clock TIMA, serial, APU)
     cartridge.js        Header parsing, cartridge type table, createCartridge()
     mappers/            base.js; mbc.js (MBC1/2/3/5, HuC1); mbc6.js, mbc7.js
                         (tilt + EEPROM), mmm01.js, huc3.js, tama5.js, camera.js
@@ -228,27 +230,43 @@ To add a core: create `src/core/<name>/index.js` exporting
 `createCore(rom, info)`, then register it in `src/core/registry.js`. Bump the
 core's `version` whenever its `saveState()` format changes; snapshots from
 other versions are refused unless the core lists them in `stateVersions`
-(`loadState(state, version)` then converts them; the Game Boy reads version 4,
-before the SameBoy APU, through `channels.js`).
+(`loadState(state, version)` then converts them; the Game Boy reads versions
+4-5, the M-cycle core's, in `#syncLegacy`, version 4's APU through
+`channels.js`).
 
 ### Game Boy core
 
-- **Timing:** the CPU drives time. Every memory access or internal delay
-  calls `GameBoy.tick()`, which advances the timer, PPU, serial port and DMA
-  by one M-cycle (4 dots, or 2 in CGB double speed) *before* the access.
-  Timing quirks of the PPU and DMA were tuned against the Mooneye tests;
-  re-run them after touching `tick()`, the CPU or the PPU phases.
-- **PPU:** a state machine of per-line phases (`Phase` in `ppu.js`) at
-  4-dot precision: STAT mode, LY=LYC, interrupts and VRAM/OAM locks change at
-  slightly different dots. Each line is rendered in one go when drawing ends,
-  so mid-line register writes aren't shown. Frames go to a back buffer that
-  is swapped in at VBlank.
+- **Models:** a DMG-B (and SGB), and a CGB-E, as in SameBoy, whose CPU,
+  timer, memory and display timing the core ports (MIT, Lior Halphon). Keep
+  SameBoy's names and display state numbers so its code and ours can be
+  compared side by side.
+- **Timing:** the CPU drives time, to the T-cycle. Each access first passes
+  the T-cycles it owes (`cpu.pending`, usually 4) to `GameBoy.advance()`,
+  which runs the timer, PPU, DMA and serial port up to that point; writes
+  to some I/O registers land a T-cycle or two early or late (the `Conflict`
+  maps in `cpu.js`), which decides what the PPU sees in the same M-cycle.
+  Where SameBoy disagrees with the tests we kept the tests: on the DMG, SCY
+  and the LCDC tile/map/sprite-size bits land 2 T-cycles early and IF on
+  time. In double speed a T-cycle is half a dot; `advance()` works in
+  8 MHz units below the CPU.
+- **PPU:** SameBoy's display state machine (`run()`): it sleeps between
+  events (8 MHz units, `ppu.cycles` <= 0 while caught up) and is caught up
+  (`catchUp()`) before the CPU touches anything it owns. Mode 3 runs a dot
+  at a time (fetcher, FIFOs, sprite fetches, window), unless nothing can
+  observe the line being drawn (no CPU access meanwhile; known length or no
+  HBlank interrupt): then `#renderLine()` draws it in one go (batching).
+  State numbers below 100 are SameBoy's sleep states, others jump targets.
+  Frames go to a back buffer that is swapped in at VBlank.
+- **HALT skipping:** while halted with nothing pending, `idleCycles()` jumps
+  to just before the next event that could raise an interrupt (the PPU's
+  next step, a TIMA overflow) in one `advance()`. It's exact (states are
+  identical with it on and off); games halt most of the frame.
 - **APU** (`apu.js`, ported from SameBoy, DMG and CGB-E): a 2 MHz clock
   with the channels' start delays and 1 MHz phase (`lfDiv`), the noise
   LFSR clocked by a counter, envelope locks, the NRx2/NR10/NR43 write
   glitches. DIV's falling edges are the 512 Hz events (`divEvent`), rising
-  edges reload envelopes (`divSecondaryEvent`). Lazy: `tick()` only adds to
-  `apu.pending`; `catchUp()` runs up to now before APU register accesses,
+  edges reload envelopes (`divSecondaryEvent`). Lazy: the timer only adds
+  to `apu.pending`; `catchUp()` runs up to now before APU register accesses,
   DIV events and the end of `runFrame()` (an M-cycle at a time around sweep
   and restart timing, as SameBoy does). Each channel's level is averaged
   over each 48 kHz sample, then high-pass filtered like the hardware's
@@ -261,22 +279,20 @@ before the SameBoy APU, through `channels.js`).
   48-byte RTC block used by VBA-M/BGB/mGBA. The RTC follows the wall clock
   (like the real cartridge, it keeps running while the game is closed), and
   its saved form doesn't change while it runs, so it doesn't trigger writes.
-- **Mid-line effects:** while the PPU draws, register writes that change the
-  picture (LCDC, SCX/SCY, palettes, WX) are logged with their dot; lines with
-  such writes are re-rendered dot by dot by `fifo.js`, the rest use the fast
-  line renderer. Tuned against the Mealybug tests.
-- **Boot:** no boot ROM is run (copyright); registers, I/O, DIV, the PPU
-  position (DMG: line 153) and the DMG's VRAM logo are set to their
-  post-boot values. DMG games on a CGB get the boot ROM's compatibility
-  palette (or a user preset) from `palettes.js`.
-- **Quirks emulated:** the DMG's OAM corruption bug (`oamBug*` in `ppu.js`,
-  triggered by OAM accesses and 16-bit inc/dec in mode 2), DMG wave RAM
-  access while channel 3 plays, APU "zombie mode" (NRx2 writes while
-  playing), the serial clock running off the system counter, TIMA glitches
-  from TAC writes, OAM DMA bus conflicts, power-on RAM noise (fixed seed),
-  HALT sampling interrupts mid-M-cycle (the PPU ticks in two halves for
-  this), the CGB speed switch pausing the CPU ~0x20008 cycles while DIV
-  runs on.
+- **Boot:** no boot ROM is run (copyright); registers, I/O, DIV (counter
+  and phase), the PPU position (DMG: line 153, `BOOT_PPU_CYCLES`) and the
+  DMG's VRAM logo are set to their post-boot values, tuned against
+  gbmicrotest's poweron tests and Mooneye's boot tests. DMG games on a CGB
+  get the boot ROM's compatibility palette (or a user preset) from
+  `palettes.js`.
+- **Quirks emulated** (mostly SameBoy's): the DMG's OAM corruption bug
+  (`triggerOamBug`/`oamBugRead` in `ppu.js`, from OAM accesses and 16-bit
+  inc/dec during OAM scan), mid-line register changes, the window and
+  sprite fetch glitches, DMG wave RAM access while channel 3 plays, APU
+  "zombie mode", the serial clock running off the system counter, TIMA
+  glitches from TAC writes, OAM DMA and HDMA bus conflicts, power-on RAM
+  noise (fixed seed), HALT sampling interrupts mid-M-cycle on the DMG, the
+  CGB speed switch pausing the CPU ~0x20008 T-cycles while DIV runs on.
 - **MBC3 clock:** separate counters with the chip's rollover rules; follows
   the wall clock in the app, emulated time in rtc3test.
 - **Peripherals:** optional Core members `getRumble()`, `wantsTilt`/`setTilt`,
@@ -292,8 +308,9 @@ before the SameBoy APU, through `channels.js`).
   attribute map and draws the border (256x224; setting `sgbBorder`, live).
   `getScreenBuffer()` is always the bare 160x144 screen (link cable,
   thumbnails). No SGB BIOS: no default border, sound or SNES code commands.
-- **Not emulated:** a CGB running DMG games (its compatibility mode); some
-  mid-line window/sprite effects (see `KNOWN_FAILURES`).
+- **Not emulated:** a CGB running DMG games (its compatibility mode); CGB
+  revisions before E; SameBoy's "odd mode" speed switches (see
+  `KNOWN_FAILURES`).
 
 ### GBA core
 
@@ -502,9 +519,12 @@ so short taps are never lost.
   ones that pass now.
 - The ROMs are skipped until `npm run fetch-test-roms` has downloaded them
   (the c-sp/game-boy-test-roms release and jsmolka/gba-tests). `tests/known-failures.js` lists
-  the ones that don't pass yet, with reasons (mostly PPU and interrupt timing
-  within an M-cycle); remove entries as they get fixed, and don't add
-  new ones to hide regressions.
+  the ones that don't pass yet, with reasons (18 for the Game Boy, 6 of them
+  written for CGB revisions B/C); remove entries as they get fixed, and
+  don't add new ones to hide regressions.
+- Game Boy timing questions: build SameBoy's tester from source and compare
+  (its own boot ROMs leave different timing, so tests that don't reset the
+  LCD disagree for that reason alone).
 
 ## Conventions
 
@@ -530,17 +550,16 @@ performance stats, the renderer setting, the PWA, video effects and scalers
 (ghosting, sharpen, outlines, xBR, LCD grid, CRT), sound effects (pitch,
 low/high pass, bass, echo, mono), the memory viewer/editor with cheat search
 (Settings → Tools), rewind, library backup/restore, video recording, a
-WebGPU renderer, GBA idle-loop skipping, the GBA link cable and multiboot.
+WebGPU renderer, GBA idle-loop skipping, the GBA link cable and multiboot,
+a T-cycle accurate Game Boy core (SameBoy's timing).
 
 Not done yet:
 
 1. More video filters (HQx, NTSC, ...; `src/video/filters.js`) and sound
    effects (`AudioOutput.setEffects`).
-2. Game Boy timing below the M-cycle: most of `tests/known-failures.js`
-   (gbmicrotest, AGE, wilbertpol's Mooneye; PPU/STAT/interrupt timing, the
-   speed switch). The tests disagree at a finer grain than the M-cycle
-   model: shifting the LCD-on timing by 4 dots fixes 58 and breaks 111. It
-   needs a T-cycle CPU/PPU like SameBoy's.
+2. The last Game Boy known failures: the CGB speed switch's exact timing,
+   LY after switching the LCD on (CGB-E), two Mealybug LCDC cases, two
+   gbmicrotest edge cases.
 3. GBA edge timing (mGBA's suite): back-to-back interrupts (timer
    count-up), the prefetch buffer meeting DMA (1-cycle cases), HBlank DMA
    phase and the Halt/IRQ path (misc edge cases).

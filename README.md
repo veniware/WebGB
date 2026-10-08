@@ -33,11 +33,12 @@ the GBA, jsmolka's gba-tests) when they have been downloaded to `tests/roms/`.
 
 ## Features
 
-- **Game Boy and Game Boy Color:** CPU, timer, DMA and interrupts accurate
-  to the M-cycle, graphics with mid-line effects, all four sound channels,
-  CGB double speed and HDMA, and the original hardware's quirks (OAM bug,
-  wave RAM). Passes Blargg's tests, dmg-acid2, cgb-acid2, the applicable
-  Mooneye Test Suite and most of the Mealybug Tearoom tests.
+- **Game Boy and Game Boy Color:** CPU, timer, DMA, interrupts and graphics
+  accurate to the T-cycle (SameBoy's timing), mid-line effects drawn dot by
+  dot, all four sound channels, CGB double speed and HDMA, and the original
+  hardware's quirks (OAM bug, wave RAM). Passes Blargg's tests, dmg-acid2,
+  cgb-acid2, the applicable Mooneye Test Suite and nearly all of Mealybug
+  Tearoom, GBMicrotest, SameSuite and AGE.
 - **Game Boy Advance:** ARM7TDMI CPU with the three-stage pipeline, memory
   wait states and the cartridge prefetch buffer, all video modes with
   sprites, windows, blending and mosaic, both kinds of sound (the Game Boy
@@ -131,8 +132,9 @@ See [AGENTS.md](AGENTS.md) for the architecture and conventions.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). `src/core/gb/apu.js` is ported from
-[SameBoy](https://github.com/LIJI32/SameBoy)'s APU (MIT, notice in the file).
+MIT, see [LICENSE](LICENSE). The Game Boy core's timing (`src/core/gb/`:
+`cpu.js`, `ppu.js`, `timer.js`, `apu.js` and parts of `gameboy.js`) is ported
+from [SameBoy](https://github.com/LIJI32/SameBoy) (MIT, notice in the files).
 `src/core/gba/multiply-carry.js` is adapted from zaydlang's
 [multiplication-algorithm](https://github.com/zaydlang/multiplication-algorithm)
 (zlib license, notice in the file).
